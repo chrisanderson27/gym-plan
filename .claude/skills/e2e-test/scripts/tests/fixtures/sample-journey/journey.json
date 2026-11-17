@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "app": "rbcloud",
+  "engine": "worker",
+  "id": "rbcloud/2026-10-12-prd-phase-sample-phase-1",
+  "story": "Order's move\nkeeps `details`",
+  "baseUrl": "http://localhost:5000",
+  "result": "pass",
+  "journey": "complete",
+  "prerequisites": {
+    "fixtures": [
+      {
+        "entity": "customer",
+        "id": 4092,
+        "name": "Test Customer 4092",
+        "created": false
+      },
+      {
+        "entity": "work-order",
+        "id": "1834",
+        "name": null,
+        "created": true
+      },
+      "order_1754"
+    ]
+  },
+  "steps": [
+    {
+      "action": "open",
+      "url": "/open-orders",
+      "wait": "url-contains:/open-orders; visible:Search open orders…",
+      "n": 1
+    },
+    {
+      "action": "fill",
+      "locator": {
+        "role": "textbox",
+        "name": "Password",
+        "playwright": "getByRole('textbox', { name: 'Password' })"
+      },
+      "input": "${E2E_PASS}",
+      "n": 2
+    },
+    {
+      "action": "fill",
+      "locator": {
+        "role": "textbox",
+        "name": "Order name",
+        "playwright": "getByRole('textbox', { name: 'Order name' })"
+      },
+      "input": "Order {unique}",
+      "n": 3
+    },
+    {
+      "action": "select",
+      "locator": {
+        "role": "combobox",
+        "name": "Status",
+        "playwright": "getByRole('combobox', { name: 'Status' })"
+      },
+      "picked": [
+        "Open",
+        "Completed"
+      ],
+      "n": 4
+    },
+    {
+      "action": "press",
+      "input": "Enter",
+      "n": 5
+    },
+    {
+      "action": "click",
+      "locator": {
+        "role": "button",
+        "name": "Inner Save",
+        "playwright": "frameLocator('iframe').getByRole('button', { name: 'Inner Save' })"
+      },
+      "assert": "Completed tab lists only claims with DateCompleted",
+      "n": 6
+    },
+    {
+      "action": "click",
+      "locator": null,
+      "unresolved": true,
+      "raw": "@e999",
+      "n": 7
+    },
+    {
+      "action": "screenshot",
+      "shot": "02-moved.png",
+      "n": 8
+    },
+    {
+      "action": "click",
+      "locator": {
+        "role": "button",
+        "name": "Close",
+        "playwright": "getByRole('button', { name: 'Close' })"
+      },
+      "ok": false,
+      "n": 9
+    }
+  ],
+  "assertions": [
+    {
+      "claim": "text-contains:Moved to",
+      "judge": "check",
+      "ok": true
+    },
+    {
+      "claim": {
+        "check": "dialog-closed"
+      },
+      "judge": "check",
+      "ok": true
+    },
+    {
+      "claim": "Completed tab lists only claims with DateCompleted",
+      "judge": "llm",
+      "ok": true
+    },
+    {
+      "claim": "text-absent:Old order",
+      "judge": "check",
+      "ok": false
+    }
+  ]
+}

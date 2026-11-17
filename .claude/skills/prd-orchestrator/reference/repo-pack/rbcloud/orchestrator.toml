@@ -1,0 +1,69 @@
+# Worked example — RBCloud. This is the content that used to be hardcoded across
+# prd-orchestrator/SKILL.md (16 strings), execute/SKILL.md and plan-feature/SKILL.md.
+# Copy to <worktree>/.claude/orchestrator.toml.
+
+[skills]
+plan = "plan-feature"
+exec = "execute"
+
+[validation]
+levels = [
+  { name = "build",    cmd = "dotnet build RBCS.sln --configuration Release", expect = "0 errors" },
+  { name = "unit",     cmd = "dotnet test RBCS.sln --filter \"Category=Unit\"", expect = "all pass, new tests appear in the run" },
+  { name = "frontend", cmd = "cd src/RBCS.Web.App && npm run build && npm run test:coverage", expect = "build clean, Vitest green" },
+  { name = "e2e-suite",cmd = "cd test/Automation.Tests && npm run test:local", expect = "Playwright green (UI features only)" },
+]
+# Use `npm run test:coverage`, NOT `npm run test` — bare `test` is `vitest` in watch mode and never exits.
+# Do NOT run formatting commands (`dotnet format`, `prettier`): formatting is optional here.
+# `npm run lint` exists but does not run in CI.
+
+[app]
+start       = "cd Aspire/RBCloud.AppHost && dotnet run"
+url         = "http://localhost:5000"
+# A 200 is NOT proof the app is up: on macOS the AirPlay Receiver also binds *:5000.
+# The gateway serves `Server: Kestrel` and nothing else on that port does.
+ready_probe = "header:Server=Kestrel"
+timeout_s   = 300
+
+[plans]
+dir = "docs/ai/plans"
+phase_pattern = "<feature>/prd-<N>-phase-<M>-<slug>.md"
+
+[e2e]
+profile        = ".claude/e2e/profile.md"
+session_prefix = "rbcloud-e2e"
+
+[figma]
+checks = "end"                      # kickoff Q5 overrides: end | per-phase | skip
+# Figma fidelity gate. Frames come from each PRD's Design contract; this only
+# names the file + where the ignored local snapshot lands. Token value is in the .env.
+enabled    = true
+file_key   = "U47CPIAPgTe28MR78Wx9u6"
+bundle_dir = ".agents/figma"
+token_env  = "FIGMA_TOKEN"
+
+[testing]
+dir     = "docs/ai/testing"
+capture = "on"
+
+[worker]
+permission_mode = "acceptEdits"   # honored everywhere; bypassPermissions is org-disabled/unreliable
+
+[knowledge]
+standards      = ".claude/standards/*.md"
+divergence_log = "docs/ai/KNOWN-ISSUES.md"
+always_loaded  = ["AGENTS.md", ".claude/standards/rbcs-clean-code.md",
+                  ".claude/standards/rbcs-project-references.md"]
+generated = [
+  { paths = "docs/ai/rbcloud/**", regenerate_with = "/map-codebase", freshness = "frontmatter" },
+]
+
+[boundary_checks]
+# Two gotchas teams hit here, both real:
+#  1. An inline table { … } must be on ONE line. TOML does not allow it to wrap.
+#  2. Use a *literal* string (single quotes) for anything with a backslash — a
+#     "double-quoted" string treats \ as an escape and your regex breaks the file.
+checks = [
+  { name = "no new ABP<->non-ABP project reference", baseline = 3, cmd = 'grep -rl "RBCS\.\(Core\|Application\|EntityFrameworkCore\|Migrator\|Reports\|Web\.Core\|Web\.Mvc\)\.csproj" src/RBCS.Api src/RBCS.Api.Application src/RBCS.Api.Infrastructure src/RBCS.AZFunctions src/RBCS.Multitenant --include="*.csproj" | wc -l' },
+  { name = "no new `using RBCS.Core.*` in a non-ABP project", baseline = 10, cmd = 'grep -rl "using RBCS\.\(Core\|Application\)" src/RBCS.Api src/RBCS.Api.Application src/RBCS.Api.Infrastructure src/RBCS.AZFunctions src/RBCS.Multitenant --include="*.cs" | wc -l' },
+]

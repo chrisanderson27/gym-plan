@@ -1,0 +1,61 @@
+# Copy to <repo>/.claude/orchestrator.toml and fill every TODO.
+# `orchestrator.py config --check` validates it; `preflight` refuses to run while a TODO remains.
+
+[skills]
+plan = "plan-feature"
+exec = "execute"
+
+[validation]
+# What the BUILDER runs and reports. The orchestrator does not re-run these.
+# Optional per-level prefix example: paths = ["src/"] (absent: always runs).
+levels = [
+  { name = "build", cmd = "TODO: your build command", expect = "0 errors" },
+  { name = "test",  cmd = "TODO: your test command",  expect = "all pass" },
+]
+
+[app]
+# Delete this whole section if the repo has no runnable app: every phase's e2e gate
+# then records N/A automatically instead of asking.
+start       = "TODO: command that starts the app"
+url         = "TODO: http://localhost:PORT"
+ready_probe = "TODO: path:/health  (or header:X=Y, text:<marker>, cmd:<shell>)"
+timeout_s   = 300
+
+[plans]
+dir = "docs/ai/plans"
+
+[e2e]
+profile        = ".claude/e2e/profile.md"
+session_prefix = "TODO-app-e2e"
+
+[figma]
+checks = "end"                      # kickoff Q5 overrides: end | per-phase | skip
+# OPTIONAL. The Figma fidelity gate. Delete this whole block if the repo has no
+# Figma designs (the gate is then N/A for every phase). If you keep it, the
+# surface→frame mapping is NOT here — it comes from each PRD's Design contract.
+enabled    = false                    # set true to turn the gate on
+file_key   = "TODO-figma-file-key"    # from any frame URL: figma.com/design/<file_key>/...
+bundle_dir = ".agents/figma"          # IGNORED; never commit images or design data; per-PRD bundles land here
+token_env  = "FIGMA_TOKEN"            # NAME only — value lives in the gitignored .env
+
+[testing]
+dir     = "docs/ai/testing"   # TRACKED — these accumulate across runs
+capture = "on"                # "off" to skip recording e2e runs
+
+[worker]
+permission_mode = "acceptEdits"   # honored everywhere; bypassPermissions is org-disabled/unreliable
+
+[knowledge]
+# scope_notes = ".claude/scope-and-decisions.md"
+standards      = ".claude/standards/*.md"
+divergence_log = "docs/ai/KNOWN-ISSUES.md"
+always_loaded  = ["AGENTS.md"]        # @-imported everywhere; NEVER auto-committed
+generated      = []                    # [{ paths = "docs/generated/**", regenerate_with = "/map-codebase", freshness = "frontmatter" }]
+
+[boundary_checks]
+# Optional architectural fences. `cmd` prints a count; `baseline` is the allowed max.
+checks = []
+
+# [pricing]                     # OPTIONAL — override the telemetry cost rates ($/MTok)
+# as_of = "2026-09-08"             # inline tables must be ONE line; keys prefix-match model id
+# "claude-sonnet-5" = { input = 2.0, output = 10.0, cache_write = 2.5, cache_read = 0.2 }
