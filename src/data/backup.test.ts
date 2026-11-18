@@ -136,4 +136,20 @@ describe('export/import', () => {
     expect(r.file.stores).toEqual({});
     expect(parseExport(JSON.stringify({ schemaVersion: 1, exportedAt: 'x', appVersion: 'x', stores: {} })).warnings).toEqual([]);
   });
+
+  it('rejects rows with missing or mistyped fields, leaving local data untouched', async () => {
+    const db = open();
+    await db.sessions.put(session('s1'));
+    const mk = (stores: Record<string, unknown[]>) =>
+      JSON.stringify({ schemaVersion: 1, exportedAt: '2026-11-12T00:00:00.000Z', appVersion: 't', stores });
+    const bad: Record<string, unknown[]>[] = [
+      { sessions: [{ id: 's1' }] },
+      { sessions: [{ ...session('s1'), blocks: [{ id: 'b', kind: 'lift' }] }] },
+      { sessions: [{ ...session('s1'), date: 'not-a-date' }] },
+      { bodyLogs: [{ date: '2026-11-10', protein: 'yes' }] },
+      { settings: [{ id: 'settings' }] },
+    ];
+    for (const stores of bad) expect(() => parseExport(mk(stores))).toThrow(ImportError);
+    expect((await db.sessions.get('s1'))?.blocks).toHaveLength(4);
+  });
 });

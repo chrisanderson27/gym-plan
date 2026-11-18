@@ -1,4 +1,6 @@
 import type { GymDb } from './db';
+import { ImportError } from './errors';
+import { validateRows } from './validate';
 import { migrateExport, type ExportFile } from './migrations';
 import { SCHEMA_VERSION } from './schema';
 import { STORE_NAMES, USER_STORES, type StoreName } from './stores';
@@ -7,7 +9,7 @@ import type { Settings } from './types';
 /** "Identical user-store contents" excludes exactly this field: importing stamps a fresh backupAt. */
 export const ROUND_TRIP_EXCLUDE = [['settings', 'backupAt']] as const;
 
-export class ImportError extends Error {}
+export { ImportError };
 
 /** Reads every user store; writes nothing. */
 export async function buildExport(db: GymDb, now: Date, appVersion: string): Promise<ExportFile> {
@@ -75,6 +77,7 @@ export function parseExport(text: string): { file: ExportFile; warnings: string[
       if (rows.length > 1) throw new ImportError('Settings may hold at most one row.');
       if (rows[0] && (rows[0] as Settings).id !== 'settings') throw new ImportError('Settings row has the wrong id.');
     }
+    validateRows(name as StoreName, rows);
     stores[name] = rows;
   }
   return { file: { ...file, stores }, warnings };
