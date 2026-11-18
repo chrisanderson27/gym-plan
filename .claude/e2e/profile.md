@@ -11,10 +11,34 @@
 ## Learned quirks
 <!-- e2e workers append here -->
 
+### Recorder can freeze minutes into a run; kill only your own daemon and re-seed
+_Learned 2026-11-18 · costs: a killed session and a re-onboard + re-import_
+**You'll see:** `run.webm` stops growing a few minutes in (it stays at about 3 MB) while commands keep working. Later, `record stop` fails with os error 35, and every command (even `get url`) hangs.
+**Do:** check that `run.webm` is still growing during long sweeps. Better, record only short clips (`record start … --fps 10`, then stop within about a minute). If the session hangs, `kill -KILL` the daemon that is the parent of *your* ffmpeg, its Chrome and that ffmpeg. The browser profile is lost, so reopen, onboard and re-import the seed. Also note there is no `find … select`; use `select @<ref> "Dark"` after `snapshot -i`.
+**Where:** any recorded visual sweep; `#/settings` Appearance.
+
+### Centre a lift card button before clicking; the sticky header covers it
+_Learned 2026-11-18 · costs: one refused click_
+**You'll see:** `click @<Swap ref>` fails with "Element is covered by <h1 inside div#app>", because `scrollintoview` puts the button at the top, under the sticky session header.
+**Do:** `eval "[...document.querySelectorAll('[data-testid=exercise-<ex>] button')].find(b=>b.textContent.trim()==='Swap').scrollIntoView({block:'center'})"`, then re-snapshot and click. Note that `pose-<ex>` testids use the exercise id (`romanian-deadlift`), not the poseId (`hinge`).
+**Where:** `#/lift/session/<id>`.
+
+### Wrap journey.py in a script; zsh won't word-split `$J`
+_Learned 2026-11-18 · costs: one failed batch of commands_
+**You'll see:** `J="python3 …/journey.py"; $J start …` fails with `no such file or directory: python3 …/journey.py` (the Bash tool's shell is zsh). macOS also has no `timeout`.
+**Do:** write a tiny executable wrapper in the scratchpad that exports `JOURNEY_DIR` and `exec python3 …/journey.py "$@"` (inject `--session <name>` for `ab`), and call that. For a "fresh session" in the same browser, delete the DB from the manifest URL (see below) and re-onboard; prove restore with a re-export diff.
+**Where:** any orchestrated run.
+
+### Wrap journey.py in a script; zsh won't word-split `$J`
+_Learned 2026-11-18 · costs: one failed batch of commands_
+**You'll see:** `J="python3 …/journey.py"; $J start …` fails with "no such file or directory: python3 …/journey.py" (the Bash tool runs zsh).
+**Do:** write a tiny executable wrapper in the scratchpad that exports `JOURNEY_DIR` and execs `python3 journey.py "$@"` (with a `b` shortcut for `ab --session <name>`), and call it by path. macOS has no `timeout`; give `record stop` its own Bash call with a long tool timeout.
+**Where:** every orchestrated run.
+
 ### Lift Equipment/Swap sheets render at the page bottom; find hidden sideways scroll by bisecting
 _Learned 2026-11-18 · costs: two blank screenshots and a hunt for an overflow no element rect showed_
 **You'll see:** after clicking Equipment ▾ or Swap on a lift card, nothing changes in the viewport, because the `.sheet` is static, after the last exercise. Separately, `documentElement.scrollWidth` > `clientWidth` while no element's `getBoundingClientRect().right` exceeds the viewport.
-**Do:** `eval "document.querySelector('.sheet').scrollIntoView({block:'center'})"` before screenshotting a lift sheet (the feedback sheet is a fixed `.sheet.overlay`). For overflow, hide `main section > *` / `.card > *` one by one (`style.display='none'`) and re-read scrollWidth. Long unbreakable text, such as the Settings feedback row's ULID/route, is the usual cause.
+**Do:** (sheet part superseded on 05ad43b — lift sheets are now fixed overlays, see below.) For overflow, hide `main section > *` / `.card > *` one by one (`style.display='none'`) and re-read scrollWidth. Long unbreakable text, such as the Settings feedback row's ULID/route, is the usual cause.
 **Where:** `#/lift/session/<id>`, `#/settings`.
 
 ### Import errors are role=alert below the fold; prove restore by re-export diff
@@ -77,11 +101,17 @@ _Learned 2026-11-18 · costs: one silent missed tick and a retry_
 **Do:** after an adjust, `get text '[data-testid=set-weight-<ex>-<idx>]'` until it shows the new value, then tick. Confirm the tick with `get attr '[data-testid=set-<ex>-<idx>]' class`, and retry via a fresh `snapshot -i -s` ref if needed.
 **Where:** `#/lift/session/<id>`.
 
-### Swap and Equipment sheets open at the page bottom, not over the card
-_Learned 2026-11-18 · costs: one wasted screenshot_
-**You'll see:** after tapping Swap or the equipment `▾`, a viewport screenshot looks unchanged. The `[role=dialog]` sheet renders inline above Finish (no `.overlay` class).
-**Do:** `scrollintoview '[role=dialog]'` before you screenshot it. Use `snapshot -i -s '[role=dialog]'` to read the options.
+### Swap and Equipment sheets are fixed bottom sheets (since 05ad43b)
+_Updated 2026-11-18 · was: inline at page bottom (pre-05ad43b)_
+**You'll see:** tapping Swap or the equipment `▾` opens a `[role=dialog]` `.sheet.overlay` (position fixed) over a dimmed page; a viewport screenshot captures it directly. The equipment link is named `<Exercise> — <Equipment> ▾` once an exercise has its own equipment, plain `<Equipment> ▾` otherwise.
+**Do:** read options with `snapshot -i -s '[role=dialog]'`; no scrolling needed. After a ref-click, the button under the pointer keeps a grey hover fill in later screenshots — that is the lingering hover state, not a selected state.
 **Where:** `#/lift/session/<id>`.
+
+### Wrap journey.py in a script; zsh won't word-split `$J`
+_Learned 2026-11-18 · costs: one failed command batch_
+**You'll see:** `J="python3 …/journey.py"; $J start …` fails with `no such file or directory: python3 …/journey.py` (zsh does not split unquoted variables).
+**Do:** write a tiny bash wrapper in the scratchpad (`exec python3 …/journey.py "$@"`, with `JOURNEY_DIR` exported, `ab` adding `--session <name>`), `chmod +x` it and call it.
+**Where:** any run from the zsh Bash tool.
 
 ### Re-snapshot after ticking a set row
 _Learned 2026-11-18 · costs: one verification eval per run_
