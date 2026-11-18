@@ -27,9 +27,11 @@ h2 { font-size: var(--text-20); font-weight: var(--weight-semibold); margin: var
   position: sticky; top: 0; z-index: 5;
 }
 .gear {
-  display: inline-flex; align-items: center; padding: 0 var(--space-3); text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0 var(--space-3); text-decoration: none;
   color: var(--color-text-primary); background: transparent; border-radius: var(--radius);
 }
+/* Icon-only link (Home ⚙ Settings): a 56 x 56 target around a 24 px glyph. */
+.gear.icon { width: var(--tap); padding: 0; font-size: var(--text-24); }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); margin: var(--space-4) 0; }
 .span2 { grid-column: span 2; }
 .span2 > .tile { width: 100%; }
@@ -38,6 +40,9 @@ h2 { font-size: var(--text-20); font-weight: var(--weight-semibold); margin: var
 
 /* ---- controls ---- */
 button, input, select, a, .gear { min-height: var(--tap); font-size: var(--text-16); }
+/* Both dimensions: every button and link is at least 56 x 56. touch-action drops the double-tap-zoom delay, so a tap right after another tap is never swallowed. */
+button, a, .gear { min-width: var(--tap); touch-action: manipulation; }
+input, select, label, textarea { touch-action: manipulation; }
 /* Every link is a 56 px target: inline links centre in a 56 px box instead of sitting on the text line. */
 a { display: inline-flex; align-items: center; }
 input, select, textarea {
@@ -49,6 +54,8 @@ input, select { padding: 0 var(--space-3); }
 /* WebKit ignores min-height on a select that is a flex item, so give it an explicit height too. */
 select { height: var(--tap); }
 .chips > select { flex: 1; min-width: 0; width: auto; }
+/* A labelled field inside a chip row gets a real width, so its input is a full-size target. */
+.chips > label { flex: 1 1 120px; margin: 0; }
 /* Checkbox + label on one row; the whole row is the 56 px hit area. */
 label.check { display: flex; align-items: center; gap: var(--space-3); min-height: var(--tap); margin: var(--space-1) 0; color: var(--color-text-primary); font-size: var(--text-16); }
 label.check > input[type='checkbox'] { width: 24px; height: 24px; min-height: 0; margin: 0; flex: none; accent-color: var(--color-action); }
@@ -67,7 +74,7 @@ label.filebtn:focus-within { outline: 2px solid var(--color-focus); outline-offs
 }
 .btn:active { background: var(--color-surface-hover); }
 .linkbar { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-3) 0; }
-.linkbar .btn { margin: 0; flex: 1; }
+.linkbar .btn { margin: 0; flex: 1 1 auto; white-space: nowrap; }
 label { display: block; margin: var(--space-3) 0; color: var(--color-text-secondary); font-size: var(--text-14); }
 label > input, label > select { margin-top: var(--space-1); }
 button {
@@ -75,7 +82,12 @@ button {
   border-radius: var(--radius); padding: 0 var(--space-4); margin: var(--space-1) var(--space-1) var(--space-1) 0;
 }
 button:hover, button:active { background: var(--color-surface-hover); }
-button:disabled { opacity: 0.5; }
+/* Disabled = flat canvas fill, dashed border, muted text: >= 3:1 in both themes (tokens.test.ts), unlike a blanket opacity. */
+button:disabled, button.primary:disabled {
+  background: var(--disabled-bg); color: var(--disabled-text); border: 1px dashed var(--disabled-border); cursor: not-allowed;
+}
+/* Icon-only buttons (💬, ⚠, swap) use secondary text, never a faint grey. */
+.fb, .iconbtn { color: var(--color-text-secondary); }
 button.primary {
   background: var(--color-action); color: var(--color-on-action); border-color: transparent;
   font-weight: var(--weight-semibold); width: 100%;
@@ -122,13 +134,39 @@ a.chip { background: var(--chip-bg); color: var(--color-text-primary); border-ra
 .card { padding: var(--space-3); margin: var(--space-3) 0; }
 .card h2 { font-size: var(--text-16); margin: 0; }
 .card header { display: flex; justify-content: space-between; align-items: center; }
-.resume { display: block; padding: var(--space-4); margin: var(--space-2) 0; }
-.sheet { padding: var(--space-3); margin: var(--space-3) 0; }
-.sheet.overlay {
-  position: fixed; left: var(--space-3); right: var(--space-3); bottom: var(--space-3); z-index: 10;
-  max-height: 80vh; overflow: auto; max-width: 480px; margin: 0 auto; box-shadow: var(--shadow-1);
+/* "Resume Lower A →": a full-width card row, not a text link. */
+.resume {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--tap);
+  padding: var(--space-2) var(--space-4); margin: var(--space-2) 0; text-decoration: none; font-weight: var(--weight-semibold);
+  color: var(--color-text-primary); border-left: 4px solid var(--color-action);
 }
+.resume:active { background: var(--color-surface-hover); }
+.sheet { padding: var(--space-3); margin: var(--space-3) 0; }
+/* Bottom sheet: fixed to the viewport bottom over a dimmed backdrop (see Sheet.tsx). */
+.sheet-backdrop { position: fixed; inset: 0; z-index: 9; background: var(--scrim); }
+.sheet.overlay {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; margin: 0 auto; max-width: 480px; max-height: 85vh; overflow: auto;
+  border-radius: var(--radius) var(--radius) 0 0; box-shadow: var(--shadow-1);
+  padding: var(--space-4) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
+}
+.sheet.overlay:focus { outline: none; }
+.sheet.overlay h2 { margin-top: 0; }
 .sheet textarea { padding: var(--space-2); }
+/* Same padding and gaps for every sheet's chips and buttons, wherever the sheet is opened from. */
+.sheet .chips { gap: var(--space-2); }
+.sheet .chip { padding: 0 var(--space-4); }
+.sheet-options { display: flex; flex-direction: column; gap: var(--space-2); margin: var(--space-2) 0; }
+.sheet-options > button { margin: 0; width: 100%; }
+.sheet-options > .chip { flex-direction: row; justify-content: center; }
+.sheet-actions { display: flex; gap: var(--space-3); margin-top: var(--space-3); }
+.sheet-actions > button { flex: 1; margin: 0; width: auto; }
+.sheet-cancel { margin: var(--space-2) 0 0; width: 100%; }
+/* Toast for "Feedback saved": fixed, so it never widens the row it was triggered from. */
+.fb-saved {
+  position: fixed; left: 50%; bottom: var(--space-4); transform: translateX(-50%); z-index: 8; white-space: nowrap;
+  background: var(--color-surface); color: var(--color-success-text); border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-pill); padding: var(--space-2) var(--space-4); box-shadow: var(--shadow-1);
+}
 .update-bar {
   position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: var(--space-2); align-items: center;
   padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom));
@@ -153,6 +191,8 @@ a.chip { background: var(--chip-bg); color: var(--color-text-primary); border-ra
   padding: 2px var(--space-2); border-radius: var(--radius-pill); background: var(--color-surface);
   border: 1px solid var(--color-border-subtle); color: var(--color-text-secondary);
 }
+/* "met" reads as done (success tint); "under" stays neutral. */
+.budget > .budget-met { background: var(--color-success-tint); color: var(--color-success-text); border-color: transparent; }
 .budget > .budget-cap { background: var(--color-warning-tint); color: var(--color-warning-text); border-color: transparent; }
 .budget > .budget-over { background: var(--color-danger-tint); color: var(--color-danger-text); border-color: transparent; }
 .ok { color: var(--color-success-text); }
@@ -170,20 +210,39 @@ p.badge { border-radius: var(--radius); padding: var(--space-2) var(--space-3); 
 
 /* ---- lifting ---- */
 .plan { list-style: none; padding: 0; margin: var(--space-2) 0; }
-.plan li { display: flex; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border-subtle); }
-/* One line at 390 px (332 px inside a card): targets stay 56 px tall but are 36 px wide; the extras (pain, feedback) may wrap below. */
-.setrow { display: flex; align-items: center; gap: 2px; margin: 6px 0; flex-wrap: wrap; }
-.setrow button { min-width: 36px; padding: 0; margin: 0; }
-.setrow .tick { min-width: 44px; }
-.setrow .val { min-width: 30px; text-align: center; font-size: var(--text-14); font-weight: var(--weight-semibold); font-variant-numeric: var(--numeric); }
-.setrow .idx { width: 30px; font-size: var(--text-12); line-height: 1.1; }
-.setrow .times { width: 12px; text-align: center; }
+.plan li { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid var(--color-border-subtle); }
+/* List rows drawn as cards (Weekly volume, My gym). */
+.cardrows { list-style: none; padding: 0; margin: var(--space-2) 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.cardrows > li {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-height: var(--tap);
+  padding: var(--space-2) var(--space-4); background: var(--tile-bg); border: 1px solid var(--tile-border); border-radius: var(--radius);
+}
+.cardrows > li > button { margin: 0; flex: none; }
+.vol-row { flex-wrap: wrap; font-variant-numeric: var(--numeric); }
+.vol-row .vol-name { font-weight: var(--weight-semibold); flex: 1 1 40%; }
+.vol-row .vol-nums { color: var(--color-text-secondary); }
+.vol-row .vol-status { font-weight: var(--weight-semibold); min-width: 4.5em; text-align: right; }
+.vol-over .vol-status { color: var(--color-danger-text); }
+.vol-met .vol-status { color: var(--color-success-text); }
+/* A set row is two deliberate lines at 390 px, never accidental wrapping, and every control is >= 56 x 56:
+   line 1 = "Set N" + weight stepper, line 2 = reps stepper + ✓ (+ ⚠ and 💬 once logged).
+   Line 2 is 56+32+56 (stepper) + 3 x 56 = 312 px + gaps, inside the 332 px card (320 px in a superset). Value cells are
+   fixed-width, so a longer number never reflows the row or moves the ✓ under the user's thumb. */
+.setrow { display: flex; flex-direction: column; gap: 2px; margin: var(--space-2) 0; }
+.setline { display: flex; align-items: center; gap: 2px; min-width: 0; flex-wrap: nowrap; }
+.setline:first-child { justify-content: space-between; }
+.setline > button { flex: none; padding: 0; margin: 0; }
+.setline > .tick { flex: 1 0 var(--tap); }
+.stepper { display: flex; align-items: center; flex: none; }
+.stepper > button { flex: none; padding: 0; margin: 0; }
+.valbox { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 32px; flex: none; line-height: 1.1; }
+.stepper.wide .valbox { width: 64px; }
+.valbox small { font-size: var(--text-12); color: var(--color-text-secondary); }
+.setrow .val { text-align: center; white-space: nowrap; font-size: var(--text-14); font-weight: var(--weight-semibold); font-variant-numeric: var(--numeric); }
+.setrow .idx { font-size: var(--text-14); }
+.loggedval { color: var(--color-text-primary); }
 .rir { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: var(--space-2) 0; }
-.vol { width: 100%; border-collapse: collapse; font-variant-numeric: var(--numeric); }
-.vol th, .vol td { text-align: left; padding: var(--space-2) var(--space-1); border-bottom: 1px solid var(--color-border-subtle); }
-.vol-over td:last-child { color: var(--color-danger-text); }
-.vol-met td:last-child { color: var(--color-success-text); }
-.superset { border-left: 4px solid var(--color-action); padding-left: var(--space-2); }
+.superset { border-left: 4px solid var(--color-action); padding-left: var(--space-1); }
 .mine-row { margin: var(--space-3) 0; }
 
 /* Full-width card rows for list screens (History, Mine). */
@@ -231,20 +290,26 @@ a.row:active { background: var(--color-surface-hover); }
 .swim-card h3 { margin: var(--space-4) 0 var(--space-1); font-size: 1.2rem; color: var(--color-link); }
 .swim-line { margin: var(--space-1) 0; }
 .swim-card small { font-size: 0.85rem; }
+/* Drill cue: ordinary secondary text under the set line, not 1.6 rem inline text with a stretched line-height. */
+.swim-card .swim-cue { display: block; font-size: var(--text-14); line-height: 1.4; color: var(--color-text-secondary); margin: 0 0 var(--space-2); }
 
 /* ---- feedback + pose ---- */
 .fb { min-width: 56px; padding: 0 var(--space-2); margin: 0; }
-.setrow .fb { min-width: var(--tap-compact); }
-.pose { height: 140px; width: auto; max-width: 100%; display: block; margin: var(--space-2) auto; color: var(--color-text-primary); }
+/* Every figure's view box is 10:7 (engine/pose.ts VIEW_ASPECT), so standing and seated poses draw at the same scale. */
+.pose { width: 100%; max-width: 200px; aspect-ratio: 10 / 7; height: auto; display: block; margin: var(--space-2) auto; color: var(--color-text-primary); }
 .pose .bone { stroke: currentColor; stroke-width: 4; stroke-linecap: round; }
 .pose .bone.far { opacity: 0.45; }
 .pose .head { fill: none; stroke: currentColor; stroke-width: 3; }
 .pose .implement { fill: var(--pose-implement); }
 .pose .prop { stroke: var(--color-text-secondary); stroke-width: 3; stroke-linecap: round; }
 .pose-strip { display: flex; gap: var(--space-1); justify-content: center; }
-.pose-strip .pose { height: 90px; margin: var(--space-1) 0; }
+.pose-strip .pose { flex: 1 1 0; min-width: 0; max-width: 33%; margin: var(--space-1) 0; }
 .cues { padding-left: var(--space-5); margin: var(--space-2) 0; }
-.fb-list { padding: 0 var(--space-3); }
-.fb-row { border-top: 1px solid var(--color-border-subtle); padding: var(--space-2) 0; }
+.fb-list { padding: 0 var(--space-3); min-width: 0; }
+.fb-row { border-top: 1px solid var(--color-border-subtle); padding: var(--space-2) 0; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+.fb-row p { margin: var(--space-1) 0; }
+.fb-head { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); align-items: baseline; }
+/* Never let long text widen the page. */
+main.screen { overflow-wrap: break-word; }
 .fb-row:first-child { border-top: none; }
 .fb-row.corrected { opacity: 0.6; }

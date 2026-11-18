@@ -3,6 +3,7 @@ import { defaultEquipmentFor, exerciseById } from '../../content';
 import { db } from '../../data/db';
 import { updateEquipmentSteps } from '../../data/lift';
 import type { Equipment } from '../../data/types';
+import { Sheet } from '../Sheet';
 
 export function EquipmentSheet({
   exerciseId,
@@ -44,20 +45,24 @@ export function EquipmentSheet({
   };
 
   return (
-    <div class="sheet" role="dialog" aria-label="Equipment">
+    <Sheet label="Equipment" onClose={onClose}>
       <h2>Equipment</h2>
-      {options.map((id) => (
-        <button key={id} type="button" class={id === currentId ? 'chip on' : 'chip'} onClick={() => onChoose(id)}>
-          {equipment.get(id)?.name}
-        </button>
-      ))}
+      <div class="sheet-options">
+        {options.map((id) => (
+          <button key={id} type="button" class={id === currentId ? 'chip on' : 'chip'} onClick={() => onChoose(id)}>
+            {equipment.get(id)?.name}
+          </button>
+        ))}
+      </div>
       <h3>Edit steps for {equipment.get(currentId)?.name}</h3>
       <label>From<input inputMode="decimal" value={from} onInput={(e) => setFrom(e.currentTarget.value)} /></label>
       <label>To<input inputMode="decimal" value={to} onInput={(e) => setTo(e.currentTarget.value)} /></label>
       <label>By<input inputMode="decimal" value={by} onInput={(e) => setBy(e.currentTarget.value)} /></label>
       {error && <p role="alert">{error}</p>}
-      <button type="button" onClick={saveSteps}>Save steps</button>
-      <button type="button" onClick={onClose}>Close</button>
-    </div>
+      <div class="sheet-actions">
+        <button type="button" onClick={saveSteps}>Save steps</button>
+        <button type="button" onClick={onClose}>Close</button>
+      </div>
+    </Sheet>
   );
 }

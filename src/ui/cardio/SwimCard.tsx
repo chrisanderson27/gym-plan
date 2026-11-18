@@ -2,6 +2,7 @@ import { DRILLS } from '../../content/drills';
 import { SWIM_GEAR_SUBSTITUTES } from '../../content/swim-workouts';
 import type { PoolUnit, SwimItem, SwimSetBlock } from '../../data/types';
 import { fmtClock } from '../../engine/swim/sendoff';
+import { tagLabel } from '../labels';
 
 const SECTION_NAMES: Record<SwimSetBlock['section'], string> = {
   warmup: 'Warm-up', drill: 'Drill', kick: 'Kick', pull: 'Pull', main: 'Main set', cooldown: 'Cool-down',
@@ -26,11 +27,13 @@ export function SwimCard({ blocks, totalDistance, poolUnit }: { blocks: SwimSetB
           {b.items.map((i, n) => {
             const cue = i.swimKind === 'drill' ? drillName(i.drillId)?.cue : undefined;
             return (
-              <p key={n} class="swim-line">
-                {itemLine(i)}
-                {i.equipment.length > 0 && <small> ({i.equipment.join(', ')})</small>}
-                {cue && <small class="dim"> — {cue}</small>}
-              </p>
+              <div key={n}>
+                <p class="swim-line">
+                  {itemLine(i)}
+                  {i.equipment.length > 0 && <small> ({i.equipment.map(tagLabel).join(', ')})</small>}
+                </p>
+                {cue && <small class="swim-cue">{cue}</small>}
+              </div>
             );
           })}
         </div>
@@ -38,7 +41,7 @@ export function SwimCard({ blocks, totalDistance, poolUnit }: { blocks: SwimSetB
       <p class="swim-total"><strong>Total {totalDistance} {poolUnit}</strong></p>
       {gear.length > 0 && (
         <ul class="dim">
-          {gear.map((g) => <li key={g}><small>{SWIM_GEAR_SUBSTITUTES[g] ?? g}</small></li>)}
+          {gear.map((g) => <li key={g}><small>{SWIM_GEAR_SUBSTITUTES[g] ?? tagLabel(g)}</small></li>)}
         </ul>
       )}
     </section>

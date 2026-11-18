@@ -12,15 +12,19 @@ export function MineRow({ types }: { types: SessionType[] }) {
     <section class="mine-row" data-testid="mine-row">
       <h2>Mine</h2>
       <ul class="rows">
-        {rows.map((t) => (
+        {rows.map((t) => {
+          // An unknown (0) duration is hidden rather than shown as "0 min".
+          const min = templateDurationMin(t.blocks);
+          return (
           <li key={t.id} class="row-item">
             <a class="row" href={'#/mine/' + t.id} data-testid={`mine-${t.id}`}>
               <span class="row-label">{t.name}</span>
-              <span class="row-meta">{templateDurationMin(t.blocks)} min</span>
+              {min > 0 && <span class="row-meta">{min} min</span>}
             </a>
             {t.source === 'built' && <a class="btn" href={'#/builder/' + t.id}>edit</a>}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </section>
   );

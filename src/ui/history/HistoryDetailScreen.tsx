@@ -5,7 +5,7 @@ import { loadSessionDetail } from '../../data/history';
 import { useLiveQuery } from '../../data/live';
 import { saveAsMine } from '../../data/templates';
 import { dayOf } from '../cardio/format';
-import { sessionTypeLabel } from '../labels';
+import { modalityName, runKindName, sessionTypeLabel } from '../labels';
 import { FeedbackButton } from '../slots/FeedbackButton';
 
 export function HistoryDetailScreen({ id }: { id: string }) {
@@ -48,7 +48,7 @@ export function HistoryDetailScreen({ id }: { id: string }) {
           </ul>
         </section>
       ))}
-      {run && <p>{run.modality ?? 'run'} · {run.kind} · {Math.round(run.durationSec / 60)} min{run.distanceMi ? ` · ${run.distanceMi} mi` : ''} · RPE {run.rpe}</p>}
+      {run && <p>{modalityName(run.modality ?? 'run')} · {runKindName(run.kind)} ·{Math.round(run.durationSec / 60)} min{run.distanceMi ? ` · ${run.distanceMi} mi` : ''} · RPE {run.rpe}</p>}
       {swim && <p>Swim · {swim.distance} {swim.poolUnit} · RPE {swim.rpe}</p>}
       {session.blocks.some((b) => b.kind === 'interval') && <p class="dim">{session.blocks.length} timed blocks</p>}
       <div class="actions">

@@ -1,5 +1,5 @@
 import { LIFT_TEMPLATES } from '../content';
-import { HISTORY_PAGE } from '../engine/config';
+import { CARDIO_MODALITY_LABELS, HISTORY_PAGE } from '../engine/config';
 import type { GymDb } from './db';
 import type { RunRow, Session, SetRow, SwimRow } from './types';
 
@@ -13,7 +13,7 @@ function summarize(s: Session, run: RunRow | undefined, swim: SwimRow | undefine
   else if (s.type === 'run' && run) bits.push(`${cap(run.kind)} run`);
   else if (s.type === 'swim' && swim) bits.push(`Swim ${swim.distance} ${swim.poolUnit}`);
   else bits.push(cap(s.type));
-  if (s.type === 'hybrid' && run) bits.push(`${run.modality ?? 'run'} ${Math.round(run.durationSec / 60)} min`);
+  if (s.type === 'hybrid' && run) bits.push(`${CARDIO_MODALITY_LABELS[run.modality ?? 'run']} ${Math.round(run.durationSec / 60)} min`);
   if (s.durationMin) bits.push(`${s.durationMin} min`);
   if (s.rpe !== null) bits.push(`RPE ${s.rpe}`);
   return bits.join(' · ');

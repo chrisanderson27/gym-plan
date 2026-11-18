@@ -16,6 +16,7 @@ import { localDate } from '../../engine/dates';
 import { pickSubstitute } from '../../engine/lift/generator';
 import { isRampInWeek, weekIndex } from '../../engine/week';
 import { FeedbackButton } from '../slots/FeedbackButton';
+import { modalityName, runKindName } from '../labels';
 import { navigate } from '../router';
 import { CalibrationCard } from './CalibrationCard';
 import { EquipmentSheet } from './EquipmentSheet';
@@ -57,7 +58,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const name = isHybrid ? `Hybrid · ${liftName}` : liftName;
   const cardio = session.blocks.find((b) => b.kind === 'run');
   const cardioLine = cardio?.kind === 'run'
-    ? `${cardio.modality} ${Math.round((cardio.repeats * cardio.segments.reduce((n, s) => n + (s.sec ?? 0), 0)) / 60)} min (${cardio.runKind})`
+    ? `${modalityName(cardio.modality)} ${Math.round((cardio.repeats * cardio.segments.reduce((n, s) => n + (s.sec ?? 0), 0)) / 60)} min (${runKindName(cardio.runKind)})`
     : '';
   const working = lifts.filter((b) => !b.warmup);
   // Consecutive blocks sharing a supersetGroup render together.

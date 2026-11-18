@@ -11,6 +11,24 @@
 ## Learned quirks
 <!-- e2e workers append here -->
 
+### Lift Equipment/Swap sheets render at the page bottom; find hidden sideways scroll by bisecting
+_Learned 2026-11-18 · costs: two blank screenshots and a hunt for an overflow no element rect showed_
+**You'll see:** after clicking Equipment ▾ or Swap on a lift card, nothing changes in the viewport, because the `.sheet` is static, after the last exercise. Separately, `documentElement.scrollWidth` > `clientWidth` while no element's `getBoundingClientRect().right` exceeds the viewport.
+**Do:** `eval "document.querySelector('.sheet').scrollIntoView({block:'center'})"` before screenshotting a lift sheet (the feedback sheet is a fixed `.sheet.overlay`). For overflow, hide `main section > *` / `.card > *` one by one (`style.display='none'`) and re-read scrollWidth. Long unbreakable text, such as the Settings feedback row's ULID/route, is the usual cause.
+**Where:** `#/lift/session/<id>`, `#/settings`.
+
+### Import errors are role=alert below the fold; prove restore by re-export diff
+_Learned 2026-11-17 · costs: a 25 s wait timeout and a re-shot screenshot_
+**You'll see:** `wait --text "Settings"` after onboarding times out (Home's Settings link is an icon-only ⚙). A rejected import's message is `<p role="alert" data-testid="backup-message">`, not `role=status`, and sits below the fold at 390×844.
+**Do:** wait on `getByTestId('tile-pick')` or snapshot instead. Scroll `[data-testid=backup-message]` into view before the screenshot. For "identical data" after import, download a re-export with `download @<Download backup ref> <path>` (launch with `--download-path`) and diff `stores` against the original, ignoring `settings.backupAt`/`updatedAt`.
+**Where:** `#/`, `#/settings`.
+
+### Name a Builder session before Start
+_Learned 2026-11-17 · costs: one dead click and a source lookup_
+**You'll see:** on `#/builder` with blocks added, **Start** and **Save** stay greyed out and clicking does nothing; no hint is shown.
+**Do:** fill `[data-testid=builder-name]` first (`ok` = name non-empty and ≥1 block), then click `builder-start`; it navigates to `#/lift/session/<id>`.
+**Where:** `#/builder`.
+
 ### Age backupAt in IndexedDB to show the backup banner
 _Learned 2026-11-17 · costs: one wasted re-import_
 **You'll see:** no "Last backup N days ago" banner after a seed import, because importing stamps `settings.backupAt` = file `exportedAt`, so a lower `backupAt` in the file is ignored.
@@ -53,6 +71,18 @@ _Learned 2026-11-17 · costs: a 2-min hung command, a failed `record stop`_
 **Do:** run `record stop` alone with `run_in_background` (or a long timeout), wait for it to exit, then `finish` and `close`. Pick a pose-less exercise for text cues with Swap → `Assisted dip` on chest press.
 **Where:** the end of any recorded run.
 
+### Wait for the value before ticking a row you just adjusted
+_Learned 2026-11-18 · costs: one silent missed tick and a retry_
+**You'll see:** a `+`/`−` click (scoped `eval`), then straight away `find testid set-done-<ex>-<idx> click`, prints Done but the row never gets class `done`.
+**Do:** after an adjust, `get text '[data-testid=set-weight-<ex>-<idx>]'` until it shows the new value, then tick. Confirm the tick with `get attr '[data-testid=set-<ex>-<idx>]' class`, and retry via a fresh `snapshot -i -s` ref if needed.
+**Where:** `#/lift/session/<id>`.
+
+### Swap and Equipment sheets open at the page bottom, not over the card
+_Learned 2026-11-18 · costs: one wasted screenshot_
+**You'll see:** after tapping Swap or the equipment `▾`, a viewport screenshot looks unchanged. The `[role=dialog]` sheet renders inline above Finish (no `.overlay` class).
+**Do:** `scrollintoview '[role=dialog]'` before you screenshot it. Use `snapshot -i -s '[role=dialog]'` to read the options.
+**Where:** `#/lift/session/<id>`.
+
 ### Re-snapshot after ticking a set row
 _Learned 2026-11-18 · costs: one verification eval per run_
 **You'll see:** after the first ✓ on a lift set row, a "pain" button appears in that row and every later `@ref` on the session screen shifts.
@@ -69,6 +99,12 @@ _Learned 2026-11-18 · costs: one silent data change and a revert_
 _Learned 2026-11-17 · costs: several wasted screenshot cycles_
 **You'll see:** pose SVGs (`[data-testid=pose-<exercise>]`, ~140px tall) animate continuously, so a fixed-delay screenshot rarely lands on the frame you need, and they are too small to judge.
 **Do:** enlarge them with `eval "document.querySelectorAll('svg.pose').forEach(s=>s.style.height='260px')"`. Then poll the near-limb bone coordinates (`line.bone:not(.far)`, index 4 = upper arm) with `eval` until the frame you want appears, and screenshot. Use `set media dark reduced-motion` and reload for the static filmstrip (`data-static="true"`). To screenshot an exact frame, poll inside one async `eval` each rAF, and on a match replace `requestAnimationFrame` with a stub that pushes callbacks to `window.__held`. Screenshot, then restore the original and re-queue the held callbacks so the loop resumes. Inline height is lost on route change, so re-apply it.
+**Where:** `#/lift/session/<id>`.
+
+### Freeze a pose frame by tapping the SVG; element screenshots of poses are offset
+_Learned 2026-11-17 · costs: two blank screenshot cycles_
+**You'll see:** `screenshot "[data-testid=pose-<ex>]"` saves the wrong region (blank or the header), and two fixed-delay viewport shots often land on the same phase.
+**Do:** a click on the pose SVG toggles pause. In one async `eval`, sample the last near bone's `x2`/`y2` each rAF for ~3.5 s, wait until it is back at the min/max, then `dispatchEvent(new MouseEvent('click',{bubbles:true}))`. Take a viewport screenshot after `scrollIntoView({block:'center'})`, then click again to resume. Use the y axis for pulldown, RDL and squat, and x for press and row.
 **Where:** `#/lift/session/<id>`.
 
 ### Date seeded "yesterday" sessions by calendar day, not hours

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anglesAt, BONE_LENGTH, cycleMs, ease, layout, lerpAngle, resolveFrames, skeleton, STANDING, type PoseDef } from './pose';
+import { anglesAt, BONE_LENGTH, cycleMs, ease, layout, lerpAngle, resolveFrames, skeleton, STANDING, VIEW_ASPECT, type PoseDef } from './pose';
 
 const squat: PoseDef = {
   view: 'side', anchor: 'feet',
@@ -83,5 +83,9 @@ describe('pose maths', () => {
     for (const v of Object.values(viewBox)) expect(Number.isFinite(v)).toBe(true);
     expect(viewBox.w).toBeGreaterThan(0);
     expect(viewBox.h).toBeGreaterThan(0);
+  });
+  it('every layout has the same aspect ratio, so tall and wide poses scale alike', () => {
+    const { viewBox } = layout(squat);
+    expect(viewBox.w / viewBox.h).toBeCloseTo(VIEW_ASPECT, 5);
   });
 });

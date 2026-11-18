@@ -3,6 +3,7 @@ import { db } from '../../data/db';
 import { addFeedback, correctFeedback } from '../../data/feedback';
 import { FEEDBACK_TAGS, type FeedbackKind, type FeedbackRow, type FeedbackTag } from '../../data/types';
 import { tagLabel } from '../labels';
+import { Sheet } from '../Sheet';
 
 /** Tag chips + notes. With `original` it writes a correction (a new row with `ref`), never an edit. */
 export function FeedbackSheet({
@@ -32,7 +33,7 @@ export function FeedbackSheet({
   };
 
   return (
-    <div class="sheet overlay" role="dialog" aria-label="Feedback" onClick={(e) => e.stopPropagation()}>
+    <Sheet label="Feedback" onClose={() => onClose(false)}>
       <h2>{original ? 'Correct feedback' : 'Feedback'}</h2>
       <div class="chips">
         {FEEDBACK_TAGS.map((t) => (
@@ -43,8 +44,10 @@ export function FeedbackSheet({
       </div>
       <textarea aria-label="Notes" rows={3} value={text} onInput={(e) => setText(e.currentTarget.value)} />
       {error && <p class="warn">{error}</p>}
-      <button type="button" class="primary" data-testid="feedback-save" disabled={tags.length === 0 && text.trim() === ''} onClick={save}>Save</button>
-      <button type="button" onClick={() => onClose(false)}>Cancel</button>
-    </div>
+      <div class="sheet-actions">
+        <button type="button" class="primary" data-testid="feedback-save" disabled={tags.length === 0 && text.trim() === ''} onClick={save}>Save</button>
+        <button type="button" onClick={() => onClose(false)}>Cancel</button>
+      </div>
+    </Sheet>
   );
 }

@@ -31,9 +31,9 @@ describe('hybridCardio', () => {
   it('never labels a machine session "run-walk"', () => {
     const easy = hybridCardio({ variant: 'lower-a', run: { ...plan(), reasons: ['run-walk 60:90 s (weeks 1–3)'] }, modality: 'row' });
     expect(easy.reasons.join('|')).not.toMatch(/run-walk/);
-    expect(easy.reasons).toContain('row steady (no walk breaks)');
+    expect(easy.reasons).toContain('Rower steady (no walk breaks)');
     const hard = hybridCardio({ variant: 'lower-b', run: { ...plan({ runKind: 'intervals' }), reasons: ['run-walk 60:90 s'] }, modality: 'bike' });
-    expect(hard.reasons).toContain('bike intervals 60:90 s');
+    expect(hard.reasons).toContain('Bike intervals 60:90 s');
     // Upper days really run, so the label stays.
     expect(hybridCardio({ variant: 'upper-a', run: { ...plan(), reasons: ['run-walk 60:90 s'] } }).reasons).toContain('run-walk 60:90 s');
   });

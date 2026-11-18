@@ -19,7 +19,7 @@ export function Home({ settings }: { settings: Settings }) {
     <main class="screen">
       <header class="bar">
         <h1>gym-plan</h1>
-        <a class="gear" href="#/settings" aria-label="Settings">
+        <a class="gear icon" href="#/settings" aria-label="Settings">
           ⚙
         </a>
       </header>

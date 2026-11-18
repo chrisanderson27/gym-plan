@@ -8,7 +8,7 @@ import type { LiftVariant } from '../../data/types';
 import { DEFAULT_LIFT_BUDGET_MIN, LIFT_BUDGETS_MIN } from '../../engine/config';
 import { muscleReadiness, variantReadiness } from '../../engine/lift/readiness';
 import { nextVariant } from '../../engine/lift/rotation';
-import { exerciseName, humanize } from '../labels';
+import { exerciseName, humanize, variantName } from '../labels';
 import { navigate } from '../router';
 
 const VARIANTS: LiftVariant[] = ['lower-a', 'upper-a', 'lower-b', 'upper-b'];
@@ -50,7 +50,8 @@ export function LiftHome({ autoStart, initial }: { autoStart?: LiftVariant; init
       </header>
       {data.open && (
         <a class="resume" data-testid="resume" href={'#/lift/session/' + data.open.id}>
-          Resume {data.open.variant ?? 'session'} →
+          <span>Resume {data.open.variant ? variantName(data.open.variant) : 'session'}</span>
+          <span aria-hidden="true">→</span>
         </a>
       )}
       <p class="dim">Suggested: {LIFT_TEMPLATES[suggestion.variant].name} — {humanize(suggestion.why)}</p>

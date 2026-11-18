@@ -31,8 +31,27 @@ test('settings backup downloads and restores into a fresh context', async ({ pag
   await onboard(page, '247.2');
   await page.getByRole('link', { name: 'Settings' }).click();
   const goal = page.getByLabel('Goal weight (lb)');
-  await goal.fill('215');
-  await goal.blur();
+  const storedGoal = () =>
+    page.evaluate(
+      () =>
+        new Promise<number | undefined>((resolve) => {
+          const open = indexedDB.open('gym-plan');
+          open.onsuccess = () => {
+            const get = open.result.transaction('settings').objectStore('settings').get('settings');
+            get.onsuccess = () => { resolve((get.result as { goalWeightLb?: number } | undefined)?.goalWeightLb); open.result.close(); };
+            get.onerror = () => resolve(undefined);
+          };
+          open.onerror = () => resolve(undefined);
+        }),
+    );
+  // The input is controlled: a live-query re-render landing right after the fill can reset it to the old value before `change`
+  // fires, and the edit is saved asynchronously. Retry until the value is really in the database, or the export races ahead of it.
+  await expect(async () => {
+    await goal.fill('215');
+    await goal.dispatchEvent('change');
+    await goal.blur();
+    expect(await storedGoal()).toBe(215);
+  }).toPass({ timeout: 10_000 });
   await expect(page.getByText('Last backup: never')).toBeVisible();
 
   const [download] = await Promise.all([

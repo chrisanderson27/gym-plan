@@ -15,7 +15,9 @@ test('Upper A at top of range with RIR ≤ 2 raises the next Upper A by one step
   const now = Date.now();
   const iso = (ms: number) => new Date(ms).toISOString();
   // Week 5 (not 6, which deloads): past the weeks 1–2 reduced-volume period.
-  const programStart = localDay(new Date(now - 28 * 86_400_000));
+  // Calendar arithmetic, not 28 x 24 h of milliseconds: across a DST change that lands on the wrong day and shifts the week window.
+  const d0 = new Date(now);
+  const programStart = localDay(new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() - 28));
   const sid = '01HZZZZZZZZZZZZZZZZZZZZZZ1';
   const sets = [0, 1, 2].map((idx) => ({
     id: `01HZZZZZZZZZZZZZZZZZZZZS0${idx}`, sessionId: sid, exerciseId: 'chest-press-machine', equipmentId: 'pin-stack', idx,

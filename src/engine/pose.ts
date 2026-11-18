@@ -168,6 +168,8 @@ export interface Layout {
 const SAMPLES = 8;
 const PAD = 14;
 const MIN_SIDE = 90;
+/** Width / height of every figure's view box (CSS `.pose` uses the same ratio). */
+export const VIEW_ASPECT = 10 / 7;
 
 export function layout(def: PoseDef): Layout {
   const frames = resolveFrames(def);
@@ -191,5 +193,11 @@ export function layout(def: PoseDef): Layout {
   let maxY = Math.max(...ys) + PAD;
   if (maxX - minX < MIN_SIDE) { const m = (maxX + minX) / 2; minX = m - MIN_SIDE / 2; maxX = m + MIN_SIDE / 2; }
   if (maxY - minY < MIN_SIDE) { const m = (maxY + minY) / 2; minY = m - MIN_SIDE / 2; maxY = m + MIN_SIDE / 2; }
+  // Every figure gets the same aspect ratio: the bounding box is grown (centred) on its short side, so a
+  // tall standing pose and a wide seated pose are drawn at the same scale on screen.
+  const w = maxX - minX;
+  const h = maxY - minY;
+  if (w / h < VIEW_ASPECT) { const grow = h * VIEW_ASPECT - w; minX -= grow / 2; maxX += grow / 2; }
+  else { const grow = w / VIEW_ASPECT - h; minY -= grow / 2; maxY += grow / 2; }
   return { anchorAt, hip0, viewBox: { x: minX, y: minY, w: maxX - minX, h: maxY - minY } };
 }

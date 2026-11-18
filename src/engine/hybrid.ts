@@ -1,5 +1,5 @@
 import type { LiftVariant, RunBlock } from '../data/types';
-import { HYBRID_LEG_DEFAULT, HYBRID_LEG_MODALITIES } from './config';
+import { CARDIO_MODALITY_LABELS, HYBRID_LEG_DEFAULT, HYBRID_LEG_MODALITIES } from './config';
 import type { RunPlan } from './run/generator';
 
 export const isLowerVariant = (v: LiftVariant): boolean => v.startsWith('lower');
@@ -14,6 +14,7 @@ export function hybridCardio({ variant, run, modality }: { variant: LiftVariant;
   const base = { plannedSec: run.plannedSec, warmupSec: run.warmupSec, cooldownSec: run.cooldownSec };
   if (!isLowerVariant(variant)) return { block: run.block, ...base, reasons: [...run.reasons] };
   const machine = modality ?? HYBRID_LEG_DEFAULT;
+  const machineName = CARDIO_MODALITY_LABELS[machine];
   const { format: _format, ...rest } = run.block;
   void _format;
   const block: RunBlock = run.block.runKind === 'intervals'
@@ -24,7 +25,7 @@ export function hybridCardio({ variant, run, modality }: { variant: LiftVariant;
   const reasons = run.reasons.map((r) => {
     const m = /^run-walk (\d+:\d+ s)/.exec(r);
     if (!m) return r;
-    return intervals ? `${machine} intervals ${m[1]}` : `${machine} steady (no walk breaks)`;
+    return intervals ? `${machineName} intervals ${m[1]}` : `${machineName} steady (no walk breaks)`;
   });
-  return { block, ...base, reasons: [...reasons, `leg day: ${machine} instead of running`] };
+  return { block, ...base, reasons: [...reasons, `leg day: ${machineName.toLowerCase()} instead of running`] };
 }

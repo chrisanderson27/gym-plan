@@ -30,7 +30,7 @@ export function FeedbackButton({ kind, context }: { kind: 'workout' | 'exercise'
       >
         💬
       </button>
-      {saved && <span role="status" class="dim">Feedback saved</span>}
+      {saved && <span role="status" class="fb-saved">Feedback saved</span>}
       {snap && (
         <FeedbackSheet
           kind={kind}

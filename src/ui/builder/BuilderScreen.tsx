@@ -7,12 +7,13 @@ import { saveBuilt, startFromBlocks } from '../../data/templates';
 import type { LiftBlock } from '../../data/types';
 import { TRACKED_MUSCLES } from '../../engine/config';
 import { moveBlock, newLiftBlock, pairWithNext, removeBlock, unpair } from '../../engine/templates';
+import { equipmentTagName, muscleName } from '../labels';
 import { navigate } from '../router';
 import { FeedbackButton } from '../slots/FeedbackButton';
 
 // Rep-based lifts only; the warm-up machines (repMax 0) are not builder material.
 const CHOICES = [...LIFT_EXERCISES.values()].filter((e) => e.repMax > 0);
-const EQUIPMENT = [...new Set(CHOICES.flatMap((e) => e.equipment))].sort();
+const EQUIPMENT = [...new Set(CHOICES.flatMap((e) => e.equipment))].sort((a, b) => equipmentTagName(a).localeCompare(equipmentTagName(b)));
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.round(n) || lo));
 
 export function BuilderScreen({ templateId }: { templateId?: string }) {
@@ -71,11 +72,11 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
       <div class="chips">
         <select aria-label="Muscle" value={muscle} onChange={(e) => setMuscle(e.currentTarget.value)}>
           <option value="">Any muscle</option>
-          {TRACKED_MUSCLES.map((m) => <option key={m} value={m}>{m}</option>)}
+          {TRACKED_MUSCLES.map((m) => <option key={m} value={m}>{muscleName(m)}</option>)}
         </select>
         <select aria-label="Equipment" value={equip} onChange={(e) => setEquip(e.currentTarget.value)}>
           <option value="">Any equipment</option>
-          {EQUIPMENT.map((m) => <option key={m} value={m}>{m}</option>)}
+          {EQUIPMENT.map((m) => <option key={m} value={m}>{equipmentTagName(m)}</option>)}
         </select>
       </div>
       <ul class="plan">
@@ -109,6 +110,7 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
           </div>
         </section>
       ))}
+      {!ok && <p class="dim" data-testid="builder-hint">{name.trim().length === 0 ? 'Name your workout to start' : 'Add an exercise to start'}</p>}
       <button type="button" class="primary" data-testid="builder-start" disabled={!ok || busy} onClick={onStart}>Start</button>
       <button type="button" data-testid="builder-save" disabled={!ok || busy} onClick={onSave}>Save</button>
       <FeedbackButton kind="workout" context={{}} />

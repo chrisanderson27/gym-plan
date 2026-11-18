@@ -80,6 +80,11 @@ const PAIRS: [string, string, number][] = [
   ['color-focus', 'color-surface', NONTEXT],
   ['color-action', 'color-surface', NONTEXT],
   ['color-success-text', 'color-surface', NONTEXT],
+  // Disabled buttons (and the budget "met" pill) stay readable in both themes.
+  ['disabled-text', 'disabled-bg', NONTEXT],
+  ['disabled-text', 'color-surface', NONTEXT],
+  ['disabled-text', 'color-canvas', NONTEXT],
+  ['color-success-text', 'color-success-tint', BODY],
   // `.ok` status messages are body text on the page or a card.
   ['color-success-text', 'color-canvas', BODY],
   ['color-success-text', 'color-surface', BODY],
@@ -136,6 +141,13 @@ describe('stylesheet contracts', () => {
   it('every link and button style keeps a 56 px minimum height', () => {
     expect(styles).toMatch(/button, input, select, a, \.gear\s*\{[^}]*min-height:\s*var\(--tap\)/);
     expect(styles).toMatch(/\.link\s*\{[^}]*min-height:\s*var\(--tap\)/);
+  });
+  it('disabled buttons use tokens, not a blanket opacity', () => {
+    expect(styles).toMatch(/button:disabled[^{]*\{[^}]*var\(--disabled-text\)/);
+    expect(styles).not.toMatch(/button:disabled\s*\{\s*opacity/);
+  });
+  it('every button and link is at least 56 px wide as well as tall', () => {
+    expect(styles).toMatch(/button, a, \.gear\s*\{[^}]*min-width:\s*var\(--tap\)/);
   });
   it('selected chip text is not composited with opacity', () => {
     const m = styles.match(/\.chip small\s*\{([^}]*)\}/);

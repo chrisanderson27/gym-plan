@@ -4,6 +4,7 @@ import { LIFT_EXERCISES, loadLiftSnapshot } from '../../data/lift';
 import { localDate } from '../../engine/dates';
 import { weeklyVolume } from '../../engine/lift/volume';
 import { weekIndex } from '../../engine/week';
+import { muscleName } from '../labels';
 
 export function VolumeScreen() {
   const snapshot = useLiveQuery(() => loadLiftSnapshot(db), []);
@@ -17,21 +18,15 @@ export function VolumeScreen() {
         <a class="gear" href="#/lift">Lift</a>
       </header>
       <p class="dim">Fractional sets per muscle: primary 1, secondary ½.</p>
-      <table class="vol">
-        <thead>
-          <tr><th>Muscle</th><th>Done</th><th>Target</th><th>Status</th></tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.muscle} data-testid={`volume-${r.muscle}`} class={`vol-${r.status}`}>
-              <td>{r.muscle}</td>
-              <td>{r.done.toFixed(1)}</td>
-              <td>{r.min}–{r.max} (cap {r.ceiling})</td>
-              <td>{r.status}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <ul class="cardrows">
+        {rows.map((r) => (
+          <li key={r.muscle} data-testid={`volume-${r.muscle}`} class={`vol-row vol-${r.status}`}>
+            <span class="vol-name">{muscleName(r.muscle)}</span>
+            <span class="vol-nums">{r.done.toFixed(1)} of {r.min}–{r.max} (cap {r.ceiling})</span>
+            <span class="vol-status">{r.status}</span>
+          </li>
+        ))}
+      </ul>
     </main>
   );
 }

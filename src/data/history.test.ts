@@ -30,7 +30,7 @@ describe('history', () => {
     await db.sets.bulkPut(topSets('h', 5));
     const [item] = await listHistory(db);
     expect(item!.summary).toContain('Hybrid · Lower A');
-    expect(item!.summary).toContain('bike 20 min');
+    expect(item!.summary).toContain('Bike 20 min');
     const d = (await loadSessionDetail(db, 'h'))!;
     expect(d.sets).toHaveLength(3);
     expect(d.run?.modality).toBe('bike');

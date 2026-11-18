@@ -9,6 +9,7 @@ import { localDate } from '../../engine/dates';
 import { generateRun } from '../../engine/run/generator';
 import { runToIntervals } from '../../engine/run/to-timer';
 import { weekIndex } from '../../engine/week';
+import { durationLabel } from '../labels';
 import { MineRow } from '../mine/MineRow';
 import { navigate } from '../router';
 import { FeedbackButton } from '../slots/FeedbackButton';
@@ -20,7 +21,7 @@ type Stage = 'plan' | 'timer' | 'log';
 const KINDS: { id: RunKind; name: string }[] = [
   { id: 'easy', name: 'Easy' }, { id: 'long', name: 'Long' }, { id: 'intervals', name: 'Intervals' },
 ];
-const SEG_NAMES = { run: 'run', walk: 'walk', jog: 'jog', sprint: 'sprint', recover: 'recover' } as const;
+const SEG_NAMES = { run: 'Run', walk: 'Walk', jog: 'Jog', sprint: 'Sprint', recover: 'Recover' } as const;
 
 export function RunScreen({ initialKind }: { initialKind?: RunKind }) {
   const snap = useLiveQuery(() => loadCardioSnapshot(db), []);
@@ -120,7 +121,7 @@ export function RunScreen({ initialKind }: { initialKind?: RunKind }) {
       </div>
       <p class="dim">
         {plan.block.repeats > 1 || plan.block.segments.length > 1 ? `${plan.block.repeats} × ` : ''}
-        {plan.block.segments.map((s) => `${SEG_NAMES[s.role]} ${s.sec ?? 0} s${s.inclinePct !== undefined ? ` @ ${s.inclinePct}%` : ''}${s.rpeTarget ? ` (RPE ${s.rpeTarget})` : ''}`).join(' + ')}
+        {plan.block.segments.map((s) => `${SEG_NAMES[s.role]} ${durationLabel(s.sec ?? 0)}${s.inclinePct !== undefined ? ` @ ${s.inclinePct}%` : ''}${s.rpeTarget ? ` (RPE ${s.rpeTarget})` : ''}`).join(' + ')}
         {plan.block.runKind === 'intervals' && ` · warm-up ${Math.round(plan.warmupSec / 60)} + cool-down ${Math.round(plan.cooldownSec / 60)} min`}
       </p>
       <ul class="plan" data-testid="run-reasons">

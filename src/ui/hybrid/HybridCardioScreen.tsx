@@ -8,11 +8,11 @@ import { isLowerVariant } from '../../engine/hybrid';
 import { runToIntervals } from '../../engine/run/to-timer';
 import { RunLog } from '../cardio/RunLog';
 import { TimerScreen } from '../cardio/TimerScreen';
+import { modalityName, runKindName } from '../labels';
 import { navigate } from '../router';
 import { FeedbackButton } from '../slots/FeedbackButton';
 
-const MACHINE_LABEL: Record<string, string> = { bike: 'Bike', row: 'Rower', ski: 'Ski erg' };
-const LEG_OPTIONS = HYBRID_LEG_MODALITIES.map((id) => ({ id: id as CardioModality, label: MACHINE_LABEL[id] ?? id }));
+const LEG_OPTIONS = HYBRID_LEG_MODALITIES.map((id) => ({ id: id as CardioModality, label: modalityName(id) }));
 const UPPER_OPTIONS: { id: CardioModality; label: string }[] = [{ id: 'run', label: 'Outdoors' }, { id: 'treadmill', label: 'Treadmill' }];
 
 export function HybridCardioScreen({ sessionId }: { sessionId: string }) {
@@ -71,7 +71,7 @@ export function HybridCardioScreen({ sessionId }: { sessionId: string }) {
         <h1>Hybrid cardio</h1>
         <a class="gear" href="#/">Home</a>
       </header>
-      <p data-testid="hybrid-cardio-planned"><strong>{block.modality} · {plannedMin} min</strong> ({block.runKind})</p>
+      <p data-testid="hybrid-cardio-planned"><strong>{modalityName(block.modality)} · {plannedMin} min</strong> ({runKindName(block.runKind)})</p>
       {/* The lift part was the warm-up, so the timer adds none. */}
       <button type="button" class="primary" data-testid="hybrid-timer-start" onClick={() => { setFrozen(runToIntervals(block, { warmupSec: 0, cooldownSec: 0 })); setStage('timer'); }}>Start timer</button>
       <button type="button" data-testid="hybrid-log-direct" onClick={() => { setTimed(null); setStage('log'); }}>Log without timer</button>

@@ -30,6 +30,7 @@ export function BodyScreen({ settings }: { settings: Settings }) {
     setError('');
     try {
       await fn();
+      // The field is already cleared by `fn`; the confirmation below reads the saved row, never the input.
       setSaved(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -44,7 +45,7 @@ export function BodyScreen({ settings }: { settings: Settings }) {
       </header>
       <label>
         Weight (lb)
-        <input data-testid="body-weight" inputMode="decimal" value={weight} placeholder={todayRow?.weightLb ? String(todayRow.weightLb) : ''} onInput={(e) => setWeight(e.currentTarget.value)} />
+        <input data-testid="body-weight" inputMode="decimal" value={weight} placeholder="" onInput={(e) => setWeight(e.currentTarget.value)} />
       </label>
       <button type="button" class="primary" data-testid="body-save" disabled={!weight}
         onClick={() => run(async () => { await saveBodyLog(db, today, { weightLb: Number(weight) }); setWeight(''); })}>Save</button>

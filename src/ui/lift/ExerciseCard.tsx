@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useRef, useState } from 'preact/hooks';
 import { exerciseById } from '../../content';
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
@@ -10,6 +10,7 @@ import { stepBy } from '../../engine/lift/steps';
 import type { LiftSnapshot } from '../../engine/lift/types';
 import { FeedbackButton } from '../slots/FeedbackButton';
 import { PoseView } from '../slots/PoseView';
+import { Stepper } from './Stepper';
 
 export interface CardProps {
   session: Session;
@@ -39,25 +40,38 @@ export function ExerciseCard(p: CardProps) {
   const steps = eq?.steps ?? [];
   const baseWeight = presc?.weight ?? block.targetWeight ?? 0;
   const baseReps = presc?.reps ?? block.repMin;
-  const [draft, setDraft] = useState<Record<number, { weight: number; reps: number }>>({});
+  // Optimistic local values: the screen never waits for the live query to echo a +/− back, so a tap
+  // straight after an adjust reads the value on screen, and rapid taps can't lose an increment.
+  const [, rerender] = useState(0);
+  const draftRef = useRef<Record<number, { weight: number; reps: number }>>({});
+  // Every write for this card runs in tap order: an adjust and the ✓ that follows it cannot interleave.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const enqueue = (job: () => Promise<unknown>) => {
+    queue.current = queue.current.then(job, job).catch((e) => console.error(e));
+  };
 
   const working = sets.filter((s) => s.setKind === undefined || s.setKind === 'working');
   const rowFor = (idx: number) => working.find((s) => s.idx === idx);
   const view = (idx: number) => {
     const logged = rowFor(idx);
-    return logged ? { weight: logged.weight, reps: logged.reps } : (draft[idx] ?? { weight: baseWeight, reps: baseReps });
+    return draftRef.current[idx] ?? (logged ? { weight: logged.weight, reps: logged.reps } : { weight: baseWeight, reps: baseReps });
   };
 
   const change = (idx: number, patch: Partial<{ weight: number; reps: number }>) => {
-    const next = { ...view(idx), ...patch };
-    setDraft({ ...draft, [idx]: next });
-    const logged = rowFor(idx);
-    if (logged) updateSetValues(db, logged.id, patch);
+    draftRef.current = { ...draftRef.current, [idx]: { ...view(idx), ...patch } };
+    rerender((n) => n + 1);
+    // Looked up when the write runs, so it lands on the row even if the ✓ that created it is still queued.
+    enqueue(async () => {
+      const row = (await db.sets.where('sessionId').equals(session.id).toArray()).find(
+        (s) => s.exerciseId === block.exerciseId && s.equipmentId === (block.equipmentId ?? '') && s.idx === idx && (s.setKind === undefined || s.setKind === 'working'),
+      );
+      if (row) await updateSetValues(db, row.id, patch);
+    });
   };
 
   const toggle = (idx: number) => {
     const v = view(idx);
-    return toggleWorkingSet(db, {
+    enqueue(() => toggleWorkingSet(db, {
       id: newId(),
       sessionId: session.id,
       exerciseId: block.exerciseId,
@@ -71,7 +85,7 @@ export function ExerciseCard(p: CardProps) {
       setKind: 'working',
       ...(block.supersetGroup ? { supersetGroup: block.supersetGroup } : {}),
       ts: new Date().toISOString(),
-    });
+    }));
   };
 
   const lastIdx = block.sets - 1;
@@ -94,20 +108,22 @@ export function ExerciseCard(p: CardProps) {
         const logged = rowFor(idx);
         const id = block.exerciseId;
         return (
+          // Two deliberate lines: "Set N" + weight stepper, then reps stepper + ✓ (+ ⚠ / 💬 once logged).
           <div class={logged ? 'setrow done' : 'setrow'} key={idx} data-testid={`set-${id}-${idx}`}>
-            <span class="idx">Set {idx + 1}</span>
-            <button type="button" aria-label="weight down" onClick={() => change(idx, { weight: stepBy(steps, v.weight, -1) })}>−</button>
-            <span class="val" data-testid={`set-weight-${id}-${idx}`}>{v.weight}</span>
-            <button type="button" aria-label="weight up" onClick={() => change(idx, { weight: stepBy(steps, v.weight, 1) })}>+</button>
-            <span class="times" aria-hidden="true">×</span>
-            <button type="button" aria-label="reps down" onClick={() => change(idx, { reps: Math.max(0, v.reps - 1) })}>−</button>
-            <span class="val" data-testid={`set-reps-${id}-${idx}`}>{v.reps}</span>
-            <button type="button" aria-label="reps up" onClick={() => change(idx, { reps: v.reps + 1 })}>+</button>
-            <button type="button" class="tick" aria-pressed={!!logged} data-testid={`set-done-${id}-${idx}`} onClick={() => toggle(idx)}>✓</button>
-            {logged && (
-              <button type="button" aria-label="pain" aria-pressed={logged.painFlag} class={logged.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, logged.id, !logged.painFlag)}>⚠</button>
-            )}
-            {logged && <FeedbackButton kind="set" context={{ sessionId: session.id, exerciseId: id, setId: logged.id, equipmentId: logged.equipmentId }} />}
+            <div class="setline">
+              <span class="idx">Set {idx + 1}</span>
+              <Stepper wide value={v.weight} unit="lb" valueTestId={`set-weight-${id}-${idx}`} downLabel="weight down" upLabel="weight up"
+                onDown={() => change(idx, { weight: stepBy(steps, v.weight, -1) })} onUp={() => change(idx, { weight: stepBy(steps, v.weight, 1) })} />
+            </div>
+            <div class="setline">
+              <Stepper value={v.reps} unit="reps" valueTestId={`set-reps-${id}-${idx}`} downLabel="reps down" upLabel="reps up"
+                onDown={() => change(idx, { reps: Math.max(0, v.reps - 1) })} onUp={() => change(idx, { reps: v.reps + 1 })} />
+              <button type="button" class="tick" aria-pressed={!!logged} data-testid={`set-done-${id}-${idx}`} onClick={() => toggle(idx)}>✓</button>
+              {logged && (
+                <button type="button" aria-label="pain" aria-pressed={logged.painFlag} class={logged.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, logged.id, !logged.painFlag)}>⚠</button>
+              )}
+              {logged && <FeedbackButton kind="set" context={{ sessionId: session.id, exerciseId: id, setId: logged.id, equipmentId: logged.equipmentId }} />}
+            </div>
           </div>
         );
       })}

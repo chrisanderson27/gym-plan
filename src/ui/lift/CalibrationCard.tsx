@@ -11,6 +11,7 @@ import { stepBy } from '../../engine/lift/steps';
 import { FeedbackButton } from '../slots/FeedbackButton';
 import { PoseView } from '../slots/PoseView';
 import type { CardProps } from './ExerciseCard';
+import { Stepper } from './Stepper';
 
 export function CalibrationCard(p: CardProps) {
   const { block, snapshot, session } = p;
@@ -72,11 +73,14 @@ export function CalibrationCard(p: CardProps) {
       <p class="dim">Calibration: find a weight you could lift about 3 more times.</p>
       {cal.map((s) => (
         <div class="setrow done" key={s.id} data-testid={`cal-${block.exerciseId}-${s.idx}`}>
-          <span class="idx">Set {s.idx + 1}</span>
-          <span class="val">{s.weight}</span>
-          <span>× {s.reps}</span>
-          <button type="button" aria-label="pain" aria-pressed={s.painFlag} class={s.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, s.id, !s.painFlag)}>⚠</button>
-          <FeedbackButton kind="set" context={{ sessionId: session.id, exerciseId: block.exerciseId, setId: s.id, equipmentId: s.equipmentId }} />
+          <div class="setline">
+            <span class="idx">Set {s.idx + 1}</span>
+            <span class="loggedval"><span class="val">{s.weight}</span> lb × {s.reps}</span>
+          </div>
+          <div class="setline">
+            <button type="button" aria-label="pain" aria-pressed={s.painFlag} class={s.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, s.id, !s.painFlag)}>⚠</button>
+            <FeedbackButton kind="set" context={{ sessionId: session.id, exerciseId: block.exerciseId, setId: s.id, equipmentId: s.equipmentId }} />
+          </div>
         </div>
       ))}
       {awaitingAnswer && (
@@ -95,15 +99,15 @@ export function CalibrationCard(p: CardProps) {
       )}
       {!awaitingAnswer && !stopped && (
         <div class="setrow">
-          <span class="idx">Set {cal.length + 1}</span>
-          <button type="button" aria-label="weight down" onClick={() => setWeight(stepBy(steps, w, -1))}>−</button>
-          <span class="val" data-testid={`cal-weight-${block.exerciseId}`}>{w}</span>
-          <button type="button" aria-label="weight up" onClick={() => setWeight(stepBy(steps, w, 1))}>+</button>
-          <span>×</span>
-          <button type="button" aria-label="reps down" onClick={() => setReps(Math.max(1, reps - 1))}>−</button>
-          <span class="val">{reps}</span>
-          <button type="button" aria-label="reps up" onClick={() => setReps(reps + 1)}>+</button>
-          <button type="button" class="tick" data-testid={`cal-log-${block.exerciseId}`} onClick={log}>✓</button>
+          <div class="setline">
+            <span class="idx">Set {cal.length + 1}</span>
+            <Stepper wide value={w} unit="lb" valueTestId={`cal-weight-${block.exerciseId}`} downLabel="weight down" upLabel="weight up"
+              onDown={() => setWeight(stepBy(steps, w, -1))} onUp={() => setWeight(stepBy(steps, w, 1))} />
+          </div>
+          <div class="setline">
+            <Stepper value={reps} unit="reps" downLabel="reps down" upLabel="reps up" onDown={() => setReps(Math.max(1, reps - 1))} onUp={() => setReps(reps + 1)} />
+            <button type="button" class="tick" data-testid={`cal-log-${block.exerciseId}`} onClick={log}>✓</button>
+          </div>
         </div>
       )}
       {sub && (

@@ -10,7 +10,7 @@ import { HYBRID_LEG_MODALITIES } from '../../engine/config';
 import { isLowerVariant } from '../../engine/hybrid';
 import { muscleReadiness, variantReadiness } from '../../engine/lift/readiness';
 import { nextVariant } from '../../engine/lift/rotation';
-import { humanize, plural } from '../labels';
+import { humanize, modalityName, plural, runKindName } from '../labels';
 import { MineRow } from '../mine/MineRow';
 import { navigate } from '../router';
 import { FeedbackButton } from '../slots/FeedbackButton';
@@ -58,13 +58,13 @@ export function HybridScreen({ initial }: { initial?: LiftVariant }) {
       </div>
       <div class="chips">
         {(['easy', 'intervals'] as const).map((k) => (
-          <button key={k} type="button" class={k === kind ? 'chip on' : 'chip'} data-testid={`hybrid-kind-${k}`} onClick={() => setKind(k)}>{k}</button>
+          <button key={k} type="button" class={k === kind ? 'chip on' : 'chip'} data-testid={`hybrid-kind-${k}`} onClick={() => setKind(k)}>{runKindName(k)}</button>
         ))}
       </div>
       {lower && (
         <div class="chips">
           {HYBRID_LEG_MODALITIES.map((m) => (
-            <button key={m} type="button" class={m === modality ? 'chip on' : 'chip'} data-testid={`hybrid-modality-${m}`} onClick={() => setModality(m)}>{m}</button>
+            <button key={m} type="button" class={m === modality ? 'chip on' : 'chip'} data-testid={`hybrid-modality-${m}`} onClick={() => setModality(m)}>{modalityName(m)}</button>
           ))}
         </div>
       )}
@@ -73,7 +73,7 @@ export function HybridScreen({ initial }: { initial?: LiftVariant }) {
           <li key={b.id}><strong>{exerciseById.get(b.exerciseId)?.name ?? b.exerciseId}</strong><span>{plural(b.sets, 'set')}</span></li>
         ))}
       </ul>
-      <p data-testid="hybrid-cardio"><strong>Then {plan.cardio.block.modality} {cardioMin} min</strong> ({plan.cardio.block.runKind})</p>
+      <p data-testid="hybrid-cardio"><strong>Then {modalityName(plan.cardio.block.modality)} {cardioMin} min</strong> ({runKindName(plan.cardio.block.runKind)})</p>
       <ul class="plan">
         {plan.cardio.reasons.map((r) => <li key={r} class="dim">{humanize(r)}</li>)}
       </ul>

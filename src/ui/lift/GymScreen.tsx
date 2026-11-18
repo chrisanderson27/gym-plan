@@ -12,7 +12,7 @@ export function GymScreen() {
         <a class="gear" href="#/lift">Lift</a>
       </header>
       {missing && missing.length === 0 && <p class="dim">Nothing marked "not at my gym".</p>}
-      <ul class="plan">
+      <ul class="cardrows">
         {missing?.map((o) => (
           <li key={o.exerciseId} data-testid={`gym-${o.exerciseId}`}>
             <strong>{exerciseById.get(o.exerciseId)?.name ?? o.exerciseId}</strong>

@@ -39,6 +39,7 @@
 
   --black-a08: rgba(0, 0, 0, 0.08);
   --black-a35: rgba(0, 0, 0, 0.35);
+  --scrim: rgba(0, 0, 0, 0.5);
   --white-a30: rgba(255, 255, 255, 0.3);
 
   --font-sans: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
@@ -130,6 +131,9 @@
   --button-text: var(--color-text-primary);
   --input-bg: var(--color-surface);
   --input-border: var(--color-border-strong);
+  --disabled-bg: var(--color-canvas);
+  --disabled-text: var(--color-border-strong);
+  --disabled-border: var(--color-border-subtle);
   --app-bar-bg: var(--color-surface);
 }
 

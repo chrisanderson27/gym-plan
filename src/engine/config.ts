@@ -97,6 +97,10 @@ export const HYBRID_LIFT_MIN = 30;
 export const HYBRID_CARDIO_MIN = 20;
 export const HYBRID_LEG_MODALITIES = ['bike', 'row', 'ski'] as const;
 export const HYBRID_LEG_DEFAULT = 'bike';
+/** Display names for cardio modality ids (shared by history summaries and the UI label helpers). */
+export const CARDIO_MODALITY_LABELS = {
+  run: 'Run', treadmill: 'Treadmill', bike: 'Bike', row: 'Rower', ski: 'Ski erg', stair: 'Stair climber', elliptical: 'Elliptical',
+} as const;
 export const BODY_EMA_ALPHA = 0.1;
 export const BODY_RATE_WINDOW_DAYS = 14;
 export const BODY_RATE_MIN_SPAN_DAYS = 7;
