@@ -73,7 +73,7 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
 
       <label>
         Goal weight (lb)
-        <input inputMode="decimal" value={settings.goalWeightLb} onChange={(e) => { const v = Number(e.currentTarget.value); if (v > 0) saveSettings(db, { goalWeightLb: v }); }} />
+        <input inputMode="decimal" defaultValue={String(settings.goalWeightLb)} onChange={(e) => { const v = Number(e.currentTarget.value); if (v > 0) saveSettings(db, { goalWeightLb: v }); }} />
       </label>
       <label>
         Pool unit

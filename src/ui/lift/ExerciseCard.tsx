@@ -57,7 +57,9 @@ export function ExerciseCard(p: CardProps) {
     return draftRef.current[idx] ?? (logged ? { weight: logged.weight, reps: logged.reps } : { weight: baseWeight, reps: baseReps });
   };
 
-  const change = (idx: number, patch: Partial<{ weight: number; reps: number }>) => {
+  // The patch is derived from the latest optimistic value (the ref), never from render-time state, so several taps before a render all count.
+  const change = (idx: number, next: (cur: { weight: number; reps: number }) => Partial<{ weight: number; reps: number }>) => {
+    const patch = next(view(idx));
     draftRef.current = { ...draftRef.current, [idx]: { ...view(idx), ...patch } };
     rerender((n) => n + 1);
     // Looked up when the write runs, so it lands on the row even if the ✓ that created it is still queued.
@@ -113,11 +115,11 @@ export function ExerciseCard(p: CardProps) {
             <div class="setline">
               <span class="idx">Set {idx + 1}</span>
               <Stepper wide value={v.weight} unit="lb" valueTestId={`set-weight-${id}-${idx}`} downLabel="weight down" upLabel="weight up"
-                onDown={() => change(idx, { weight: stepBy(steps, v.weight, -1) })} onUp={() => change(idx, { weight: stepBy(steps, v.weight, 1) })} />
+                onDown={() => change(idx, (c) => ({ weight: stepBy(steps, c.weight, -1) }))} onUp={() => change(idx, (c) => ({ weight: stepBy(steps, c.weight, 1) }))} />
             </div>
             <div class="setline">
               <Stepper value={v.reps} unit="reps" valueTestId={`set-reps-${id}-${idx}`} downLabel="reps down" upLabel="reps up"
-                onDown={() => change(idx, { reps: Math.max(0, v.reps - 1) })} onUp={() => change(idx, { reps: v.reps + 1 })} />
+                onDown={() => change(idx, (c) => ({ reps: Math.max(0, c.reps - 1) }))} onUp={() => change(idx, (c) => ({ reps: c.reps + 1 }))} />
               <button type="button" class="tick" aria-pressed={!!logged} data-testid={`set-done-${id}-${idx}`} onClick={() => toggle(idx)}>✓</button>
               {logged && (
                 <button type="button" aria-label="pain" aria-pressed={logged.painFlag} class={logged.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, logged.id, !logged.painFlag)}>⚠</button>

@@ -120,7 +120,7 @@ a.chip { background: var(--chip-bg); color: var(--color-text-primary); border-ra
   background: var(--tile-bg); border: 1px solid var(--tile-border); border-radius: var(--radius);
 }
 .tile {
-  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 2px;
   min-height: 96px; padding: var(--space-3); width: 100%; text-align: left;
   color: var(--color-text-primary); text-decoration: none; margin: 0;
 }
@@ -143,9 +143,12 @@ a.chip { background: var(--chip-bg); color: var(--color-text-primary); border-ra
 .resume:active { background: var(--color-surface-hover); }
 .sheet { padding: var(--space-3); margin: var(--space-3) 0; }
 /* Bottom sheet: fixed to the viewport bottom over a dimmed backdrop (see Sheet.tsx). */
-.sheet-backdrop { position: fixed; inset: 0; z-index: 9; background: var(--scrim); }
+.sheet-backdrop { position: fixed; inset: 0; z-index: 9; background: var(--scrim); overscroll-behavior: contain; }
+/* Background scroll lock while a sheet is open: the body is pinned at the saved offset (set inline by Sheet.tsx). */
+html.sheet-lock { overflow: hidden; }
+html.sheet-lock body { position: fixed; left: 0; right: 0; width: 100%; overflow: hidden; }
 .sheet.overlay {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; margin: 0 auto; max-width: 480px; max-height: 85vh; overflow: auto;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; margin: 0 auto; max-width: 480px; max-height: 85vh; overflow: auto; overscroll-behavior: contain;
   border-radius: var(--radius) var(--radius) 0 0; box-shadow: var(--shadow-1);
   padding: var(--space-4) var(--space-4) calc(var(--space-4) + env(safe-area-inset-bottom));
 }

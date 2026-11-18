@@ -44,14 +44,12 @@ test('settings backup downloads and restores into a fresh context', async ({ pag
           open.onerror = () => resolve(undefined);
         }),
     );
-  // The input is controlled: a live-query re-render landing right after the fill can reset it to the old value before `change`
-  // fires, and the edit is saved asynchronously. Retry until the value is really in the database, or the export races ahead of it.
-  await expect(async () => {
-    await goal.fill('215');
-    await goal.dispatchEvent('change');
-    await goal.blur();
-    expect(await storedGoal()).toBe(215);
-  }).toPass({ timeout: 10_000 });
+  // One real edit: fill, then blur (the browser's own `change`). The save is asynchronous, so poll the stored value
+  // until it lands; nothing is ever re-filled, so a lost edit fails here.
+  await goal.fill('215');
+  await goal.blur();
+  await expect.poll(storedGoal, { timeout: 10_000 }).toBe(215);
+  await expect(goal).toHaveValue('215');
   await expect(page.getByText('Last backup: never')).toBeVisible();
 
   const [download] = await Promise.all([

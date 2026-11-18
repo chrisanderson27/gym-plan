@@ -174,6 +174,91 @@ test('a ✓ tapped in the same instant as a +/− adjust still logs the adjusted
   await expect(row(1).getByTestId(`set-done-${ex}-1`)).toHaveAttribute('aria-pressed', 'false');
 });
 
+test('five + taps in one JS task move the weight by exactly five steps, and survive a reload', async ({ page }) => {
+  await onboardWithHistory(page);
+  await page.goto('./#/lift');
+  await page.getByTestId('variant-upper-a').click();
+  await page.getByTestId('start-lift').click();
+  const ex = 'chest-press-machine';
+  const row = page.getByTestId(`set-${ex}-0`);
+  const weight = row.getByTestId(`set-weight-${ex}-0`);
+  const reps = row.getByTestId(`set-reps-${ex}-0`);
+  const w0 = Number(await weight.textContent());
+  const r0 = Number(await reps.textContent());
+
+  // One task, no render between taps. One step is whatever the equipment step is: measure it with a single tap first.
+  await row.getByRole('button', { name: 'weight up' }).click();
+  const step = Number(await weight.textContent()) - w0;
+  expect(step).toBeGreaterThan(0);
+  await row.evaluate((el) => {
+    const up = el.querySelector('[aria-label="weight up"]') as HTMLButtonElement;
+    const rUp = el.querySelector('[aria-label="reps up"]') as HTMLButtonElement;
+    for (let i = 0; i < 5; i++) { up.click(); rUp.click(); }
+    (el.querySelector('[data-testid^="set-done-"]') as HTMLButtonElement).click();
+  });
+  await expect(row.getByTestId(`set-done-${ex}-0`)).toHaveAttribute('aria-pressed', 'true');
+  await expect(weight).toHaveText(String(w0 + 6 * step));
+  await expect(reps).toHaveText(String(r0 + 5));
+  await page.reload();
+  await expect(weight).toHaveText(String(w0 + 6 * step));
+  await expect(reps).toHaveText(String(r0 + 5));
+});
+
+test('an open sheet traps Tab inside the dialog, makes the page inert and locks scroll', async ({ page }) => {
+  await onboardWithHistory(page);
+  await page.goto('./#/lift');
+  await page.getByTestId('variant-upper-a').click();
+  await page.getByTestId('start-lift').click();
+  const opener = page.getByRole('button', { name: 'Swap' }).first();
+  // Bring the opener into view first (a click would scroll it there anyway), then take the scroll position to protect.
+  await opener.scrollIntoViewIfNeeded();
+  const y0 = await page.evaluate(() => window.scrollY);
+  expect(y0).toBeGreaterThan(0);
+  await opener.click();
+  const dialog = page.getByRole('dialog', { name: 'Swap exercise' });
+  await expect(dialog).toBeVisible();
+  const inside = () => dialog.evaluate((el) => el.contains(document.activeElement));
+  const controls = await dialog.evaluate((el) => el.querySelectorAll('a[href], button:not([disabled]), input, select, textarea').length);
+  for (let i = 0; i < controls + 3; i++) {
+    await page.keyboard.press('Tab');
+    expect(await inside(), `Tab #${i + 1}`).toBe(true);
+  }
+  for (let i = 0; i < controls + 3; i++) {
+    await page.keyboard.press('Shift+Tab');
+    expect(await inside(), `Shift+Tab #${i + 1}`).toBe(true);
+  }
+  expect(await page.evaluate(() => document.querySelectorAll('[inert]').length)).toBeGreaterThan(0);
+
+  // Scroll lock: a wheel attempt (over the backdrop) leaves the page where it was.
+  // (Mobile WebKit has no mouse.wheel, so the attempt is a wheel event on the backdrop plus programmatic scrolls.)
+  await page.getByTestId('sheet-backdrop').dispatchEvent('wheel', { deltaY: 400 });
+  await page.evaluate(() => { window.scrollTo(0, 400); window.scrollBy(0, 400); document.scrollingElement!.scrollTop = 400; });
+  // The body is pinned at the saved offset: the content still sits at the same visual position.
+  expect(await page.evaluate(() => Math.round(-document.body.getBoundingClientRect().top))).toBe(y0);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  expect(await page.evaluate(() => document.querySelectorAll('[inert]').length)).toBe(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(y0);
+  await expect(opener).toBeFocused();
+});
+
+test('Home tiles are left-aligned: title, chip and reason share one left edge', async ({ page }) => {
+  await onboardWithHistory(page);
+  await page.goto('./#/');
+  await expect(page.getByTestId('tile-lift')).toBeVisible();
+  const edges = await page.evaluate(() =>
+    ['pick', 'lift', 'burn', 'run', 'swim', 'hybrid'].map((id) => {
+      const tile = document.querySelector(`[data-testid="tile-${id}"]`)!;
+      const lefts = Array.from(tile.querySelectorAll('strong, span, small')).map((n) => Math.round(n.getBoundingClientRect().left * 10) / 10);
+      return { id, lefts };
+    }),
+  );
+  for (const e of edges) {
+    expect(e.lefts.length, e.id).toBeGreaterThan(0);
+    for (const l of e.lefts) expect(Math.abs(l - e.lefts[0]!), `${e.id} left edges ${e.lefts}`).toBeLessThanOrEqual(1);
+  }
+});
+
 test('Feedback list reads as words, wraps long text, and never widens the page', async ({ page }) => {
   await onboardWithHistory(page);
   await page.goto('./#/lift');
