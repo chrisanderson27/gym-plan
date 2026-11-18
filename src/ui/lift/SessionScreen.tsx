@@ -1,18 +1,15 @@
 import { useState } from 'preact/hooks';
-import { LIFT_TEMPLATES, exerciseById } from '../../content';
+import { LIFT_TEMPLATES } from '../../content';
 import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
 import {
   LIFT_EXERCISES,
-  blockPrescriptionPatch,
-  ensureEquipmentInstance,
+  changeBlockEquipment,
   finishLiftSession,
   loadLiftSnapshot,
   prescribeExercise,
-  resolveEquipmentId,
   setNotAtMyGym,
-  setPreferredEquipment,
-  swapExerciseInSession,
+  swapBlockExercise,
 } from '../../data/lift';
 import type { LiftBlock } from '../../data/types';
 import { localDate } from '../../engine/dates';
@@ -57,13 +54,8 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const name = session.variant ? `${LIFT_TEMPLATES[session.variant].name} · ${LIFT_TEMPLATES[session.variant].focus}` : 'Lift';
   const elapsed = Math.max(0, Math.round(((session.endedAt ? new Date(session.endedAt).getTime() : Date.now()) - new Date(session.date).getTime()) / 60_000));
 
-  const rebuildPrescription = (exId: string, eqId: string) => blockPrescriptionPatch(snapshot, exId, eqId, flags);
-
   const swapTo = async (block: LiftBlock, newId: string) => {
-    const ex = exerciseById.get(newId);
-    if (!ex) return;
-    const eqId = await ensureEquipmentInstance(db, ex, resolveEquipmentId(snapshot, ex, weekIdx));
-    await swapExerciseInSession(db, sessionId, block.id, newId, eqId, rebuildPrescription(newId, eqId));
+    await swapBlockExercise(db, sessionId, block.id, newId);
     setSheet(null);
   };
   const notAtMyGym = async (block: LiftBlock) => {
@@ -73,8 +65,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     if (sub) await swapTo(block, sub);
   };
   const chooseEquipment = async (block: LiftBlock, eqId: string) => {
-    await setPreferredEquipment(db, block.exerciseId, eqId);
-    await swapExerciseInSession(db, sessionId, block.id, block.exerciseId, eqId, rebuildPrescription(block.exerciseId, eqId));
+    await changeBlockEquipment(db, sessionId, block.id, eqId);
     setSheet(null);
   };
 

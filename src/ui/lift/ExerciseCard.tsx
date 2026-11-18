@@ -116,7 +116,7 @@ export function ExerciseCard(p: CardProps) {
         <div class="rir">
           <span>Reps in reserve?</span>
           {RIRS.map((r) => (
-            <button key={r.v} type="button" class={lastLogged.rir === r.v ? 'chip on' : 'chip'} data-testid={`rir-${block.exerciseId}-${r.v}`} onClick={() => setLastSetRir(db, session.id, block.exerciseId, r.v)}>
+            <button key={r.v} type="button" class={lastLogged.rir === r.v ? 'chip on' : 'chip'} data-testid={`rir-${block.exerciseId}-${r.v}`} onClick={() => setLastSetRir(db, session.id, block.exerciseId, r.v, block.equipmentId ?? '')}>
               {r.label}
             </button>
           ))}

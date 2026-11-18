@@ -4,6 +4,8 @@ import { buildExport, importExport } from './backup';
 import type { GymDb } from './db';
 import {
   blockPrescriptionPatch,
+  changeBlockEquipment,
+  swapBlockExercise,
   buildLiftPlan,
   ensureEquipmentInstance,
   finishLiftSession,
@@ -18,7 +20,9 @@ import {
 } from './lift';
 import { newId } from './ids';
 import { openTestDb } from './test-utils';
-import type { SetRow } from './types';
+import type { LiftBlock, SetRow } from './types';
+import { painSwapOffer } from '../engine/lift/pain';
+import { summarizeLiftSession } from '../engine/lift/session';
 
 const dbs: GymDb[] = [];
 const open = () => {
@@ -137,5 +141,76 @@ describe('blockPrescriptionPatch', () => {
     expect(patch.label).toBe('Calibration');
     expect(patch.sets).toBe(1);
     expect(patch.targetWeight).not.toBe(100);
+  });
+});
+
+describe('review fixes (cycle 2)', () => {
+  const started = async () => {
+    const db = open();
+    await seedSettings(db);
+    const plan = buildLiftPlan(await loadLiftSnapshot(db, NOW), 'upper-a', 60);
+    const id = await startLiftSession(db, plan, NOW);
+    const blocks = (await db.sessions.get(id))!.blocks.filter((b): b is LiftBlock => b.kind === 'lift' && !b.warmup);
+    return { db, id, blocks };
+  };
+
+  it('R1: zero-rep working failures on three exercises trigger fatigue', () => {
+    const blocks = ['a', 'b', 'c'].map((e) => ({ kind: 'lift', id: e, exerciseId: e, sets: 3, repMin: 8, repMax: 12 }) as unknown as LiftBlock);
+    const sets = ['a', 'b', 'c'].map((e) => setRow('s', e, 'q', 0, { reps: 0, targetReps: 10 }));
+    expect(summarizeLiftSession(blocks, sets)).toEqual({ missedExercises: ['a', 'b', 'c'], fatigue: true });
+    const cal = sets.map((r) => ({ ...r, setKind: 'calibration' as const }));
+    expect(summarizeLiftSession(blocks, cal).fatigue).toBe(false);
+  });
+
+  it('R2: swapping to a fresh machine exercise rebuilds sets/RIR for the new instance', async () => {
+    const { db, id, blocks } = await started();
+    const used = new Set(blocks.map((b) => b.exerciseId));
+    const fresh = [...exerciseById.values()].find((e) => !e.retired && !used.has(e.id) && e.prescription.unit === 'reps' && e.group !== 'conditioning' && e.equipment[0] === 'machine')!;
+    const target = blocks[0]!;
+    await db.sessions.update(id, { blocks: (await db.sessions.get(id))!.blocks.map((b) => (b.kind === 'lift' && b.id === target.id ? { ...b, sets: 4, rirTarget: 3 } : b)) });
+    const before = (await db.equipment.toArray()).length;
+    await swapBlockExercise(db, id, target.id, fresh.id);
+    const swapped = (await db.sessions.get(id))!.blocks.find((b): b is LiftBlock => b.kind === 'lift' && b.id === target.id)!;
+    expect((await db.equipment.toArray()).length).toBe(before + 1);
+    expect(swapped.exerciseId).toBe(fresh.id);
+    expect(swapped.label).toBe('Calibration');
+    expect(swapped.sets).toBe(1);
+  });
+
+  it('R5: re-selecting the current equipment keeps a ceiling-trimmed set count', async () => {
+    const { db, id, blocks } = await started();
+    const b = blocks.find((x) => x.equipmentId)!;
+    await db.sessions.update(id, { blocks: (await db.sessions.get(id))!.blocks.map((x) => (x.kind === 'lift' && x.id === b.id ? { ...x, sets: 1 } : x)) });
+    await changeBlockEquipment(db, id, b.id, b.equipmentId!);
+    const after = (await db.sessions.get(id))!.blocks.find((x): x is LiftBlock => x.kind === 'lift' && x.id === b.id)!;
+    expect(after.sets).toBe(1);
+  });
+
+  it('R5: a changed pair never exceeds the planned (trimmed) set count', async () => {
+    const d = open();
+    const snapshot = await loadLiftSnapshot(d);
+    const eq = [...snapshot.equipment.values()].find((e) => e.kind === 'db')!;
+    const ex = [...exerciseById.values()].find((e) => e.equipment.includes('db'))!;
+    const cur = { sets: 0 } as LiftBlock;
+    expect(blockPrescriptionPatch(snapshot, ex.id, eq.id, { deload: false, rampIn: false }, cur).sets).toBe(0);
+  });
+
+  it('R3: RIR on equipment B leaves equipment A rows untouched', async () => {
+    const d = open();
+    const sid = newId();
+    await logSet(d, setRow(sid, 'x', 'A', 0, { rir: 3 }));
+    await logSet(d, setRow(sid, 'x', 'A', 1));
+    await logSet(d, setRow(sid, 'x', 'B', 0));
+    await setLastSetRir(d, sid, 'x', 1, 'B');
+    const rows = await d.sets.where('sessionId').equals(sid).toArray();
+    const rir = (eq: string, idx: number) => rows.find((r) => r.equipmentId === eq && r.idx === idx)?.rir;
+    expect(rir('B', 0)).toBe(1);
+    expect(rir('A', 0)).toBe(3);
+    expect(rir('A', 1)).toBeUndefined();
+  });
+
+  it('R4: two flagged calibration sets raise the pain-swap offer', () => {
+    const sets = [0, 1].map((i) => setRow('s', 'x', 'A', i, { setKind: 'calibration', painFlag: true }));
+    expect(painSwapOffer('x', [], sets, NOW.toISOString())).toBe(true);
   });
 });

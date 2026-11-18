@@ -2,8 +2,10 @@ import { useState } from 'preact/hooks';
 import { exerciseById } from '../../content';
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
-import { logSet, setPainFlag } from '../../data/lift';
+import { LIFT_EXERCISES, logSet, setPainFlag } from '../../data/lift';
 import { CALIBRATION_JUMP_STEPS, CALIBRATION_REPS } from '../../engine/config';
+import { pickSubstitute } from '../../engine/lift/generator';
+import { painSwapOffer } from '../../engine/lift/pain';
 import { calibrationLanding, calibrationStart } from '../../engine/lift/progression';
 import { stepBy } from '../../engine/lift/steps';
 import { FeedbackButton } from '../slots/FeedbackButton';
@@ -26,6 +28,9 @@ export function CalibrationCard(p: CardProps) {
   const nextWeight = last ? stepBy(steps, last.weight, jump) : startWeight;
   const [weight, setWeight] = useState<number | null>(null);
   const w = weight ?? nextWeight;
+  const sub = painSwapOffer(block.exerciseId, snapshot.history, p.sets, new Date().toISOString())
+    ? pickSubstitute(block.exerciseId, LIFT_EXERCISES, snapshot.overrides, { jointFriendlyOnly: true })
+    : null;
   const awaitingAnswer = !!last && last.rir === undefined;
   const stopped = !!last && last.rir !== undefined && !heavier;
 
@@ -98,6 +103,12 @@ export function CalibrationCard(p: CardProps) {
           <button type="button" aria-label="reps up" onClick={() => setReps(reps + 1)}>+</button>
           <button type="button" class="tick" data-testid={`cal-log-${block.exerciseId}`} onClick={log}>✓</button>
         </div>
+      )}
+      {sub && (
+        <p class="warn" data-testid={`pain-offer-${block.exerciseId}`}>
+          Pain flagged twice — try {exerciseById.get(sub)?.name}{' '}
+          <button type="button" onClick={() => p.onSwapTo(sub)}>Swap</button>
+        </p>
       )}
       <div class="actions">
         <button type="button" onClick={p.onSwap}>Swap</button>

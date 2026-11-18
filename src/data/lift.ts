@@ -7,7 +7,7 @@ import { classifyHard } from '../engine/hard';
 import { generateLift, type LiftPlan } from '../engine/lift/generator';
 import { isLowerBarbell, prescribe } from '../engine/lift/progression';
 import { summarizeLiftSession } from '../engine/lift/session';
-import { weekIndex } from '../engine/week';
+import { isRampInWeek, weekIndex } from '../engine/week';
 import type { HistorySession, LiftExercise, LiftSnapshot, Prescription } from '../engine/lift/types';
 import type { GymDb } from './db';
 import { newId } from './ids';
@@ -124,10 +124,13 @@ export function blockPrescriptionPatch(
   exerciseId: string,
   equipmentId: string,
   flags: { deload: boolean; rampIn: boolean },
+  current?: LiftBlock,
 ): Partial<LiftBlock> {
   const presc = prescribeExercise(snapshot, exerciseId, equipmentId, flags);
   if (!presc) return { targetWeight: undefined, label: undefined };
-  return { targetWeight: presc.weight, sets: presc.sets, rirTarget: presc.rirTarget, label: presc.mode === 'calibrate' ? 'Calibration' : undefined };
+  // Never raise the planned count: the generator may have trimmed it for the weekly ceiling.
+  const sets = current ? Math.min(presc.sets, current.sets) : presc.sets;
+  return { targetWeight: presc.weight, sets, rirTarget: presc.rirTarget, label: presc.mode === 'calibrate' ? 'Calibration' : undefined };
 }
 
 /** Per-machine instance, only for a seed machine/cable that has never been used for this exercise. */
@@ -182,9 +185,9 @@ export async function unlogSet(db: GymDb, id: string): Promise<void> {
 }
 
 /** RIR lives only on the exercise's last set (PRD §9); clear it elsewhere. */
-export async function setLastSetRir(db: GymDb, sessionId: string, exerciseId: string, rir: 0 | 1 | 3): Promise<void> {
+export async function setLastSetRir(db: GymDb, sessionId: string, exerciseId: string, rir: 0 | 1 | 3, equipmentId?: string): Promise<void> {
   const rows = (await db.sets.where('sessionId').equals(sessionId).toArray())
-    .filter((s) => s.exerciseId === exerciseId && s.setKind !== 'warmup')
+    .filter((s) => s.exerciseId === exerciseId && s.setKind !== 'warmup' && (equipmentId === undefined || s.equipmentId === equipmentId))
     .sort((a, b) => a.idx - b.idx);
   const last = rows.at(-1);
   if (!last) return;
@@ -262,4 +265,39 @@ export async function swapExerciseInSession(
     );
     await db.sessions.update(sessionId, { blocks });
   });
+}
+
+/** Progression reads history only: the session being logged must not feed its own prescription. */
+const historySnapshot = async (db: GymDb, sessionId: string): Promise<LiftSnapshot> => {
+  const full = await loadLiftSnapshot(db, new Date());
+  return { ...full, history: full.history.filter((h) => h.session.id !== sessionId) };
+};
+
+const flagsFor = (session: Session, snapshot: LiftSnapshot) => ({
+  deload: !!session.flags?.deload,
+  rampIn: isRampInWeek(weekIndex(localDate(new Date(session.date)), snapshot.programStart)),
+});
+
+/** Swap a block to another exercise. Equipment is created first and the prescription rebuilt from a fresh snapshot that includes it. */
+export async function swapBlockExercise(db: GymDb, sessionId: string, blockId: string, newExerciseId: string): Promise<void> {
+  const ex = exerciseById.get(newExerciseId);
+  const session = await db.sessions.get(sessionId);
+  const block = session?.blocks.find((b): b is LiftBlock => b.kind === 'lift' && b.id === blockId);
+  if (!ex || !session || !block) return;
+  const before = await historySnapshot(db, sessionId);
+  const weekIdx = weekIndex(localDate(new Date(session.date)), before.programStart);
+  const eqId = await ensureEquipmentInstance(db, ex, resolveEquipmentId(before, ex, weekIdx));
+  const fresh = await historySnapshot(db, sessionId);
+  await swapExerciseInSession(db, sessionId, blockId, newExerciseId, eqId, blockPrescriptionPatch(fresh, newExerciseId, eqId, flagsFor(session, fresh), block));
+}
+
+/** Pick equipment for a block. Re-selecting the current instance changes nothing, so a ceiling-trimmed count survives. */
+export async function changeBlockEquipment(db: GymDb, sessionId: string, blockId: string, equipmentId: string): Promise<void> {
+  const session = await db.sessions.get(sessionId);
+  const block = session?.blocks.find((b): b is LiftBlock => b.kind === 'lift' && b.id === blockId);
+  if (!session || !block) return;
+  await setPreferredEquipment(db, block.exerciseId, equipmentId);
+  if (block.equipmentId === equipmentId) return;
+  const snap = await historySnapshot(db, sessionId);
+  await swapExerciseInSession(db, sessionId, blockId, block.exerciseId, equipmentId, blockPrescriptionPatch(snap, block.exerciseId, equipmentId, flagsFor(session, snap), block));
 }
