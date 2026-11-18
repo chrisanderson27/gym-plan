@@ -23,7 +23,8 @@ export interface PrescribeCtx {
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const byIdx = (a: SetRow, b: SetRow) => a.idx - b.idx;
 const isCalib = (s: SetRow) => s.setKind === 'calibration';
-const isWork = (s: SetRow) => (s.setKind === undefined || s.setKind === 'working') && s.reps > 0;
+// Logged failed sets (0 reps) still count: they are misses, not absent rows.
+const isWork = (s: SetRow) => s.setKind === undefined || s.setKind === 'working';
 
 export const isLowerBarbell = (ex: LiftExercise, eq: Equipment): boolean =>
   eq.kind === 'barbell' && ['squat', 'hinge', 'lunge'].includes(ex.group);
@@ -54,7 +55,9 @@ export function prescribe(ex: LiftExercise, eq: Equipment, pairHistory: HistoryS
   const sessions = pairHistory
     .map((h) => {
       const mine = h.sets.filter((s) => s.exerciseId === ex.id && s.equipmentId === eq.id);
-      return { work: mine.filter(isWork).sort(byIdx), calib: mine.filter(isCalib).sort(byIdx) };
+      const block = h.session.blocks.find((b) => b.kind === 'lift' && b.exerciseId === ex.id && b.equipmentId === eq.id);
+      const planned = block && block.kind === 'lift' ? block.sets : 0;
+      return { work: mine.filter(isWork).sort(byIdx), calib: mine.filter(isCalib).sort(byIdx), planned };
     })
     .filter((s) => s.work.length + s.calib.length > 0);
 
@@ -97,7 +100,7 @@ export function prescribe(ex: LiftExercise, eq: Equipment, pairHistory: HistoryS
 
   const w = last.work.at(-1)!.weight;
   const lastRir = last.work.at(-1)!.rir;
-  const topped = last.work.every((s) => s.reps >= repMax && s.weight >= s.targetWeight);
+  const topped = new Set(last.work.map((s) => s.idx)).size >= last.planned && last.work.every((s) => s.reps >= repMax && s.weight >= s.targetWeight);
   if (topped && (lastRir === 0 || lastRir === 1)) {
     const nxt = nextStep(steps, w, ctx.isLowerBarbell ? BARBELL_LOWER_MIN_INCREMENT_LB : 0);
     if (nxt === null) return finish({ mode: 'hold', weight: w, reps: repMax, reason: 'hold: top of the rack' }, w);

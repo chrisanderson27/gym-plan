@@ -4,6 +4,7 @@ import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
 import {
   LIFT_EXERCISES,
+  blockPrescriptionPatch,
   ensureEquipmentInstance,
   finishLiftSession,
   loadLiftSnapshot,
@@ -56,11 +57,13 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const name = session.variant ? `${LIFT_TEMPLATES[session.variant].name} · ${LIFT_TEMPLATES[session.variant].focus}` : 'Lift';
   const elapsed = Math.max(0, Math.round(((session.endedAt ? new Date(session.endedAt).getTime() : Date.now()) - new Date(session.date).getTime()) / 60_000));
 
+  const rebuildPrescription = (exId: string, eqId: string) => blockPrescriptionPatch(snapshot, exId, eqId, flags);
+
   const swapTo = async (block: LiftBlock, newId: string) => {
     const ex = exerciseById.get(newId);
     if (!ex) return;
     const eqId = await ensureEquipmentInstance(db, ex, resolveEquipmentId(snapshot, ex, weekIdx));
-    await swapExerciseInSession(db, sessionId, block.id, newId, eqId);
+    await swapExerciseInSession(db, sessionId, block.id, newId, eqId, rebuildPrescription(newId, eqId));
     setSheet(null);
   };
   const notAtMyGym = async (block: LiftBlock) => {
@@ -71,7 +74,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   };
   const chooseEquipment = async (block: LiftBlock, eqId: string) => {
     await setPreferredEquipment(db, block.exerciseId, eqId);
-    await swapExerciseInSession(db, sessionId, block.id, block.exerciseId, eqId);
+    await swapExerciseInSession(db, sessionId, block.id, block.exerciseId, eqId, rebuildPrescription(block.exerciseId, eqId));
     setSheet(null);
   };
 
@@ -88,7 +91,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
 
   const warm = lifts.find((b) => b.warmup);
   const cardFor = (block: LiftBlock) => {
-    const mine = sets.filter((s) => s.exerciseId === block.exerciseId);
+    const mine = sets.filter((s) => s.exerciseId === block.exerciseId && s.equipmentId === (block.equipmentId ?? ''));
     const presc = block.equipmentId ? prescribeExercise(snapshot, block.exerciseId, block.equipmentId, flags) : null;
     const calibrating = mine.some((s) => s.setKind === 'calibration') || presc?.mode === 'calibrate';
     const props = {
@@ -102,7 +105,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       onNotAtMyGym: () => notAtMyGym(block),
       onSwapTo: (id: string) => swapTo(block, id),
     };
-    return calibrating ? <CalibrationCard key={block.id} {...props} /> : <ExerciseCard key={block.id} {...props} />;
+    return calibrating ? <CalibrationCard key={`${block.id}|${block.equipmentId}`} {...props} /> : <ExerciseCard key={`${block.id}|${block.equipmentId}`} {...props} />;
   };
 
   return (

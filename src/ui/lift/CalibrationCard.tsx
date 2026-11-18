@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks';
 import { exerciseById } from '../../content';
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
-import { logSet } from '../../data/lift';
+import { logSet, setPainFlag } from '../../data/lift';
 import { CALIBRATION_JUMP_STEPS, CALIBRATION_REPS } from '../../engine/config';
 import { calibrationLanding, calibrationStart } from '../../engine/lift/progression';
 import { stepBy } from '../../engine/lift/steps';
@@ -69,6 +69,7 @@ export function CalibrationCard(p: CardProps) {
           <span class="idx">Set {s.idx + 1}</span>
           <span class="val">{s.weight}</span>
           <span>× {s.reps}</span>
+          <button type="button" aria-label="pain" aria-pressed={s.painFlag} class={s.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, s.id, !s.painFlag)}>⚠</button>
         </div>
       ))}
       {awaitingAnswer && (

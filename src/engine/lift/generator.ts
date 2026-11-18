@@ -162,6 +162,11 @@ export function generateLift(input: {
     for (const e of [...entries].reverse()) {
       while (total(m) > VOLUME_CEILING && !e.calibrate && e.block.sets > 1 && weights(e).some(([x]) => x === m)) e.block.sets--;
     }
+    // Trimming bottoms out at one set; if the ceiling is still exceeded, drop the exercise (PRD §5 ceiling 20).
+    for (let i = entries.length - 1; i >= 0 && total(m) > VOLUME_CEILING; i--) {
+      const e = entries[i]!;
+      if (!e.calibrate && weights(e).some(([x]) => x === m)) dropped.push(entries.splice(i, 1)[0]!.ex.id);
+    }
   }
 
   const warm = WARMUP_MACHINES.find((id) => exercises.has(id) && !snapshot.overrides.get(id)?.notAtMyGym) ?? WARMUP_MACHINES[0]!;

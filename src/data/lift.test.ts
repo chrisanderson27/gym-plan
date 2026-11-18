@@ -3,6 +3,7 @@ import { exerciseById } from '../content';
 import { buildExport, importExport } from './backup';
 import type { GymDb } from './db';
 import {
+  blockPrescriptionPatch,
   buildLiftPlan,
   ensureEquipmentInstance,
   finishLiftSession,
@@ -121,5 +122,20 @@ describe('lift data layer', () => {
     await importExport(db2, file);
     expect(await db2.sessions.get(id)).toEqual(await db.sessions.get(id));
     expect(await db2.sets.count()).toBe(1);
+  });
+});
+
+describe('blockPrescriptionPatch', () => {
+  it('starts an uncalibrated pair at its calibration start, not the previous weight', async () => {
+    const d = open();
+    const snapshot = await loadLiftSnapshot(d);
+    const db1 = [...snapshot.equipment.values()].find((e) => e.kind === 'db');
+    if (!db1) return;
+    const ex = [...exerciseById.values()].find((e) => e.equipment.includes('db'));
+    if (!ex) return;
+    const patch = blockPrescriptionPatch(snapshot, ex.id, db1.id, { deload: false, rampIn: false });
+    expect(patch.label).toBe('Calibration');
+    expect(patch.sets).toBe(1);
+    expect(patch.targetWeight).not.toBe(100);
   });
 });

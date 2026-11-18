@@ -118,6 +118,18 @@ export function prescribeExercise(
   return prescribe(ex, eq, pair, { ...flags, isLowerBarbell: isLowerBarbell(ex, eq) });
 }
 
+/** Block fields that depend on the exercise × equipment pair; a swap must not carry the previous pair's values. */
+export function blockPrescriptionPatch(
+  snapshot: LiftSnapshot,
+  exerciseId: string,
+  equipmentId: string,
+  flags: { deload: boolean; rampIn: boolean },
+): Partial<LiftBlock> {
+  const presc = prescribeExercise(snapshot, exerciseId, equipmentId, flags);
+  if (!presc) return { targetWeight: undefined, label: undefined };
+  return { targetWeight: presc.weight, sets: presc.sets, rirTarget: presc.rirTarget, label: presc.mode === 'calibrate' ? 'Calibration' : undefined };
+}
+
 /** Per-machine instance, only for a seed machine/cable that has never been used for this exercise. */
 export async function ensureEquipmentInstance(db: GymDb, ex: Exercise, seedId: string): Promise<string> {
   const seed = await db.equipment.get(seedId);

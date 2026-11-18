@@ -54,6 +54,14 @@ describe('pain', () => {
   });
 });
 
+describe('pain (per-set)', () => {
+  const pain = (id: string, idx: number): SetRow => ({ id, sessionId: 'cur', exerciseId: 'x', equipmentId: 'e', idx, targetWeight: 1, targetReps: 1, weight: 1, reps: 1, painFlag: true });
+  it('offers after two flagged sets in the same session', () => {
+    expect(painSwapOffer('x', [], [pain('a', 0)], '2026-02-20T00:00:00Z')).toBe(false);
+    expect(painSwapOffer('x', [], [pain('a', 0), pain('b', 1)], '2026-02-20T00:00:00Z')).toBe(true);
+  });
+});
+
 describe('summarizeLiftSession', () => {
   const block = (id: string): LiftBlock => ({ id: 'b' + id, kind: 'lift', exerciseId: id, sets: 3, repMin: 8, repMax: 12 });
   const set = (exerciseId: string, reps: number, targetReps = 10): SetRow => ({ id: Math.random().toString(), sessionId: 's', exerciseId, equipmentId: 'e', idx: 0, targetWeight: 1, targetReps, weight: 1, reps, painFlag: false });

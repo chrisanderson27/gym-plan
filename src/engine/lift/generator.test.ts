@@ -59,6 +59,16 @@ describe('generateLift', () => {
     const p = gen(snap('2026-01-01'), 90, { forceCalibrate: true });
     expect(p.prescriptions.get('b1')?.mode).toBe('calibrate');
   });
+  it('drops exercises when the weekly ceiling is already reached', () => {
+    const sets = Array.from({ length: 20 }, (_, i) => ({
+      id: 'h' + i, sessionId: 'old', exerciseId: 'leg-press', equipmentId: 'pin', idx: i, targetWeight: 10, targetReps: 10, weight: 10, reps: 10, painFlag: false,
+    }));
+    const s = snap('2026-01-01');
+    s.history = [{ session: { id: 'old', date: '2026-03-01T08:00:00', type: 'lift', blocks: [], hard: false, hardCardio: false, rpe: null, durationMin: 0, notes: '' }, sets }];
+    const p = gen(s);
+    expect(ids(p)).not.toContain('leg-press');
+    expect(ids(p)).not.toContain('hack-squat');
+  });
   it('pickSubstitute respects exclusions', () => {
     expect(pickSubstitute('leg-press', exercises, new Map(), { exclude: new Set(['hack-squat']) })).not.toBe('hack-squat');
   });

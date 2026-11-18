@@ -83,3 +83,27 @@ describe('prescribe (double progression)', () => {
     expect(prescribe(ex, bw, [], ctx)).toMatchObject({ weight: 0, reps: 8 });
   });
 });
+
+describe('prescribe — review fixes', () => {
+  const withBlock = (h: HistorySession, sets: number): HistorySession => ({
+    ...h,
+    session: { ...h.session, blocks: [{ id: 'b1', kind: 'lift', exerciseId: ex.id, equipmentId: pin.id, sets, repMin: 8, repMax: 12 }] },
+  });
+  it('a logged zero-rep set blocks progression', () => {
+    const p = prescribe(ex, pin, [sess(pin, 100, [0, 12, 12], 1)], ctx);
+    expect(p.mode).not.toBe('progress');
+    expect(p.weight).toBe(100);
+  });
+  it('an all-zero exercise counts as a miss', () => {
+    expect(prescribe(ex, pin, [sess(pin, 100, [0, 0, 0], 0)], ctx).mode).toBe('hold');
+  });
+  it('does not raise when fewer sets were logged than prescribed', () => {
+    const h = withBlock(sess(pin, 100, [12], 1), 3);
+    expect(prescribe(ex, pin, [h], ctx).weight).toBe(100);
+  });
+  it('raises when all prescribed sets were logged', () => {
+    const h = withBlock(sess(pin, 100, [12, 12, 12], 1), 3);
+    expect(prescribe(ex, pin, [h], ctx).weight).toBe(115);
+  });
+});
+
