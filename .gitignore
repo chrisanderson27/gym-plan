@@ -4,4 +4,8 @@ dist/
 exports/
 .DS_Store
 .env
+playwright-report/
+test-results/
+coverage/
+dev-dist/
 /.agents/
