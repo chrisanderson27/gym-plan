@@ -11,12 +11,14 @@ export function MineRow({ types }: { types: SessionType[] }) {
   return (
     <section class="mine-row" data-testid="mine-row">
       <h2>Mine</h2>
-      <ul class="plan">
+      <ul class="rows">
         {rows.map((t) => (
-          <li key={t.id}>
-            <a href={'#/mine/' + t.id} data-testid={`mine-${t.id}`}>{t.name}</a>
-            <span>{templateDurationMin(t.blocks)} min</span>
-            {t.source === 'built' && <a href={'#/builder/' + t.id}>edit</a>}
+          <li key={t.id} class="row-item">
+            <a class="row" href={'#/mine/' + t.id} data-testid={`mine-${t.id}`}>
+              <span class="row-label">{t.name}</span>
+              <span class="row-meta">{templateDurationMin(t.blocks)} min</span>
+            </a>
+            {t.source === 'built' && <a class="btn" href={'#/builder/' + t.id}>edit</a>}
           </li>
         ))}
       </ul>

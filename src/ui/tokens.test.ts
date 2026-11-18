@@ -62,7 +62,13 @@ const PAIRS: [string, string, number][] = [
   ['color-info-text', 'color-info-tint', BODY],
   ['color-danger-text', 'color-surface', BODY],
   ['chip-on-text', 'chip-on-bg', BODY],
-  ['color-on-danger', 'chip-danger-on-bg', BODY],
+  ['chip-danger-on-text', 'chip-danger-on-bg', BODY],
+  ['chip-on-border', 'chip-on-bg', NONTEXT],
+  ['chip-danger-on-border', 'chip-danger-on-bg', NONTEXT],
+  ['tick-on-text', 'tick-on-bg', BODY],
+  ['tick-on-border', 'tick-on-bg', NONTEXT],
+  ['color-selected-text', 'color-selected-bg', BODY],
+  ['color-selected-text', 'color-surface', BODY],
   ['color-text-primary', 'chip-bg', BODY],
   ['button-text', 'button-bg', BODY],
   ['color-text-primary', 'input-bg', BODY],
@@ -74,6 +80,9 @@ const PAIRS: [string, string, number][] = [
   ['color-focus', 'color-surface', NONTEXT],
   ['color-action', 'color-surface', NONTEXT],
   ['color-success-text', 'color-surface', NONTEXT],
+  // `.ok` status messages are body text on the page or a card.
+  ['color-success-text', 'color-canvas', BODY],
+  ['color-success-text', 'color-surface', BODY],
 ];
 const TIMER: [string, string, number][] = [
   ...['timer-idle', 'timer-work', 'timer-rest', 'timer-warmup', 'timer-transition'].map((f): [string, string, number] => ['timer-text', f, BODY]),
@@ -113,6 +122,20 @@ describe('stylesheet contracts', () => {
   });
   it('timer focus ring uses --timer-focus', () => {
     expect(styles).toMatch(/\.timer > button:focus-visible[^{]*\{\s*outline-color:\s*var\(--timer-focus\)/);
+  });
+  it('tile helper text rule does not out-specify the status chip colours', () => {
+    expect(styles).not.toMatch(/\.tile small\s*[,{]/);
+    expect(styles).toMatch(/\.tile small:not\(\.status\)/);
+  });
+  it('selected chips are tinted, never solid action blue', () => {
+    expect(styles).toMatch(/\.chip\.on\s*\{[^}]*var\(--chip-on-bg\)/);
+    expect(css).toMatch(/--chip-on-bg:\s*var\(--color-selected-bg\)/);
+    expect(resolve(themes.light, 'chip-on-bg')).not.toBe(resolve(themes.light, 'color-action'));
+    expect(resolve(themes.dark, 'chip-on-bg')).not.toBe(resolve(themes.dark, 'color-action'));
+  });
+  it('every link and button style keeps a 56 px minimum height', () => {
+    expect(styles).toMatch(/button, input, select, a, \.gear\s*\{[^}]*min-height:\s*var\(--tap\)/);
+    expect(styles).toMatch(/\.link\s*\{[^}]*min-height:\s*var\(--tap\)/);
   });
   it('selected chip text is not composited with opacity', () => {
     const m = styles.match(/\.chip small\s*\{([^}]*)\}/);

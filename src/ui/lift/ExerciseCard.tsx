@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks';
 import { exerciseById } from '../../content';
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
-import { LIFT_EXERCISES, logSet, prescribeExercise, setLastSetRir, setPainFlag, unlogSet } from '../../data/lift';
+import { LIFT_EXERCISES, prescribeExercise, setLastSetRir, setPainFlag, toggleWorkingSet, updateSetValues } from '../../data/lift';
 import type { LiftBlock, Session, SetRow } from '../../data/types';
 import { pickSubstitute } from '../../engine/lift/generator';
 import { painSwapOffer } from '../../engine/lift/pain';
@@ -52,14 +52,12 @@ export function ExerciseCard(p: CardProps) {
     const next = { ...view(idx), ...patch };
     setDraft({ ...draft, [idx]: next });
     const logged = rowFor(idx);
-    if (logged) logSet(db, { ...logged, ...next });
+    if (logged) updateSetValues(db, logged.id, patch);
   };
 
   const toggle = (idx: number) => {
-    const logged = rowFor(idx);
-    if (logged) return unlogSet(db, logged.id);
     const v = view(idx);
-    return logSet(db, {
+    return toggleWorkingSet(db, {
       id: newId(),
       sessionId: session.id,
       exerciseId: block.exerciseId,
@@ -101,7 +99,7 @@ export function ExerciseCard(p: CardProps) {
             <button type="button" aria-label="weight down" onClick={() => change(idx, { weight: stepBy(steps, v.weight, -1) })}>−</button>
             <span class="val" data-testid={`set-weight-${id}-${idx}`}>{v.weight}</span>
             <button type="button" aria-label="weight up" onClick={() => change(idx, { weight: stepBy(steps, v.weight, 1) })}>+</button>
-            <span>×</span>
+            <span class="times" aria-hidden="true">×</span>
             <button type="button" aria-label="reps down" onClick={() => change(idx, { reps: Math.max(0, v.reps - 1) })}>−</button>
             <span class="val" data-testid={`set-reps-${id}-${idx}`}>{v.reps}</span>
             <button type="button" aria-label="reps up" onClick={() => change(idx, { reps: v.reps + 1 })}>+</button>

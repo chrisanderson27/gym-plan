@@ -15,6 +15,7 @@ export function BodyScreen({ settings }: { settings: Settings }) {
   const [weight, setWeight] = useState('');
   const [waist, setWaist] = useState('');
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
   const today = localDate(new Date());
 
   if (!logs) return <main class="screen"><h1>Weigh-in</h1></main>;
@@ -29,6 +30,7 @@ export function BodyScreen({ settings }: { settings: Settings }) {
     setError('');
     try {
       await fn();
+      setSaved(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -46,10 +48,11 @@ export function BodyScreen({ settings }: { settings: Settings }) {
       </label>
       <button type="button" class="primary" data-testid="body-save" disabled={!weight}
         onClick={() => run(async () => { await saveBodyLog(db, today, { weightLb: Number(weight) }); setWeight(''); })}>Save</button>
-      <button type="button" class={todayRow?.protein ? 'chip on' : 'chip'} aria-pressed={!!todayRow?.protein} data-testid="body-protein"
-        onClick={() => run(() => saveBodyLog(db, today, { protein: !todayRow?.protein }))}>
-        Protein ✓
-      </button>
+      <label class="check">
+        <input type="checkbox" data-testid="body-protein" checked={!!todayRow?.protein}
+          onChange={() => run(() => saveBodyLog(db, today, { protein: !todayRow?.protein }))} />
+        <span>Protein ✓</span>
+      </label>
       <label>
         Waist (in) {waistDue(logs, today) && <span class="badge" data-testid="body-waist-due">due</span>}
         <input data-testid="body-waist" inputMode="decimal" value={waist} onInput={(e) => setWaist(e.currentTarget.value)} />
@@ -57,6 +60,11 @@ export function BodyScreen({ settings }: { settings: Settings }) {
       <button type="button" data-testid="body-waist-save" disabled={!waist}
         onClick={() => run(async () => { await saveBodyLog(db, today, { waistIn: Number(waist) }); setWaist(''); })}>Save waist</button>
       {error && <p role="alert" class="warn">{error}</p>}
+      {saved && todayRow && (
+        <p role="status" class="ok" data-testid="body-saved">
+          Saved for today: {todayRow.weightLb ? `${todayRow.weightLb} lb` : 'no weight'}{todayRow.waistIn ? ` · waist ${todayRow.waistIn} in` : ''}
+        </p>
+      )}
 
       {last && (
         <section class="card">

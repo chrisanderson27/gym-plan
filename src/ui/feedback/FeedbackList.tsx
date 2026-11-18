@@ -7,6 +7,7 @@ import type { FeedbackRow } from '../../data/types';
 import { localDate } from '../../engine/dates';
 import { toJsonl, toMarkdown } from '../../engine/feedback';
 import { datedFileName, deliverFile } from '../../platform/share';
+import { tagLabel } from '../labels';
 import { FeedbackSheet } from './FeedbackSheet';
 
 const contextLabel = (c: FeedbackRow['context']): string =>
@@ -39,9 +40,10 @@ export function FeedbackList({ onMessage }: { onMessage: (m: string) => void }) 
       <h2>Feedback</h2>
       <button type="button" data-testid="feedback-new" onClick={() => setSheet({})}>New feedback</button>
       {empty && <p class="dim">No feedback yet</p>}
+      {!empty && <div class="card fb-list">
       {(rows ?? []).map((r) => (
         <div key={r.id} class={corrected.has(r.id) ? 'fb-row corrected' : 'fb-row'} data-testid="feedback-row">
-          <strong>{r.tags.join(', ') || r.kind}</strong>
+          <strong>{r.tags.map(tagLabel).join(', ') || r.kind}</strong>
           {corrected.has(r.id) && <span class="dim"> (corrected)</span>}
           {r.ref && <span class="dim"> (correction)</span>}
           {r.text && <p>{r.text}</p>}
@@ -49,6 +51,7 @@ export function FeedbackList({ onMessage }: { onMessage: (m: string) => void }) 
           <button type="button" class="link" onClick={() => setSheet({ original: r })}>Correct</button>
         </div>
       ))}
+      </div>}
       <button type="button" disabled={empty} onClick={() => exportAs('jsonl', true)}>Share feedback (JSONL)</button>
       <button type="button" disabled={empty} onClick={() => exportAs('jsonl', false)}>Download feedback (JSONL)</button>
       <button type="button" disabled={empty} onClick={() => exportAs('md', false)}>Download feedback (Markdown)</button>

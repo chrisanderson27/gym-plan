@@ -107,15 +107,24 @@
   --color-on-danger: var(--gray-0);
   --color-info-text: var(--blue-70);
   --color-info-tint: var(--blue-10);
+  --color-selected-bg: var(--blue-10);
+  --color-selected-text: var(--blue-60);
   --pose-implement: var(--blue-60);
 
   --tile-bg: var(--color-surface);
   --tile-border: var(--color-border-subtle);
   --chip-bg: var(--color-surface);
   --chip-border: var(--color-border-strong);
-  --chip-on-bg: var(--color-action);
-  --chip-on-text: var(--color-on-action);
-  --chip-danger-on-bg: var(--color-danger);
+  /* Selected = tinted, so the one solid-blue element on a screen stays the primary action. */
+  --chip-on-bg: var(--color-selected-bg);
+  --chip-on-text: var(--color-selected-text);
+  --chip-on-border: var(--color-selected-text);
+  --chip-danger-on-bg: var(--color-danger-tint);
+  --chip-danger-on-text: var(--color-danger-text);
+  --chip-danger-on-border: var(--color-danger);
+  --tick-on-bg: var(--color-success-tint);
+  --tick-on-text: var(--color-success-text);
+  --tick-on-border: var(--color-success-text);
   --button-bg: var(--color-surface);
   --button-border: var(--color-border-strong);
   --button-text: var(--color-text-primary);
@@ -150,6 +159,8 @@
   --color-on-danger: var(--gray-0);
   --color-info-text: var(--blue-40);
   --color-info-tint: var(--blue-90);
+  --color-selected-bg: var(--blue-90);
+  --color-selected-text: var(--blue-40);
   --pose-implement: var(--blue-40);
 }
 
@@ -180,6 +191,8 @@
     --color-on-danger: var(--gray-0);
     --color-info-text: var(--blue-40);
     --color-info-tint: var(--blue-90);
+    --color-selected-bg: var(--blue-90);
+    --color-selected-text: var(--blue-40);
     --pose-implement: var(--blue-40);
   }
 }

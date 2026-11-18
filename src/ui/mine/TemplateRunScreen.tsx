@@ -92,7 +92,7 @@ function BurnAgain({ run, snap }: { run: Runnable; snap: CardioSnapshot }) {
   if (stage === 'log' && result) {
     return (
       <main class="screen">
-        <h1>Session complete</h1>
+        <header class="bar"><h1>Session complete</h1></header>
         <RpeChips value={rpe} onChange={setRpe} allowSkip />
         <button type="button" class="primary" data-testid="burn-save"
           onClick={async () => { await saveBurn(db, { templateId, blocks: result.blocks, rpe, startedAt: result.startedAt, id: sessionId }); navigate('/'); }}>Save</button>
@@ -137,7 +137,7 @@ function RunAgain({ run, block, snap }: { run: Runnable; block: RunBlock; snap: 
   if (stage === 'log') {
     return (
       <main class="screen">
-        <h1>Log run</h1>
+        <header class="bar"><h1>Log run</h1></header>
         <RunLog defaultMinutes={Math.round(plan.plannedSec / 60)} defaultModality={plan.block.modality}
           onSave={async (v) => { await saveRun(db, { block: plan.block, startedAt, id: sessionId, ...v }); navigate('/'); }} />
         <FeedbackButton kind="workout" context={ctx} />
@@ -175,7 +175,7 @@ function SwimAgain({ run, snap }: { run: Runnable; snap: CardioSnapshot }) {
   if (logging) {
     return (
       <main class="screen">
-        <h1>Log swim</h1>
+        <header class="bar"><h1>Log swim</h1></header>
         <SwimLog defaultDistance={plan.totalDistance} onSave={async (v) => {
           const startedAt = new Date(Date.now() - v.durationMin * 60_000).toISOString();
           await saveSwim(db, { workoutId: run.templateId ?? 'mine', blocks: plan.blocks, startedAt, id: sessionId, ...v });

@@ -132,7 +132,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         <section class="card" data-testid="warmup">
           <h2>{warm.label}</h2>
           <p class="dim">{warm.notes}</p>
-          <label class="check"><input type="checkbox" data-testid="warmup-done" /> Warm-up done</label>
+          <label class="check"><input type="checkbox" data-testid="warmup-done" /><span>Warm-up done</span></label>
         </section>
       )}
 

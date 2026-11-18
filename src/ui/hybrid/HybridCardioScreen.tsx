@@ -53,7 +53,7 @@ export function HybridCardioScreen({ sessionId }: { sessionId: string }) {
   if (stage === 'log') {
     return (
       <main class="screen">
-        <h1>Log cardio</h1>
+        <header class="bar"><h1>Log cardio</h1></header>
         <RunLog
           defaultMinutes={timed?.minutes ?? plannedMin}
           defaultModality={block.modality}

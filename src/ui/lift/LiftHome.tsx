@@ -8,6 +8,7 @@ import type { LiftVariant } from '../../data/types';
 import { DEFAULT_LIFT_BUDGET_MIN, LIFT_BUDGETS_MIN } from '../../engine/config';
 import { muscleReadiness, variantReadiness } from '../../engine/lift/readiness';
 import { nextVariant } from '../../engine/lift/rotation';
+import { exerciseName, humanize } from '../labels';
 import { navigate } from '../router';
 
 const VARIANTS: LiftVariant[] = ['lower-a', 'upper-a', 'lower-b', 'upper-b'];
@@ -52,7 +53,7 @@ export function LiftHome({ autoStart, initial }: { autoStart?: LiftVariant; init
           Resume {data.open.variant ?? 'session'} →
         </a>
       )}
-      <p class="dim">Suggested: {LIFT_TEMPLATES[suggestion.variant].name} — {suggestion.why}</p>
+      <p class="dim">Suggested: {LIFT_TEMPLATES[suggestion.variant].name} — {humanize(suggestion.why)}</p>
       <div class="chips">
         {VARIANTS.map((v) => {
           const r = ready(v);
@@ -85,13 +86,15 @@ export function LiftHome({ autoStart, initial }: { autoStart?: LiftVariant; init
           );
         })}
       </ul>
-      {plan.dropped.length > 0 && <p class="dim">Dropped to fit {budget} min: {plan.dropped.join(', ')}</p>}
+      {plan.dropped.length > 0 && <p class="dim">Dropped to fit {budget} min: {plan.dropped.map(exerciseName).join(', ')}</p>}
       <p class="dim">≈ {Math.round(plan.estMin)} min</p>
       <button type="button" class="primary" data-testid="start-lift" onClick={start}>Start</button>
       <MineRow types={['lift', 'custom']} />
-      <p>
-        <a href="#/lift/volume">Weekly volume</a> · <a href="#/lift/gym">My gym</a> · <a href="#/">Home</a>
-      </p>
+      <nav class="linkbar" aria-label="Lift links">
+        <a class="btn" href="#/lift/volume">Weekly volume</a>
+        <a class="btn" href="#/lift/gym">My gym</a>
+        <a class="btn" href="#/">Home</a>
+      </nav>
     </main>
   );
 }

@@ -47,7 +47,6 @@ export function SwimLog({ defaultDistance, onSave }: { defaultDistance: number; 
 
   return (
     <section>
-      <h2>Log swim</h2>
       <label>
         Distance
         <input data-testid="swim-distance" inputMode="decimal" value={distance} onInput={(e) => setDistance(e.currentTarget.value)} />
@@ -59,8 +58,9 @@ export function SwimLog({ defaultDistance, onSave }: { defaultDistance: number; 
       <p>RPE</p>
       <RpeChips value={rpe} onChange={setRpe} />
       <button type="button" class={pain ? 'chip on pain' : 'chip'} aria-pressed={pain} data-testid="swim-shoulder-pain" onClick={() => setPain(!pain)}>Shoulder pain</button>
-      <label>
-        <input type="checkbox" checked={didTest} onChange={(e) => setDidTest(e.currentTarget.checked)} /> I did a CSS test today
+      <label class="check">
+        <input type="checkbox" checked={didTest} onChange={(e) => setDidTest(e.currentTarget.checked)} />
+        <span>I did a CSS test today</span>
       </label>
       {didTest && (
         <>

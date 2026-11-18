@@ -16,7 +16,9 @@ import {
   setLastSetRir,
   setNotAtMyGym,
   startLiftSession,
+  toggleWorkingSet,
   updateEquipmentSteps,
+  updateSetValues,
 } from './lift';
 import { newId } from './ids';
 import { openTestDb } from './test-utils';
@@ -221,6 +223,26 @@ describe('review fixes (cycle 2)', () => {
     expect(rir('B', 0)).toBe(1);
     expect(rir('A', 0)).toBe(3);
     expect(rir('A', 1)).toBeUndefined();
+  });
+
+  it('toggleWorkingSet decides from the database: a stale double tap never duplicates a set, and edits never resurrect one', async () => {
+    const db = open();
+    await seedSettings(db);
+    const plan = buildLiftPlan(await loadLiftSnapshot(db, NOW), 'upper-a', 60);
+    const id = await startLiftSession(db, plan, NOW);
+    const block = plan.blocks.find((b) => !b.warmup)!;
+    const row = () => setRow(id, block.exerciseId, block.equipmentId!, 0);
+    // Two taps issued before any live-query refresh (both saw "not logged"): the second one unticks, never duplicates.
+    const [a, b] = await Promise.all([toggleWorkingSet(db, row()), toggleWorkingSet(db, row())]);
+    expect([a, b].sort()).toEqual(['logged', 'unlogged']);
+    expect(await db.sets.where('sessionId').equals(id).count()).toBe(0);
+    expect(await toggleWorkingSet(db, row())).toBe('logged');
+    const [logged] = await db.sets.where('sessionId').equals(id).toArray();
+    await updateSetValues(db, logged!.id, { reps: 9 });
+    expect((await db.sets.get(logged!.id))?.reps).toBe(9);
+    await db.sets.delete(logged!.id);
+    await updateSetValues(db, logged!.id, { reps: 7 });
+    expect(await db.sets.get(logged!.id)).toBeUndefined();
   });
 
   it('R4: two flagged calibration sets raise the pain-swap offer', () => {

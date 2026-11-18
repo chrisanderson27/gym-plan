@@ -10,6 +10,7 @@ import { HYBRID_LEG_MODALITIES } from '../../engine/config';
 import { isLowerVariant } from '../../engine/hybrid';
 import { muscleReadiness, variantReadiness } from '../../engine/lift/readiness';
 import { nextVariant } from '../../engine/lift/rotation';
+import { humanize, plural } from '../labels';
 import { MineRow } from '../mine/MineRow';
 import { navigate } from '../router';
 import { FeedbackButton } from '../slots/FeedbackButton';
@@ -69,12 +70,12 @@ export function HybridScreen({ initial }: { initial?: LiftVariant }) {
       )}
       <ul class="plan">
         {plan.lift.blocks.filter((b) => !b.warmup).map((b) => (
-          <li key={b.id}><strong>{exerciseById.get(b.exerciseId)?.name ?? b.exerciseId}</strong><span>{b.sets} sets</span></li>
+          <li key={b.id}><strong>{exerciseById.get(b.exerciseId)?.name ?? b.exerciseId}</strong><span>{plural(b.sets, 'set')}</span></li>
         ))}
       </ul>
       <p data-testid="hybrid-cardio"><strong>Then {plan.cardio.block.modality} {cardioMin} min</strong> ({plan.cardio.block.runKind})</p>
       <ul class="plan">
-        {plan.cardio.reasons.map((r) => <li key={r} class="dim">{r}</li>)}
+        {plan.cardio.reasons.map((r) => <li key={r} class="dim">{humanize(r)}</li>)}
       </ul>
       <button type="button" class="primary" data-testid="hybrid-start" disabled={busy} onClick={start}>Start</button>
       <MineRow types={['hybrid']} />

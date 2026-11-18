@@ -206,6 +206,30 @@ export async function unlogSet(db: GymDb, id: string): Promise<void> {
   await db.sets.delete(id);
 }
 
+/**
+ * Tick / untick one working set. Decides from the database inside one transaction, not from the rendered
+ * (possibly stale) live-query snapshot, so a tap before the snapshot refreshes cannot write a duplicate row
+ * for the same idx or untick a set that is not there.
+ */
+export async function toggleWorkingSet(db: GymDb, row: SetRow): Promise<'logged' | 'unlogged'> {
+  return db.transaction('rw', db.sets, async () => {
+    const existing = (await db.sets.where('sessionId').equals(row.sessionId).toArray()).filter(
+      (s) => s.exerciseId === row.exerciseId && s.equipmentId === row.equipmentId && s.idx === row.idx && (s.setKind === undefined || s.setKind === 'working'),
+    );
+    if (existing.length > 0) {
+      await db.sets.bulkDelete(existing.map((s) => s.id));
+      return 'unlogged' as const;
+    }
+    await db.sets.put(row);
+    return 'logged' as const;
+  });
+}
+
+/** Edit a logged set's weight/reps. Update-only: a set unticked in the meantime is never resurrected. */
+export async function updateSetValues(db: GymDb, id: string, patch: { weight?: number; reps?: number }): Promise<void> {
+  await db.sets.update(id, patch);
+}
+
 /** RIR lives only on the exercise's last set (PRD §9); clear it elsewhere. */
 export async function setLastSetRir(db: GymDb, sessionId: string, exerciseId: string, rir: 0 | 1 | 3, equipmentId?: string): Promise<void> {
   const rows = (await db.sets.where('sessionId').equals(sessionId).toArray())

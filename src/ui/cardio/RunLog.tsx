@@ -38,7 +38,6 @@ export function RunLog({ defaultMinutes, defaultModality, onSave, modalities = D
 
   return (
     <section>
-      <h2>Log run</h2>
       <label>
         Distance (mi, optional)
         <input data-testid="run-distance" inputMode="decimal" value={distance} onInput={(e) => setDistance(e.currentTarget.value)} />

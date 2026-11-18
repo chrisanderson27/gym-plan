@@ -73,7 +73,7 @@ export function BurnScreen() {
     };
     return (
       <main class="screen">
-        <h1>{result.early ? 'Session ended early' : 'Session complete'}</h1>
+        <header class="bar"><h1>{result.early ? 'Session ended early' : 'Session complete'}</h1></header>
         <p>How hard was it? (optional)</p>
         <RpeChips value={rpe} onChange={setRpe} allowSkip />
         <button type="button" class="primary" data-testid="burn-save" disabled={saving} onClick={save}>Save</button>
@@ -110,17 +110,20 @@ export function BurnScreen() {
         ))}
       </div>
       <p data-testid="burn-total"><strong>{plan.totalMin} min</strong>{plan.swaps.length > 0 && ` · swapped ${plan.swaps.map((s) => `${labelOf[s.from] ?? s.from} → ${labelOf[s.to] ?? s.to}`).join(', ')}`}</p>
-      <ul class="plan">
+      <ul class="plan burn-blocks">
         {plan.blocks.map((b) => {
           const stations = [...new Set(b.phases.filter((p) => p.exerciseId).map((p) => p.exerciseId!))];
           return (
-            <li key={b.id}>
-              <span>{b.label ?? 'Block'} · {b.rounds}×</span>
-              <span>{blockMin(b)} min</span>
+            <li key={b.id} class="burn-row">
+              <span class="row-label">{b.label ?? 'Block'} · {b.rounds}×</span>
+              <span class="row-meta">{blockMin(b)} min</span>
               {stations.length > 0 && stations.length <= 4 && (
                 <span class="stations">
                   {stations.map((id) => (
-                    <button key={id} type="button" class="link" onClick={() => swapFor(id)}>{labelOf[id] ?? id} ⇄</button>
+                    <span key={id} class="station">
+                      <span class="station-name">{labelOf[id] ?? id}</span>
+                      <button type="button" class="iconbtn" aria-label={`Swap ${labelOf[id] ?? id}`} onClick={() => swapFor(id)}>⇄</button>
+                    </span>
                   ))}
                 </span>
               )}

@@ -78,7 +78,7 @@ export function RunScreen({ initialKind }: { initialKind?: RunKind }) {
     const startedAt = timed?.startedAt ?? new Date().toISOString();
     return (
       <main class="screen">
-        <h1>{timed ? 'Session complete' : 'Log run'}</h1>
+        <header class="bar"><h1>{timed ? 'Session complete' : 'Log run'}</h1></header>
         <RunLog defaultMinutes={timed?.minutes ?? plannedMin} defaultModality={plan.block.modality} onSave={(v) => record(v, startedAt)} />
         <FeedbackButton kind="workout" context={{ sessionId, templateId: runTemplateId }} />
       </main>

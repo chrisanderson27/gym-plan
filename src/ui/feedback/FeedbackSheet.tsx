@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { db } from '../../data/db';
 import { addFeedback, correctFeedback } from '../../data/feedback';
 import { FEEDBACK_TAGS, type FeedbackKind, type FeedbackRow, type FeedbackTag } from '../../data/types';
+import { tagLabel } from '../labels';
 
 /** Tag chips + notes. With `original` it writes a correction (a new row with `ref`), never an edit. */
 export function FeedbackSheet({
@@ -36,7 +37,7 @@ export function FeedbackSheet({
       <div class="chips">
         {FEEDBACK_TAGS.map((t) => (
           <button key={t} type="button" class={tags.includes(t) ? 'chip on' : 'chip'} aria-pressed={tags.includes(t)} data-testid={`feedback-tag-${t}`} onClick={() => toggle(t)}>
-            {t}
+            {tagLabel(t)}
           </button>
         ))}
       </div>

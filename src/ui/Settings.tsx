@@ -14,6 +14,8 @@ declare const __APP_VERSION__: string;
 export function SettingsScreen({ settings }: { settings: SettingsRow }) {
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [message, setMessage] = useState('');
+  // Backup result sits next to the backup controls; feedback results stay under the feedback section.
+  const [backupMsg, setBackupMsg] = useState<{ text: string; error?: boolean } | null>(null);
   useEffect(() => {
     isPersisted().then(setPersisted);
   }, []);
@@ -28,9 +30,9 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
     const now = new Date();
     const file = await buildExport(db, now, __APP_VERSION__);
     const result = await deliverFile(backupFileName(now), JSON.stringify(file), { preferShare });
-    if (result === 'cancelled') return setMessage('Export cancelled.');
+    if (result === 'cancelled') return setBackupMsg({ text: 'Export cancelled.' });
     await markBackedUp(db, file.exportedAt);
-    setMessage(result === 'shared' ? 'Backup shared.' : 'Backup downloaded.');
+    setBackupMsg({ text: result === 'shared' ? 'Backup shared.' : 'Backup downloaded.' });
   };
 
   const doImport = async (e: Event) => {
@@ -44,9 +46,9 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
         .filter(([, n]) => n > 0)
         .map(([k, n]) => `${k}: ${n}`)
         .join(', ');
-      setMessage(`Imported ${counts || 'nothing'}. ${warnings.join(' ')}`.trim());
+      setBackupMsg({ text: `Imported ${counts || 'nothing'}. ${warnings.join(' ')}`.trim() });
     } catch (err) {
-      setMessage(err instanceof ImportError ? err.message : 'Import failed.');
+      setBackupMsg({ text: err instanceof ImportError ? err.message : 'Import failed.', error: true });
     }
     input.value = '';
   };
@@ -97,12 +99,15 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
       <p>Last backup: {backupLabel}</p>
       <button type="button" onClick={() => doExport(true)}>Export (share)</button>
       <button type="button" onClick={() => doExport(false)}>Download backup</button>
-      <label>
+      <label class="filebtn">
         Import backup
-        <input type="file" accept=".json,application/json" onChange={doImport} />
+        <input class="visually-hidden" type="file" accept=".json,application/json" onChange={doImport} />
       </label>
+      {backupMsg && (
+        <p role={backupMsg.error ? 'alert' : 'status'} class={backupMsg.error ? 'warn' : 'ok'} data-testid="backup-message">{backupMsg.text}</p>
+      )}
       <FeedbackList onMessage={setMessage} />
-      {message && <p role="status">{message}</p>}
+      {message && <p role="status" class="ok">{message}</p>}
       <p class="dim">gym-plan v{__APP_VERSION__}</p>
     </main>
   );

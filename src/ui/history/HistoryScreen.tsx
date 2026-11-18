@@ -27,10 +27,10 @@ export function HistoryScreen() {
         <a class="gear" href="#/">Home</a>
       </header>
       {rows && rows.length === 0 && <p class="dim">No sessions yet.</p>}
-      <ul class="plan">
+      <ul class="rows">
         {(rows ?? []).map(({ session, summary }) => (
-          <li key={session.id}>
-            <a href={'#/history/' + session.id} data-testid={`history-${session.id}`}>
+          <li key={session.id} class="row-item">
+            <a class="row" href={'#/history/' + session.id} data-testid={`history-${session.id}`}>
               {dayOf(session.date)} · {summary}{session.endedAt ? '' : ' · in progress'}
             </a>
           </li>

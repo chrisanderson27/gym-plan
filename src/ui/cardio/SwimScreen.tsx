@@ -37,7 +37,7 @@ export function SwimScreen() {
   if (logging) {
     return (
       <main class="screen">
-        <h1>Log swim</h1>
+        <header class="bar"><h1>Log swim</h1></header>
         <SwimLog
           defaultDistance={plan.totalDistance}
           onSave={async (v) => {
@@ -68,12 +68,13 @@ export function SwimScreen() {
       <p class="dim">{workout.focus}</p>
       {!css && (
         <p class="warn" data-testid="swim-css-prompt">
-          No CSS test yet, so this card uses rest intervals. <a href="#/swim/css">Take the CSS test</a> to get send-offs.
+          No CSS test yet, so this card uses rest intervals. Take the CSS test to get send-offs.
+          <a class="btn" href="#/swim/css">Take the CSS test</a>
         </p>
       )}
       {css?.estimate && <p class="badge" data-testid="swim-css-estimate">Send-offs from an estimate · CSS {fmtMSS(css.per100)}</p>}
       {css?.approx && <p class="badge">Approximate: your test was in the other pool unit</p>}
-      {css && !css.estimate && !css.approx && <p class="dim">CSS {fmtMSS(css.per100)} per 100 · <a href="#/swim/css">retest</a></p>}
+      {css && !css.estimate && !css.approx && <p class="dim">CSS {fmtMSS(css.per100)} per 100 · <a class="btn" href="#/swim/css">retest</a></p>}
       <SwimCard blocks={plan.blocks} totalDistance={plan.totalDistance} poolUnit={settings.poolUnit} />
       <button type="button" class="primary" data-testid="swim-log" onClick={() => setLogging(true)}>Log swim</button>
       <p class="dim">{lastSwim ? `Last swim: ${dayOf(lastSwim)}` : 'No swims yet'}</p>

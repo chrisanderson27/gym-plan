@@ -26,9 +26,11 @@ export function Home({ settings }: { settings: Settings }) {
       <BackupBanner settings={settings} />
       {plan && (
         <p class="budget" data-testid="budget">
-          {plan.budget.map((l) => (
-            <span key={l.id} class={`budget-${l.status}`} data-testid={`budget-${l.id}`}>{l.label} {l.done}/{l.id === 'rest' || l.id === 'hard' ? l.max : l.min}</span>
-          ))}
+          {plan.budget.map((l) => {
+            // The hard line shows its cap: reaching it warns, exceeding it is an error.
+            const cls = l.status === 'over' ? 'budget-over' : l.id === 'hard' && l.done >= l.max ? 'budget-cap' : `budget-${l.status}`;
+            return <span key={l.id} class={cls} data-testid={`budget-${l.id}`}>{l.label} {l.done}/{l.id === 'rest' || l.id === 'hard' ? l.max : l.min}</span>;
+          })}
         </p>
       )}
       <div class="grid">

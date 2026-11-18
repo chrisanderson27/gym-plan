@@ -19,5 +19,12 @@ export function hybridCardio({ variant, run, modality }: { variant: LiftVariant;
   const block: RunBlock = run.block.runKind === 'intervals'
     ? { ...rest, modality: machine }
     : { ...rest, modality: machine, repeats: 1, segments: [{ role: 'run', sec: run.plannedSec }] };
-  return { block, ...base, reasons: [...run.reasons, `leg day: ${machine} instead of running`] };
+  // A run-walk ratio means nothing on a machine: relabel it (intervals keep their ratio, easy days are steady).
+  const intervals = run.block.runKind === 'intervals';
+  const reasons = run.reasons.map((r) => {
+    const m = /^run-walk (\d+:\d+ s)/.exec(r);
+    if (!m) return r;
+    return intervals ? `${machine} intervals ${m[1]}` : `${machine} steady (no walk breaks)`;
+  });
+  return { block, ...base, reasons: [...reasons, `leg day: ${machine} instead of running`] };
 }
