@@ -11,9 +11,18 @@ const bool: Check = (v) => typeof v === 'boolean';
 const arr = (item: Check): Check => (v) => Array.isArray(v) && v.every(item);
 const oneOf = (...xs: string[]): Check => (v) => typeof v === 'string' && xs.includes(v);
 const nullable = (c: Check): Check => (v) => v === null || c(v);
-const iso: Check = (v) => typeof v === 'string' && !Number.isNaN(Date.parse(v));
-const localDate: Check = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
 const opt = (c: Check): Check => (v) => v === undefined || c(v);
+const localDate: Check = (v) => {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const [y, m, d] = v.split('-').map(Number) as [number, number, number];
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+};
+const iso: Check = (v) =>
+  typeof v === 'string' &&
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(v) &&
+  localDate(v.slice(0, 10)) &&
+  !Number.isNaN(Date.parse(v));
 
 /** Every listed field must be present with the right type; absent/mistyped optional fields are rejected too. */
 const shape = (fields: Record<string, Check>): Check => (v) =>
@@ -22,6 +31,7 @@ const shape = (fields: Record<string, Check>): Check => (v) =>
 const SESSION_TYPES = ['lift', 'burn', 'run', 'swim', 'hybrid', 'custom'];
 const POOL_UNITS = ['yd', 'm'];
 const MODALITIES = ['run', 'treadmill', 'bike', 'row', 'ski', 'stair', 'elliptical'];
+const RUN_FORMATS = ['sprint-walk', 'sprint-jog', '30-30', 'norwegian-4x4', 'hill', 'treadmill-incline', 'run-walk'];
 const RUN_KINDS = ['easy', 'long', 'intervals'];
 
 const phase = shape({
@@ -41,18 +51,20 @@ const swimBlock = shape({
   id: str, kind: oneOf('swim'), section: oneOf('warmup', 'drill', 'kick', 'pull', 'main', 'cooldown'),
   rounds: num, items: arr(swimItem),
 });
+const result = shape({ completed: bool, actualSec: opt(num), completedRounds: opt(num), skipped: opt(bool) });
 const block: Check = (v) => {
   if (!isRec(v) || !str(v.id)) return false;
+  if (!opt(str)(v.label) || !opt(str)(v.notes) || !opt(result)(v.result)) return false;
   switch (v.kind) {
     case 'interval': return shape({ rounds: num, phases: arr(phase) })(v);
     case 'lift':
       return shape({
         exerciseId: str, sets: num, repMin: num, repMax: num,
-        equipmentId: opt(str), targetWeight: opt(num), restSec: opt(num), rirTarget: opt(num), supersetGroup: opt(str),
+        equipmentId: opt(str), targetWeight: opt(num), restSec: opt(num), rirTarget: opt(num), supersetGroup: opt(str), warmup: opt(bool),
       })(v);
     case 'swim': return swimBlock(v);
     case 'run':
-      return shape({ runKind: oneOf(...RUN_KINDS), modality: oneOf(...MODALITIES), repeats: num, segments: arr(segment) })(v);
+      return shape({ runKind: oneOf(...RUN_KINDS), modality: oneOf(...MODALITIES), repeats: num, segments: arr(segment), format: opt(oneOf(...RUN_FORMATS)) })(v);
     default: return false;
   }
 };
@@ -65,14 +77,17 @@ const ROW_SHAPES: Record<StoreName, Check> = {
   sessions: shape({
     id: str, date: iso, type: oneOf(...SESSION_TYPES), blocks: arr(block), hard: bool, hardCardio: bool,
     rpe: nullable(num), durationMin: num, notes: str, templateId: opt(str), endedAt: opt(iso),
+    variant: opt(oneOf('upper-a', 'upper-b', 'lower-a', 'lower-b')),
+    flags: opt(shape({ calibration: opt(bool), deload: opt(bool), fatigue: opt(bool) })),
   }),
   sets: shape({
     id: str, sessionId: str, exerciseId: str, equipmentId: str, idx: num, targetWeight: num, targetReps: num,
-    weight: num, reps: num, painFlag: bool, rir: opt(oneOf0(0, 1, 3)), ts: opt(iso),
+    weight: num, reps: num, painFlag: bool, rir: opt(oneOf0(0, 1, 3)), ts: opt(iso), supersetGroup: opt(str),
+    setKind: opt(oneOf('working', 'warmup', 'calibration')),
   }),
   runs: shape({
     sessionId: str, kind: oneOf(...RUN_KINDS), distanceMi: num, durationSec: num, intervals: arr(segment),
-    rpe: num, painFlag: bool, modality: opt(oneOf(...MODALITIES)),
+    rpe: num, painFlag: bool, modality: opt(oneOf(...MODALITIES)), runWalkRatio: opt(str),
   }),
   swims: shape({
     sessionId: str, poolLength: num, poolUnit: oneOf(...POOL_UNITS), distance: num, sets: arr(swimBlock),
@@ -88,7 +103,7 @@ const ROW_SHAPES: Record<StoreName, Check> = {
   }),
   feedback: shape({
     id: str, v: (x) => x === 1, ts: iso, kind: oneOf('workout', 'exercise', 'set', 'app'), tags: arr(str), text: str,
-    context: isRec, ref: opt(str),
+    context: shape({ sessionId: opt(str), exerciseId: opt(str), setId: opt(str), equipmentId: opt(str) }), ref: opt(str),
   }),
   settings: shape({
     id: oneOf('settings'), goalWeightLb: num, daysPerWeek: num, poolUnit: oneOf(...POOL_UNITS), poolLength: num,

@@ -148,8 +148,24 @@ describe('export/import', () => {
       { sessions: [{ ...session('s1'), date: 'not-a-date' }] },
       { bodyLogs: [{ date: '2026-11-10', protein: 'yes' }] },
       { settings: [{ id: 'settings' }] },
+      { sessions: [{ ...session('s1'), flags: 'broken' }] },
+      { sessions: [{ ...session('s1'), variant: 'nope' }] },
+      { sessions: [{ ...session('s1'), blocks: [{ ...blocks[0], result: { actualSec: 'broken' } }] }] },
+      { sessions: [{ ...session('s1'), date: '123' }] },
+      { bodyLogs: [{ date: '2026-02-30', protein: true }] },
+      { sets: [{ id: 'x', sessionId: 's', exerciseId: 'e', equipmentId: 'q', idx: 0, targetWeight: 1, targetReps: 1, weight: 1, reps: 1, painFlag: false, setKind: 'bogus' }] },
+      { feedback: [{ id: 'f', v: 1, ts: '2026-11-10T11:00:00.000Z', kind: 'app', tags: [], text: '', context: { sessionId: 5 } }] },
     ];
     for (const stores of bad) expect(() => parseExport(mk(stores))).toThrow(ImportError);
     expect((await db.sessions.get('s1'))?.blocks).toHaveLength(4);
+  });
+
+  it('accepts valid optional fields and unknown extension fields', () => {
+    const ok = {
+      ...session('s1'), variant: 'upper-a', flags: { deload: true }, extra: 1,
+      blocks: [{ ...blocks[0], result: { completed: true, actualSec: 30 } }],
+    };
+    const raw = JSON.stringify({ schemaVersion: 1, exportedAt: '2026-11-12T00:00:00.000Z', appVersion: 't', stores: { sessions: [ok], bodyLogs: [{ date: '2024-02-29', protein: true }] } });
+    expect(() => parseExport(raw)).not.toThrow();
   });
 });
