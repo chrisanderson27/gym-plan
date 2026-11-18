@@ -1,0 +1,77 @@
+import { useState } from 'preact/hooks';
+import type { CssInput } from '../../data/cardio';
+import { parseMSS } from './format';
+import { RpeChips } from './RpeChips';
+
+export interface SwimLogValues {
+  distance: number;
+  durationMin: number;
+  rpe: number;
+  shoulderPainFlag: boolean;
+  css?: CssInput;
+}
+
+export function SwimLog({ defaultDistance, onSave }: { defaultDistance: number; onSave: (v: SwimLogValues) => Promise<void> }) {
+  const [distance, setDistance] = useState(String(defaultDistance));
+  const [minutes, setMinutes] = useState('45');
+  const [rpe, setRpe] = useState<number | null>(null);
+  const [pain, setPain] = useState(false);
+  const [didTest, setDidTest] = useState(false);
+  const [t400, setT400] = useState('');
+  const [t200, setT200] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const ok = rpe !== null && Number(distance) > 0 && Number(minutes) > 0;
+
+  const save = async () => {
+    if (rpe === null || !ok) return;
+    const a = parseMSS(t400);
+    const b = parseMSS(t200);
+    setBusy(true);
+    setError('');
+    try {
+      await onSave({
+        distance: Number(distance), durationMin: Math.round(Number(minutes)), rpe, shoulderPainFlag: pain,
+        ...(didTest && a !== undefined && b !== undefined ? { css: { t400: a, t200: b } } : {}),
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section>
+      <h2>Log swim</h2>
+      <label>
+        Distance
+        <input data-testid="swim-distance" inputMode="decimal" value={distance} onInput={(e) => setDistance(e.currentTarget.value)} />
+      </label>
+      <label>
+        Duration (min)
+        <input inputMode="decimal" value={minutes} onInput={(e) => setMinutes(e.currentTarget.value)} />
+      </label>
+      <p>RPE</p>
+      <RpeChips value={rpe} onChange={setRpe} />
+      <button type="button" class={pain ? 'chip on pain' : 'chip'} aria-pressed={pain} data-testid="swim-shoulder-pain" onClick={() => setPain(!pain)}>Shoulder pain</button>
+      <label>
+        <input type="checkbox" checked={didTest} onChange={(e) => setDidTest(e.currentTarget.checked)} /> I did a CSS test today
+      </label>
+      {didTest && (
+        <>
+          <label>
+            Test 400 (m:ss)
+            <input value={t400} onInput={(e) => setT400(e.currentTarget.value)} />
+          </label>
+          <label>
+            Test 200 (m:ss)
+            <input value={t200} onInput={(e) => setT200(e.currentTarget.value)} />
+          </label>
+        </>
+      )}
+      {error && <p role="alert" class="warn">{error}</p>}
+      <button type="button" class="primary" data-testid="swim-save" disabled={!ok || busy} onClick={save}>Save</button>
+    </section>
+  );
+}
