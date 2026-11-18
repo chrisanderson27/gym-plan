@@ -28,11 +28,8 @@ test('settings backup downloads and restores into a fresh context', async ({ pag
   const fresh = await context.newPage();
   await onboard(fresh, '180');
 
-  await onboard(page, '247.2');
-  await page.getByRole('link', { name: 'Settings' }).click();
-  const goal = page.getByLabel('Goal weight (lb)');
-  const storedGoal = () =>
-    page.evaluate(
+  const storedGoalOf = (p: Page) => () =>
+    p.evaluate(
       () =>
         new Promise<number | undefined>((resolve) => {
           const open = indexedDB.open('gym-plan');
@@ -44,6 +41,18 @@ test('settings backup downloads and restores into a fresh context', async ({ pag
           open.onerror = () => resolve(undefined);
         }),
     );
+  // The destination edits its own goal first (older than the backup), so its input is dirty when the newer backup lands.
+  await fresh.getByRole('link', { name: 'Settings' }).click();
+  const freshGoal = fresh.getByLabel('Goal weight (lb)');
+  await freshGoal.fill('190');
+  await freshGoal.blur();
+  await expect.poll(storedGoalOf(fresh), { timeout: 10_000 }).toBe(190);
+  await expect(freshGoal).toHaveValue('190');
+
+  await onboard(page, '247.2');
+  await page.getByRole('link', { name: 'Settings' }).click();
+  const goal = page.getByLabel('Goal weight (lb)');
+  const storedGoal = storedGoalOf(page);
   // One real edit: fill, then blur (the browser's own `change`). The save is asynchronous, so poll the stored value
   // until it lands; nothing is ever re-filled, so a lost edit fails here.
   await goal.fill('215');
@@ -60,7 +69,6 @@ test('settings backup downloads and restores into a fresh context', async ({ pag
   await download.saveAs(saved);
   await expect(page.getByText('Last backup: today')).toBeVisible();
 
-  await fresh.getByRole('link', { name: 'Settings' }).click();
   await fresh.locator('input[type=file]').setInputFiles(saved);
   await expect(fresh.getByRole('status').filter({ hasText: 'Imported' })).toBeVisible();
   await expect(fresh.getByLabel('Goal weight (lb)')).toHaveValue('215');

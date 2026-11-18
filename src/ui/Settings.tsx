@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { buildExport, ImportError, importExport, markBackedUp, parseExport } from '../data/backup';
 import { db } from '../data/db';
 import { saveSettings } from '../data/settings';
@@ -19,6 +19,13 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
   useEffect(() => {
     isPersisted().then(setPersisted);
   }, []);
+
+  // Local draft so live-query renders never reset a field mid-edit; it follows the stored goal (e.g. after an import) whenever the field is not focused.
+  const [goalDraft, setGoalDraft] = useState(String(settings.goalWeightLb));
+  const goalFocused = useRef(false);
+  useEffect(() => {
+    if (!goalFocused.current) setGoalDraft(String(settings.goalWeightLb));
+  }, [settings.goalWeightLb]);
 
   const backupLabel = (() => {
     if (!settings.backupAt) return 'never';
@@ -73,7 +80,14 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
 
       <label>
         Goal weight (lb)
-        <input inputMode="decimal" defaultValue={String(settings.goalWeightLb)} onChange={(e) => { const v = Number(e.currentTarget.value); if (v > 0) saveSettings(db, { goalWeightLb: v }); }} />
+        <input
+          inputMode="decimal"
+          value={goalDraft}
+          onFocus={() => { goalFocused.current = true; }}
+          onBlur={() => { goalFocused.current = false; }}
+          onInput={(e) => setGoalDraft(e.currentTarget.value)}
+          onChange={(e) => { const v = Number(e.currentTarget.value); if (v > 0) saveSettings(db, { goalWeightLb: v }); }}
+        />
       </label>
       <label>
         Pool unit

@@ -1,12 +1,22 @@
 import type { ComponentChildren } from 'preact';
-import { useEffect, useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef } from 'preact/hooks';
+import { createModalStack } from './modalStack';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-// Safari does not focus a button on click, so activeElement can be <body> when a sheet opens: remember the last clicked control as the trigger.
+// Safari does not focus a button on click (and may leave an old input as activeElement), so the opener is the control whose
+// click opened the sheet, recorded at click time. A click only counts as the opener for a short window.
+const TRIGGER_WINDOW_MS = 1000;
 let lastTrigger: HTMLElement | null = null;
+let lastTriggerAt = 0;
 if (typeof document !== 'undefined') {
-  document.addEventListener('click', (e) => { lastTrigger = (e.target as Element | null)?.closest<HTMLElement>('button, a[href]') ?? null; }, true);
+  document.addEventListener('click', (e) => {
+    lastTrigger = (e.target as Element | null)?.closest<HTMLElement>('button, a[href]') ?? null;
+    lastTriggerAt = Date.now();
+  }, true);
+}
+function recentTrigger(): HTMLElement | null {
+  return lastTrigger && Date.now() - lastTriggerAt < TRIGGER_WINDOW_MS && document.contains(lastTrigger) ? lastTrigger : null;
 }
 
 let lockCount = 0;
@@ -26,22 +36,32 @@ function unlockScroll() {
   window.scrollTo(0, lockedY);
 }
 
-/** Marks everything outside `keep` (the dialog and its backdrop) inert, walking up so the sheet may sit anywhere in the tree. */
-function inertBackground(keep: Element[]): () => void {
-  const marked: Element[] = [];
-  let node: Element | null = keep[0] ?? null;
-  while (node && node !== document.body) {
-    const parent: Element | null = node.parentElement;
-    if (!parent) break;
-    for (const sib of Array.from(parent.children)) {
-      if (keep.includes(sib) || sib === node || sib.hasAttribute('inert') || sib.tagName === 'SCRIPT') continue;
-      sib.setAttribute('inert', '');
-      marked.push(sib);
+interface Modal { dialog: HTMLElement; backdrop: HTMLElement | null }
+
+// Inert is owned by the stack: every mark we made is cleared and re-applied for the current top modal, so a nested sheet's
+// container is never inert, closing the inner one re-opens the outer, and the page is released only when the last one closes.
+let marked: Element[] = [];
+const stack = createModalStack<Modal>({
+  clear() {
+    marked.forEach((el) => el.removeAttribute('inert'));
+    marked = [];
+  },
+  /** Marks everything outside the top modal (dialog + backdrop) inert, walking up so the sheet may sit anywhere in the tree. */
+  mark({ dialog, backdrop }) {
+    const keep: Element[] = [dialog, ...(backdrop ? [backdrop] : [])];
+    let node: Element | null = dialog;
+    while (node && node !== document.body) {
+      const parent: Element | null = node.parentElement;
+      if (!parent) break;
+      for (const sib of Array.from(parent.children)) {
+        if (keep.includes(sib) || sib === node || sib.hasAttribute('inert') || sib.tagName === 'SCRIPT') continue;
+        sib.setAttribute('inert', '');
+        marked.push(sib);
+      }
+      node = parent;
     }
-    node = parent;
-  }
-  return () => marked.forEach((el) => el.removeAttribute('inert'));
-}
+  },
+});
 
 /**
  * Bottom-sheet overlay: fixed to the viewport bottom over a dimmed backdrop, so it opens where the user tapped.
@@ -54,14 +74,18 @@ export function Sheet({ label, onClose, children }: { label: string; onClose: ()
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
-  useEffect(() => {
+  // Layout effect: the key trap and inert background must be live in the same frame the dialog appears (no gap for Tab to escape).
+  useLayoutEffect(() => {
     const current = document.activeElement as HTMLElement | null;
-    const opener = current && current !== document.body ? current : lastTrigger;
+    // The control whose click opened this sheet wins; otherwise (keyboard / programmatic open) whatever had focus.
+    const opener = recentTrigger() ?? (current && current !== document.body ? current : null);
     const dialog = ref.current;
+    const modal: Modal | null = dialog ? { dialog, backdrop: backdropRef.current } : null;
     lockScroll();
-    const restoreInert = dialog ? inertBackground([dialog, ...(backdropRef.current ? [backdropRef.current] : [])]) : () => {};
+    if (modal) stack.push(modal);
     dialog?.focus();
     const onKey = (e: KeyboardEvent) => {
+      if (modal && !stack.isTop(modal)) return; // only the top-most sheet handles keys
       if (e.key === 'Escape') {
         closeRef.current();
         return;
@@ -83,7 +107,7 @@ export function Sheet({ label, onClose, children }: { label: string; onClose: ()
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
-      restoreInert();
+      if (modal) stack.remove(modal);
       unlockScroll();
       if (opener && document.contains(opener)) opener.focus();
     };
