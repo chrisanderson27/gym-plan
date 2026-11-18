@@ -107,8 +107,10 @@ export function prescribeExercise(
   exerciseId: string,
   equipmentId: string,
   flags: { deload: boolean; rampIn: boolean },
+  range?: { repMin: number; repMax: number },
 ): Prescription | null {
-  const ex = LIFT_EXERCISES.get(exerciseId);
+  const base = LIFT_EXERCISES.get(exerciseId);
+  const ex = base && range ? { ...base, repMin: range.repMin, repMax: range.repMax } : base;
   const eq = snapshot.equipment.get(equipmentId);
   if (!ex || !eq) return null;
   const pair = snapshot.history
@@ -125,8 +127,9 @@ export function blockPrescriptionPatch(
   equipmentId: string,
   flags: { deload: boolean; rampIn: boolean },
   current?: LiftBlock,
+  range?: { repMin: number; repMax: number },
 ): Partial<LiftBlock> {
-  const presc = prescribeExercise(snapshot, exerciseId, equipmentId, flags);
+  const presc = prescribeExercise(snapshot, exerciseId, equipmentId, flags, range);
   if (!presc) return { targetWeight: undefined, label: undefined };
   // Never raise the planned count: the generator may have trimmed it for the weekly ceiling.
   const sets = current ? Math.min(presc.sets, current.sets) : presc.sets;

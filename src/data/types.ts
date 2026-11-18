@@ -202,6 +202,8 @@ export interface Template {
   id: string;
   name: string;
   type: SessionType;
+  /** Lift variant of a saved lift/hybrid session; keeps leg-day identity and A/B rotation on replay. */
+  variant?: LiftVariant;
   blocks: Block[];
   source: 'generated' | 'saved' | 'built';
   createdAt: ISODateTime;

@@ -101,6 +101,7 @@ const ROW_SHAPES: Record<StoreName, Check> = {
   templates: shape({
     id: str, name: str, type: oneOf(...SESSION_TYPES), blocks: arr(block),
     source: oneOf('generated', 'saved', 'built'), createdAt: iso,
+    variant: opt(oneOf('upper-a', 'upper-b', 'lower-a', 'lower-b')),
   }),
   feedback: shape({
     id: str, v: (x) => x === 1, ts: iso, kind: oneOf('workout', 'exercise', 'set', 'app'), tags: arr(oneOf(...FEEDBACK_TAGS)), text: str,

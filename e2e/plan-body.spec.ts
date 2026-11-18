@@ -151,3 +151,13 @@ test('body: weigh-in shows trend and rate', async ({ page }, testInfo) => {
   await expect(page.getByTestId('body-eta')).toContainText('220');
   testInfo.annotations.push({ type: 'covered', description: 'AC1' });
 });
+
+test('builder will not add the same exercise twice', async ({ page }) => {
+  await onboard(page, '247');
+  await page.goto('./#/builder');
+  await page.getByTestId('builder-search').fill('chest press');
+  const add = page.getByTestId('builder-add-chest-press-machine');
+  await add.click();
+  await expect(add).toBeDisabled();
+  await expect(page.getByTestId('builder-block-1')).toHaveCount(0);
+});

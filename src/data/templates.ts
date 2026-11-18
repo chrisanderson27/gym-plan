@@ -38,7 +38,7 @@ export async function saveAsMine(db: GymDb, sessionId: string, name?: string, no
   const id = newId();
   await db.templates.add({
     id, name: name?.trim() || defaultName(session.type, session.variant, session.templateId, session.date), type: session.type,
-    blocks: toTemplateBlocks(session.blocks, newId), source: 'saved', createdAt: now.toISOString(),
+    ...(session.variant ? { variant: session.variant } : {}), blocks: toTemplateBlocks(session.blocks, newId), source: 'saved', createdAt: now.toISOString(),
   });
   return id;
 }
@@ -60,7 +60,7 @@ export const deleteTemplate = (db: GymDb, id: string): Promise<void> => db.templ
 export async function loadRunnable(db: GymDb, src: { templateId: string } | { sessionId: string }): Promise<Runnable | null> {
   if ('templateId' in src) {
     const t = await db.templates.get(src.templateId);
-    return t ? { type: t.type, blocks: t.blocks, templateId: t.id, name: t.name } : null;
+    return t ? { type: t.type, blocks: t.blocks, templateId: t.id, name: t.name, ...(t.variant ? { variant: t.variant } : {}) } : null;
   }
   const s = await db.sessions.get(src.sessionId);
   if (!s) return null;
@@ -110,7 +110,7 @@ export async function startFromBlocks(db: GymDb, r: Runnable, now = new Date()):
     const ex = exerciseById.get(exerciseId);
     if (!ex) continue;
     if (!equipmentId || !snap.equipment.has(equipmentId)) equipmentId = resolveEquipmentId(snap, ex, weekIdx);
-    const patch = blockPrescriptionPatch(snap, exerciseId, equipmentId, flags);
+    const patch = blockPrescriptionPatch(snap, exerciseId, equipmentId, flags, undefined, exerciseId === b.exerciseId ? b : undefined);
     const lx = LIFT_EXERCISES.get(exerciseId);
     const next: LiftBlock = {
       ...base, exerciseId, equipmentId, ...patch,

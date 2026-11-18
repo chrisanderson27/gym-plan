@@ -82,7 +82,7 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
         {results.map((e) => (
           <li key={e.id}>
             <span>{exerciseById.get(e.id)?.name ?? e.id}</span>
-            <button type="button" data-testid={`builder-add-${e.id}`} onClick={() => setBlocks([...blocks, newLiftBlock({ id: e.id, repMin: e.repMin, repMax: e.repMax }, newId)])}>Add</button>
+            <button type="button" data-testid={`builder-add-${e.id}`} disabled={blocks.some((b) => b.exerciseId === e.id)} onClick={() => setBlocks([...blocks, newLiftBlock({ id: e.id, repMin: e.repMin, repMax: e.repMax }, newId)])}>Add</button>
           </li>
         ))}
       </ul>

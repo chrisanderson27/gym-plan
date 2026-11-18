@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { GymDb } from './db';
-import { setNotAtMyGym } from './lift';
+import { loadLiftSnapshot, prescribeExercise, setNotAtMyGym } from './lift';
 import { chestBlock, NOW, seedSettings, session, topSets } from './p4-test-utils';
 import { listMine, loadRunnable, saveAsMine, saveBuilt, startFromBlocks } from './templates';
 import { openTestDb } from './test-utils';
@@ -69,5 +69,27 @@ describe('templates', () => {
     expect(groups[0]).toBeDefined();
     expect(groups[0]).toBe(groups[1]);
     expect((await db.templates.get(tid))!.source).toBe('built');
+  });
+
+  it('save-as-mine keeps the variant and loading a Mine template restores it', async () => {
+    const db = open();
+    await db.sessions.put(session('h1', 5, { type: 'hybrid', variant: 'lower-a', blocks: [chestBlock()] }));
+    const id = await saveAsMine(db, 'h1');
+    expect((await db.templates.get(id))!.variant).toBe('lower-a');
+    expect((await loadRunnable(db, { templateId: id }))!.variant).toBe('lower-a');
+  });
+
+  it('a builder rep ceiling controls the prescription', async () => {
+    const db = open();
+    await seedSettings(db);
+    await db.sessions.put(session('l1', 30, { variant: 'upper-a', blocks: [chestBlock()] }));
+    await db.sets.bulkPut(topSets('l1', 30));
+    const snap = await loadLiftSnapshot(db, NOW);
+    const flags = { deload: false, rampIn: false };
+    const base = prescribeExercise(snap, 'chest-press-machine', 'pin-stack', flags)!;
+    const custom = prescribeExercise(snap, 'chest-press-machine', 'pin-stack', flags, { repMin: 8, repMax: 20 })!;
+    expect(base.mode).toBe('progress');
+    expect(custom.mode).not.toBe('progress');
+    expect(custom.weight).toBe(100);
   });
 });

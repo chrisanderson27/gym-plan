@@ -35,7 +35,7 @@ export function ExerciseCard(p: CardProps) {
   const { block, sets, snapshot, session } = p;
   const ex = exerciseById.get(block.exerciseId);
   const eq = block.equipmentId ? snapshot.equipment.get(block.equipmentId) : undefined;
-  const presc = block.equipmentId ? prescribeExercise(snapshot, block.exerciseId, block.equipmentId, p.flags) : null;
+  const presc = block.equipmentId ? prescribeExercise(snapshot, block.exerciseId, block.equipmentId, p.flags, block) : null;
   const steps = eq?.steps ?? [];
   const baseWeight = presc?.weight ?? block.targetWeight ?? 0;
   const baseReps = presc?.reps ?? block.repMin;

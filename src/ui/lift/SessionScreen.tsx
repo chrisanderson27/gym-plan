@@ -98,7 +98,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const warm = lifts.find((b) => b.warmup);
   const cardFor = (block: LiftBlock) => {
     const mine = sets.filter((s) => s.exerciseId === block.exerciseId && s.equipmentId === (block.equipmentId ?? ''));
-    const presc = block.equipmentId ? prescribeExercise(snapshot, block.exerciseId, block.equipmentId, flags) : null;
+    const presc = block.equipmentId ? prescribeExercise(snapshot, block.exerciseId, block.equipmentId, flags, block) : null;
     const calibrating = mine.some((s) => s.setKind === 'calibration') || presc?.mode === 'calibrate';
     const props = {
       session,
