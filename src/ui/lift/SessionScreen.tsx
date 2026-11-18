@@ -29,15 +29,16 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     const session = await db.sessions.get(sessionId);
     const sets = await db.sets.where('sessionId').equals(sessionId).toArray();
     const full = await loadLiftSnapshot(db);
+    const template = session?.type === 'custom' && session.templateId ? await db.templates.get(session.templateId) : undefined;
     // Progression reads history only: the session being logged must not feed its own prescription.
-    return { session, sets, snapshot: { ...full, history: full.history.filter((h) => h.session.id !== sessionId) } };
+    return { session, sets, templateName: template?.name, snapshot: { ...full, history: full.history.filter((h) => h.session.id !== sessionId) } };
   }, [sessionId]);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [rpePrompt, setRpePrompt] = useState(false);
   const [fatigue, setFatigue] = useState(false);
 
   if (!data) return <main class="screen"><h1>Session</h1></main>;
-  const { session, sets, snapshot } = data;
+  const { session, sets, snapshot, templateName } = data;
   if (!session) {
     return (
       <main class="screen">
@@ -51,7 +52,21 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   const flags = { deload: !!session.flags?.deload, rampIn: isRampInWeek(weekIdx) };
   const lifts = session.blocks.filter((b): b is LiftBlock => b.kind === 'lift');
   const planned = new Set(lifts.map((b) => b.exerciseId));
-  const name = session.variant ? `${LIFT_TEMPLATES[session.variant].name} · ${LIFT_TEMPLATES[session.variant].focus}` : 'Lift';
+  const liftName = session.variant ? `${LIFT_TEMPLATES[session.variant].name} · ${LIFT_TEMPLATES[session.variant].focus}` : (templateName ?? 'Lift');
+  const isHybrid = session.type === 'hybrid';
+  const name = isHybrid ? `Hybrid · ${liftName}` : liftName;
+  const cardio = session.blocks.find((b) => b.kind === 'run');
+  const cardioLine = cardio?.kind === 'run'
+    ? `${cardio.modality} ${Math.round((cardio.repeats * cardio.segments.reduce((n, s) => n + (s.sec ?? 0), 0)) / 60)} min (${cardio.runKind})`
+    : '';
+  const working = lifts.filter((b) => !b.warmup);
+  // Consecutive blocks sharing a supersetGroup render together.
+  const groups: LiftBlock[][] = [];
+  for (const b of working) {
+    const last = groups.at(-1);
+    if (last && b.supersetGroup && last[0]!.supersetGroup === b.supersetGroup) last.push(b);
+    else groups.push([b]);
+  }
   const elapsed = Math.max(0, Math.round(((session.endedAt ? new Date(session.endedAt).getTime() : Date.now()) - new Date(session.date).getTime()) / 60_000));
 
   const swapTo = async (block: LiftBlock, newId: string) => {
@@ -121,7 +136,18 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         </section>
       )}
 
-      {lifts.filter((b) => !b.warmup).map(cardFor)}
+      {isHybrid && cardioLine && <p class="dim" data-testid="hybrid-next">Then: {cardioLine}</p>}
+
+      {groups.map((g) =>
+        g.length > 1 ? (
+          <section key={g[0]!.id} class="superset" data-testid={`superset-${g[0]!.supersetGroup}`}>
+            <h2>Superset — alternate sets</h2>
+            {g.map(cardFor)}
+          </section>
+        ) : (
+          cardFor(g[0]!)
+        ),
+      )}
 
       {sheet?.kind === 'swap' && (
         <SwapSheet
@@ -143,7 +169,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
       )}
 
       {!session.endedAt && !rpePrompt && (
-        <button type="button" class="primary" data-testid="finish" onClick={() => setRpePrompt(true)}>Finish</button>
+        <button type="button" class="primary" data-testid="finish" onClick={() => (isHybrid ? navigate('/hybrid/cardio/' + sessionId) : setRpePrompt(true))}>Finish</button>
       )}
       {rpePrompt && (
         <div class="sheet" data-testid="rpe-prompt">

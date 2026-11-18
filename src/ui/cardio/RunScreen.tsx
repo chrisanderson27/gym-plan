@@ -9,6 +9,7 @@ import { localDate } from '../../engine/dates';
 import { generateRun } from '../../engine/run/generator';
 import { runToIntervals } from '../../engine/run/to-timer';
 import { weekIndex } from '../../engine/week';
+import { MineRow } from '../mine/MineRow';
 import { navigate } from '../router';
 import { FeedbackButton } from '../slots/FeedbackButton';
 import { dayOf } from './format';
@@ -21,9 +22,9 @@ const KINDS: { id: RunKind; name: string }[] = [
 ];
 const SEG_NAMES = { run: 'run', walk: 'walk', jog: 'jog', sprint: 'sprint', recover: 'recover' } as const;
 
-export function RunScreen() {
+export function RunScreen({ initialKind }: { initialKind?: RunKind }) {
   const snap = useLiveQuery(() => loadCardioSnapshot(db), []);
-  const [kind, setKind] = useState<RunKind>('easy');
+  const [kind, setKind] = useState<RunKind>(initialKind ?? 'easy');
   const [format, setFormat] = useState<(typeof RUN_FORMATS)[number]['format'] | undefined>(undefined);
   const [durationMin, setDurationMin] = useState<number | undefined>(undefined);
   const [stage, setStage] = useState<Stage>('plan');
@@ -129,6 +130,7 @@ export function RunScreen() {
       <button type="button" class="primary" data-testid="run-start" onClick={() => { setFrozen(runToIntervals(plan.block, plan)); setStage('timer'); }}>Start timer</button>
       <button type="button" data-testid="run-log-direct" onClick={() => { setTimed(null); setStage('log'); }}>Log without timer</button>
       <p class="dim">{lastRun ? `Last run: ${dayOf(lastRun.date)} · ${Math.round(lastRun.durationSec / 60)} min` : 'No runs yet'}</p>
+      <MineRow types={['run']} />
       <FeedbackButton kind="workout" context={{ templateId: runTemplateId }} />
     </main>
   );

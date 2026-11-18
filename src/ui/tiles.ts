@@ -15,11 +15,11 @@ export const TILES: TileDef[] = [
   { id: 'burn', title: 'Burn class', subtitle: '55 min', route: '#/burn', ready: true, phase: 'P3' },
   { id: 'run', title: 'Run', subtitle: 'Easy, long, intervals', route: '#/run', ready: true, phase: 'P3' },
   { id: 'swim', title: 'Swim', subtitle: 'Pool session', route: '#/swim', ready: true, phase: 'P3' },
-  { id: 'hybrid', title: 'Hybrid', subtitle: 'Lift + cardio', route: '#/hybrid', ready: false, phase: 'P4' },
+  { id: 'hybrid', title: 'Hybrid', subtitle: 'Lift + cardio', route: '#/hybrid', ready: true, phase: 'P4' },
 ];
 
 export const ACTIONS: TileDef[] = [
-  { id: 'weigh-in', title: 'Weigh-in', subtitle: '', route: '#/weigh-in', ready: false, phase: 'P4' },
-  { id: 'history', title: 'History', subtitle: '', route: '#/history', ready: false, phase: 'P4' },
-  { id: 'builder', title: '+', subtitle: '', route: '#/builder', ready: false, phase: 'P4' },
+  { id: 'weigh-in', title: 'Weigh-in', subtitle: '', route: '#/weigh-in', ready: true, phase: 'P4' },
+  { id: 'history', title: 'History', subtitle: '', route: '#/history', ready: true, phase: 'P4' },
+  { id: 'builder', title: '+', subtitle: '', route: '#/builder', ready: true, phase: 'P4' },
 ];

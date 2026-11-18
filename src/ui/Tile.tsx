@@ -1,6 +1,8 @@
+import type { Status } from '../engine/plan/types';
 import type { TileDef } from './tiles';
 
-export function Tile({ tile, compact }: { tile: TileDef; compact?: boolean }) {
+/** A blocked tile is only marked, never disabled: the user may override the plan. */
+export function Tile({ tile, compact, status }: { tile: TileDef; compact?: boolean; status?: { status: Status; reason?: string } }) {
   const cls = `tile${compact ? ' tile-compact' : ''}`;
   if (tile.ready) {
     return (
@@ -8,6 +10,11 @@ export function Tile({ tile, compact }: { tile: TileDef; compact?: boolean }) {
         <strong>{tile.title}</strong>
         {tile.subtitle && <span>{tile.subtitle}</span>}
         {tile.why && <small>{tile.why}</small>}
+        {status && (
+          <small class={`status status-${status.status}`} data-testid={`status-${tile.id}`}>
+            {status.status}{status.reason ? ' · ' + status.reason : ''}
+          </small>
+        )}
       </a>
     );
   }

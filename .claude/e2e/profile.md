@@ -29,6 +29,12 @@ _Learned 2026-11-17 · costs: several wasted screenshot cycles_
 **Do:** enlarge them with `eval "document.querySelectorAll('svg.pose').forEach(s=>s.style.height='260px')"`. Then poll the near-limb bone coordinates (`line.bone:not(.far)`, index 4 = upper arm) with `eval` until the frame you want appears, and screenshot. Use `set media dark reduced-motion` and reload for the static filmstrip (`data-static="true"`). To screenshot an exact frame, poll inside one async `eval` each rAF, and on a match replace `requestAnimationFrame` with a stub that pushes callbacks to `window.__held`. Screenshot, then restore the original and re-queue the held callbacks so the loop resumes. Inline height is lost on route change, so re-apply it.
 **Where:** `#/lift/session/<id>`.
 
+### Date seeded "yesterday" sessions by calendar day, not hours
+_Learned 2026-11-17 · costs: one re-import per run_
+**You'll see:** a session seeded at `now − 20 h` lands on *today* when the run is late in the day, so every tile turns "warned · already trained today" and the pick reasons change.
+**Do:** for "yesterday", use `now − 26 h` or noon of the previous local day. Re-importing the same session id with a later `settings.updatedAt` overwrites its date.
+**Where:** `#/` Home statuses / Today's pick.
+
 ### Seed lift history via Settings → Import backup
 _Learned 2026-11-18 · costs: none if known; otherwise a whole calibration session_
 **You'll see:** a fresh profile has no lift history, so every exercise shows a calibration card and progression cannot be tested.

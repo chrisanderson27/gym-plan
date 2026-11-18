@@ -14,12 +14,11 @@ test('first run: onboarding then Home with six tiles', async ({ page }) => {
     await expect(page.getByTestId(`tile-${id}`)).toBeVisible();
   }
   await expect(page.getByTestId('tile-pick')).toContainText('Lower A (calibration)');
-  const hybrid = page.getByTestId('tile-hybrid');
-  await expect(hybrid).toHaveAttribute('aria-disabled', 'true');
-  await expect(hybrid).toContainText('coming soon');
-  const url = page.url();
-  await hybrid.click({ force: true });
-  expect(page.url()).toBe(url);
+  // P4 made these live: they are links now, and nothing on Home says "coming soon".
+  for (const [id, href] of [['hybrid', '#/hybrid'], ['weigh-in', '#/weigh-in'], ['history', '#/history'], ['builder', '#/builder']] as const) {
+    await expect(page.getByTestId(`tile-${id}`)).toHaveAttribute('href', href);
+  }
+  await expect(page.locator('.soon')).toHaveCount(0);
 });
 
 test('settings backup downloads and restores into a fresh context', async ({ page, browser }, testInfo) => {

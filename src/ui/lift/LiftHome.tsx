@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { LIFT_TEMPLATES, exerciseById } from '../../content';
 import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
-import { LIFT_EXERCISES, buildLiftPlan, findOpenLiftSession, loadLiftSnapshot, startLiftSession } from '../../data/lift';
+import { LIFT_EXERCISES, buildLiftPlan, findOpenLiftSession, loadLiftSnapshot, startLiftSession, variantMuscles } from '../../data/lift';
+import { MineRow } from '../mine/MineRow';
 import type { LiftVariant } from '../../data/types';
 import { DEFAULT_LIFT_BUDGET_MIN, LIFT_BUDGETS_MIN } from '../../engine/config';
 import { muscleReadiness, variantReadiness } from '../../engine/lift/readiness';
@@ -11,9 +12,9 @@ import { navigate } from '../router';
 
 const VARIANTS: LiftVariant[] = ['lower-a', 'upper-a', 'lower-b', 'upper-b'];
 
-export function LiftHome({ autoStart }: { autoStart?: LiftVariant }) {
+export function LiftHome({ autoStart, initial }: { autoStart?: LiftVariant; initial?: LiftVariant }) {
   const data = useLiveQuery(async () => ({ snapshot: await loadLiftSnapshot(db), open: (await findOpenLiftSession(db)) ?? null }), []);
-  const [picked, setPicked] = useState<LiftVariant | null>(null);
+  const [picked, setPicked] = useState<LiftVariant | null>(initial ?? null);
   const [budget, setBudget] = useState<number>(DEFAULT_LIFT_BUDGET_MIN);
   const started = useRef(false);
 
@@ -29,8 +30,7 @@ export function LiftHome({ autoStart }: { autoStart?: LiftVariant }) {
 
   const readiness = muscleReadiness(snapshot, LIFT_EXERCISES);
   const ready = (v: LiftVariant) => {
-    const muscles = LIFT_TEMPLATES[v].slots.flatMap((s) => LIFT_EXERCISES.get(s.candidates[0]!)?.primary ?? []);
-    return variantReadiness([...new Set(muscles)], readiness, snapshot.now);
+    return variantReadiness(variantMuscles(v), readiness, snapshot.now);
   };
   const suggestion = nextVariant(snapshot.history, (v) => ready(v).ready);
   const variant = picked ?? suggestion.variant;
@@ -88,6 +88,7 @@ export function LiftHome({ autoStart }: { autoStart?: LiftVariant }) {
       {plan.dropped.length > 0 && <p class="dim">Dropped to fit {budget} min: {plan.dropped.join(', ')}</p>}
       <p class="dim">≈ {Math.round(plan.estMin)} min</p>
       <button type="button" class="primary" data-testid="start-lift" onClick={start}>Start</button>
+      <MineRow types={['lift', 'custom']} />
       <p>
         <a href="#/lift/volume">Weekly volume</a> · <a href="#/lift/gym">My gym</a> · <a href="#/">Home</a>
       </p>

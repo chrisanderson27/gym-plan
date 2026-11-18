@@ -1,0 +1,82 @@
+import { useState } from 'preact/hooks';
+import { loadBodyLogs, saveBodyLog } from '../../data/body';
+import { db } from '../../data/db';
+import { useLiveQuery } from '../../data/live';
+import type { Settings } from '../../data/types';
+import { BODY_RATE_BAND_LB, BODY_RATE_MIN_SPAN_DAYS } from '../../engine/config';
+import { etaToGoal, rateBand, round1, waistDue, weeklyRate, weightTrend } from '../../engine/body';
+import { localDate } from '../../engine/dates';
+import { FeedbackButton } from '../slots/FeedbackButton';
+
+const BAND_TEXT = { gaining: 'gaining', below: 'below band', in: 'in band', above: 'above band' } as const;
+
+export function BodyScreen({ settings }: { settings: Settings }) {
+  const logs = useLiveQuery(() => loadBodyLogs(db), []);
+  const [weight, setWeight] = useState('');
+  const [waist, setWaist] = useState('');
+  const [error, setError] = useState('');
+  const today = localDate(new Date());
+
+  if (!logs) return <main class="screen"><h1>Weigh-in</h1></main>;
+  const points = weightTrend(logs);
+  const last = points.at(-1);
+  const rate = weeklyRate(points, today);
+  const band = rateBand(rate);
+  const eta = last ? etaToGoal(last.trend, settings.goalWeightLb, rate, today) : null;
+  const todayRow = logs.find((l) => l.date === today);
+
+  const run = async (fn: () => Promise<void>) => {
+    setError('');
+    try {
+      await fn();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <main class="screen">
+      <header class="bar">
+        <h1>Weigh-in</h1>
+        <a class="gear" href="#/">Home</a>
+      </header>
+      <label>
+        Weight (lb)
+        <input data-testid="body-weight" inputMode="decimal" value={weight} placeholder={todayRow?.weightLb ? String(todayRow.weightLb) : ''} onInput={(e) => setWeight(e.currentTarget.value)} />
+      </label>
+      <button type="button" class="primary" data-testid="body-save" disabled={!weight}
+        onClick={() => run(async () => { await saveBodyLog(db, today, { weightLb: Number(weight) }); setWeight(''); })}>Save</button>
+      <button type="button" class={todayRow?.protein ? 'chip on' : 'chip'} aria-pressed={!!todayRow?.protein} data-testid="body-protein"
+        onClick={() => run(() => saveBodyLog(db, today, { protein: !todayRow?.protein }))}>
+        Protein ✓
+      </button>
+      <label>
+        Waist (in) {waistDue(logs, today) && <span class="badge" data-testid="body-waist-due">due</span>}
+        <input data-testid="body-waist" inputMode="decimal" value={waist} onInput={(e) => setWaist(e.currentTarget.value)} />
+      </label>
+      <button type="button" data-testid="body-waist-save" disabled={!waist}
+        onClick={() => run(async () => { await saveBodyLog(db, today, { waistIn: Number(waist) }); setWaist(''); })}>Save waist</button>
+      {error && <p role="alert" class="warn">{error}</p>}
+
+      {last && (
+        <section class="card">
+          <p data-testid="body-trend">Trend {round1(last.trend)} lb</p>
+          <p data-testid="body-rate">
+            {rate === null || band === null
+              ? `not enough data (need ${BODY_RATE_MIN_SPAN_DAYS} days)`
+              : `${rate < 0 ? '−' : '+'}${round1(Math.abs(rate))} lb/wk · ${BAND_TEXT[band]} (${BODY_RATE_BAND_LB[0]}–${BODY_RATE_BAND_LB[1]})`}
+          </p>
+          <p data-testid="body-eta">
+            {eta === 'reached' ? `Goal ${settings.goalWeightLb} reached` : eta === null ? 'not trending down' : `ETA ${settings.goalWeightLb} ≈ ${eta}`}
+          </p>
+        </section>
+      )}
+      <ul class="plan">
+        {points.slice(-14).reverse().map((p) => (
+          <li key={p.date}><span>{p.date}</span><span>{p.weight} · trend {round1(p.trend)}</span></li>
+        ))}
+      </ul>
+      <FeedbackButton kind="workout" context={{}} />
+    </main>
+  );
+}

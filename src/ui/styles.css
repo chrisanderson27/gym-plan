@@ -113,3 +113,18 @@ a { color: var(--accent); }
 .cues { color: var(--dim); padding-left: 20px; margin: 8px 0; }
 .fb-row { border-top: 1px solid #22222b; padding: 8px 0; }
 .fb-row.corrected { opacity: 0.6; }
+
+/* ---- P4: plan & body ---- */
+.status { font-weight: 600; }
+.status-eligible::before { content: '✓ '; }
+.status-warned::before { content: '⚠ '; }
+.status-blocked::before { content: '✕ '; }
+.status-eligible { color: var(--accent); }
+.status-warned { color: #e0b341; }
+.status-blocked { color: #e0645a; }
+.budget { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.85rem; margin: 4px 0 8px; }
+.budget-under { color: var(--dim); }
+.budget-over { color: #e0b341; }
+.superset { border-left: 4px solid var(--accent); padding-left: 8px; }
+.mine-row { margin: 12px 0; }
+a.chip { background: var(--card); color: var(--fg); border-radius: 12px; padding: 0 16px; text-decoration: none; min-height: 56px; }

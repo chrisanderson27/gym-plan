@@ -10,6 +10,7 @@ export function LiftRoutes({ route }: { route: string; settings: Settings }) {
   const parts = route.split('/').filter(Boolean); // ['lift', ...]
   const [, sub, arg] = parts;
   if (sub === 'calibrate' && VARIANTS.includes(arg as LiftVariant)) return <LiftHome autoStart={arg as LiftVariant} />;
+  if (sub === 'start' && VARIANTS.includes(arg as LiftVariant)) return <LiftHome initial={arg as LiftVariant} />;
   if (sub === 'session' && arg) return <SessionScreen sessionId={arg} />;
   if (sub === 'volume') return <VolumeScreen />;
   if (sub === 'gym') return <GymScreen />;

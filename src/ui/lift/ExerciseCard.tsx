@@ -71,6 +71,7 @@ export function ExerciseCard(p: CardProps) {
       reps: v.reps,
       painFlag: false,
       setKind: 'working',
+      ...(block.supersetGroup ? { supersetGroup: block.supersetGroup } : {}),
       ts: new Date().toISOString(),
     });
   };

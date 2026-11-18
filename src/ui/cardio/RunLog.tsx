@@ -10,7 +10,12 @@ export interface RunLogValues {
   painFlag: boolean;
 }
 
-export function RunLog({ defaultMinutes, defaultModality, onSave }: { defaultMinutes: number; defaultModality: CardioModality; onSave: (v: RunLogValues) => Promise<void> }) {
+const DEFAULT_MODALITIES: { id: CardioModality; label: string }[] = [{ id: 'run', label: 'Outdoors' }, { id: 'treadmill', label: 'Treadmill' }];
+
+export function RunLog({ defaultMinutes, defaultModality, onSave, modalities = DEFAULT_MODALITIES }: {
+  defaultMinutes: number; defaultModality: CardioModality; onSave: (v: RunLogValues) => Promise<void>;
+  modalities?: { id: CardioModality; label: string }[];
+}) {
   const [distance, setDistance] = useState('');
   const [minutes, setMinutes] = useState(String(defaultMinutes));
   const [modality, setModality] = useState<CardioModality>(defaultModality);
@@ -45,8 +50,7 @@ export function RunLog({ defaultMinutes, defaultModality, onSave }: { defaultMin
       <label>
         Where
         <select value={modality} onChange={(e) => setModality(e.currentTarget.value as CardioModality)}>
-          <option value="run">Outdoors</option>
-          <option value="treadmill">Treadmill</option>
+          {modalities.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
       </label>
       <p>RPE</p>

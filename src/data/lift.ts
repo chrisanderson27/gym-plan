@@ -11,7 +11,7 @@ import { isRampInWeek, weekIndex } from '../engine/week';
 import type { HistorySession, LiftExercise, LiftSnapshot, Prescription } from '../engine/lift/types';
 import type { GymDb } from './db';
 import { newId } from './ids';
-import type { Equipment, ExerciseOverride, LiftBlock, LiftVariant, Session, SetRow } from './types';
+import type { Block, Equipment, ExerciseOverride, LiftBlock, LiftVariant, Session, SessionType, SetRow } from './types';
 
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
@@ -144,27 +144,32 @@ export async function ensureEquipmentInstance(db: GymDb, ex: Exercise, seedId: s
   return inst.id;
 }
 
-export async function startLiftSession(db: GymDb, plan: LiftPlan, now = new Date()): Promise<string> {
+/** Every lift start goes through here: lift, custom (builder) and hybrid sessions. Non-lift blocks pass through untouched. */
+export async function writeLiftSession(
+  db: GymDb,
+  input: { type: 'lift' | 'custom' | 'hybrid'; blocks: Block[]; variant?: LiftVariant; templateId?: string; calibration: boolean; deload: boolean },
+  now = new Date(),
+): Promise<string> {
   return db.transaction('rw', [db.sessions, db.sets, db.equipment, db.exerciseOverrides], async () => {
-    const blocks: LiftBlock[] = [];
-    for (const b of plan.blocks) {
-      const ex = exerciseById.get(b.exerciseId);
-      if (b.warmup || !ex || !b.equipmentId) {
+    const blocks: Block[] = [];
+    for (const b of input.blocks) {
+      const ex = b.kind === 'lift' ? exerciseById.get(b.exerciseId) : undefined;
+      if (b.kind !== 'lift' || b.warmup || !ex || !b.equipmentId) {
         blocks.push(b);
         continue;
       }
       blocks.push({ ...b, equipmentId: await ensureEquipmentInstance(db, ex, b.equipmentId) });
     }
-    const calibration = [...plan.prescriptions.values()].some((p) => p.mode === 'calibrate');
     const flags: NonNullable<Session['flags']> = {};
-    if (calibration) flags.calibration = true;
-    if (plan.deload) flags.deload = true;
+    if (input.calibration) flags.calibration = true;
+    if (input.deload) flags.deload = true;
     const id = newId();
     await db.sessions.put({
       id,
       date: now.toISOString(),
-      type: 'lift',
-      variant: plan.variant,
+      type: input.type,
+      ...(input.variant ? { variant: input.variant } : {}),
+      ...(input.templateId ? { templateId: input.templateId } : {}),
       blocks,
       hard: false,
       hardCardio: false,
@@ -175,6 +180,20 @@ export async function startLiftSession(db: GymDb, plan: LiftPlan, now = new Date
     });
     return id;
   });
+}
+
+export function startLiftSession(db: GymDb, plan: LiftPlan, now = new Date()): Promise<string> {
+  return writeLiftSession(
+    db,
+    { type: 'lift', blocks: plan.blocks, variant: plan.variant, calibration: [...plan.prescriptions.values()].some((p) => p.mode === 'calibrate'), deload: plan.deload },
+    now,
+  );
+}
+
+/** Primary muscles of a variant's lead exercises, used for readiness. */
+export function variantMuscles(v: LiftVariant): string[] {
+  const muscles = LIFT_TEMPLATES[v].slots.flatMap((s) => LIFT_EXERCISES.get(s.candidates[0]!)?.primary ?? []);
+  return [...new Set(muscles)];
 }
 
 export async function logSet(db: GymDb, row: SetRow): Promise<void> {
@@ -223,10 +242,10 @@ export async function finishLiftSession(db: GymDb, sessionId: string, rpe: numbe
   });
 }
 
-export async function findOpenLiftSession(db: GymDb, now = new Date()): Promise<Session | undefined> {
+export async function findOpenLiftSession(db: GymDb, now = new Date(), types: SessionType[] = ['lift', 'custom']): Promise<Session | undefined> {
   const since = new Date(now.getTime() - RESUME_WINDOW_HOURS * HOUR).toISOString();
   const rows = await db.sessions.where('date').aboveOrEqual(since).toArray();
-  return rows.filter((s) => s.type === 'lift' && !s.endedAt).sort((a, b) => b.date.localeCompare(a.date))[0];
+  return rows.filter((s) => types.includes(s.type) && !s.endedAt).sort((a, b) => b.date.localeCompare(a.date))[0];
 }
 
 async function upsertOverride(db: GymDb, exerciseId: string, patch: Partial<ExerciseOverride>): Promise<void> {

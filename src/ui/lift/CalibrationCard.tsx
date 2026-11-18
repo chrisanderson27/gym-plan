@@ -47,6 +47,7 @@ export function CalibrationCard(p: CardProps) {
       reps,
       painFlag: false,
       setKind: 'calibration',
+      ...(block.supersetGroup ? { supersetGroup: block.supersetGroup } : {}),
       ts: new Date().toISOString(),
     });
     setHeavier(false);

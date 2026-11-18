@@ -82,3 +82,26 @@ export const SWIM_DRILL_OFFSET_SEC = 40;
 export const SWIM_REST_SEC = { EZ: 15, MOD: 20, CSS: 20, FAST: 30, SPRINT: 45 } as const; // no-CSS fallback, and kick/sprint always
 export const SWIM_PADDLES_FROM_WEEK = 3;
 export const SWIM_CSS_SANITY_MIN_GAP_SEC = 100; // T400 − T200 well under this → warn
+
+// ---- P4 plan & body ----
+export const BUDGET = { hardCardioMax: 2, liftsMin: 2, liftsMax: 3, longRunMin: 1, longRunMax: 1, swimsMin: 1, swimsMax: 2, restMin: 1 } as const;
+export const LOWER_MUSCLES = ['quads', 'glutes', 'hamstrings'] as const;
+export const LOWER_SESSION_MIN_SETS = 3; // working sets on a lower primary that make a non-variant session "lower"
+export const LOWER_AFTER_LOWER_H = 48;
+export const HARD_RUN_AFTER_HEAVY_LEGS_H = 24;
+export const LOWER_AFTER_HARD_RUN_H = 48;
+export const HARD_SPACING_H = 48;
+export const LONG_AFTER_HARD_RUN_H = 24;
+export const PICK_WINDOW_DAYS = 14;
+export const HYBRID_LIFT_MIN = 30;
+export const HYBRID_CARDIO_MIN = 20;
+export const HYBRID_LEG_MODALITIES = ['bike', 'row', 'ski'] as const;
+export const HYBRID_LEG_DEFAULT = 'bike';
+export const BODY_EMA_ALPHA = 0.1;
+export const BODY_RATE_WINDOW_DAYS = 14;
+export const BODY_RATE_MIN_SPAN_DAYS = 7;
+export const BODY_RATE_BAND_LB = [1.25, 2.5] as const; // loss per week
+export const WAIST_EVERY_DAYS = 7;
+export const BODY_WEIGHT_RANGE_LB = [50, 700] as const;
+export const BODY_WAIST_RANGE_IN = [15, 80] as const;
+export const HISTORY_PAGE = 50;

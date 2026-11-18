@@ -7,6 +7,7 @@ import { useLiveQuery } from '../../data/live';
 import type { IntervalBlock } from '../../data/types';
 import { generateBurn, nextBurnTemplate } from '../../engine/burn';
 import { BURN_BUDGETS_MIN, BURN_DEFAULT_MIN } from '../../engine/config';
+import { MineRow } from '../mine/MineRow';
 import { navigate } from '../router';
 import { FeedbackButton } from '../slots/FeedbackButton';
 import { dayOf } from './format';
@@ -129,6 +130,7 @@ export function BurnScreen() {
       </ul>
       <button type="button" class="primary" data-testid="burn-start" onClick={() => { setFrozen(plan.blocks); setStage('timer'); }}>Start</button>
       <p class="dim">{last ? `Last Burn: ${dayOf(last)}` : 'No Burn yet'}</p>
+      <MineRow types={['burn']} />
       <FeedbackButton kind="workout" context={{ templateId: template.id }} />
     </main>
   );

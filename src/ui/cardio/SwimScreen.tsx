@@ -8,6 +8,7 @@ import { localDate } from '../../engine/dates';
 import { latestCss } from '../../engine/swim/css';
 import { generateSwim, nextSwimWorkout } from '../../engine/swim/generator';
 import { weekIndex } from '../../engine/week';
+import { MineRow } from '../mine/MineRow';
 import { navigate } from '../router';
 import { FeedbackButton } from '../slots/FeedbackButton';
 import { dayOf, fmtMSS } from './format';
@@ -76,6 +77,7 @@ export function SwimScreen() {
       <SwimCard blocks={plan.blocks} totalDistance={plan.totalDistance} poolUnit={settings.poolUnit} />
       <button type="button" class="primary" data-testid="swim-log" onClick={() => setLogging(true)}>Log swim</button>
       <p class="dim">{lastSwim ? `Last swim: ${dayOf(lastSwim)}` : 'No swims yet'}</p>
+      <MineRow types={['swim']} />
       <FeedbackButton kind="workout" context={{ templateId: workout.id }} />
     </main>
   );
