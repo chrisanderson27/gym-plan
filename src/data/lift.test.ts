@@ -186,6 +186,20 @@ describe('review fixes (cycle 2)', () => {
     expect(after.sets).toBe(1);
   });
 
+  it('R1: an equipment-only change keeps the block custom rep range', async () => {
+    const { db, id, blocks } = await started();
+    const b = blocks.find((x) => x.equipmentId)!;
+    await db.sessions.update(id, {
+      blocks: (await db.sessions.get(id))!.blocks.map((x) => (x.kind === 'lift' && x.id === b.id ? { ...x, repMin: 8, repMax: 20 } : x)),
+    });
+    const other: import('./types').Equipment = { id: newId(), name: 'Other', kind: 'db', steps: [5] };
+    await db.equipment.put(other);
+    await changeBlockEquipment(db, id, b.id, other.id);
+    const after = (await db.sessions.get(id))!.blocks.find((x): x is LiftBlock => x.kind === 'lift' && x.id === b.id)!;
+    expect(after.equipmentId).toBe(other.id);
+    expect([after.repMin, after.repMax]).toEqual([8, 20]);
+  });
+
   it('R5: a changed pair never exceeds the planned (trimmed) set count', async () => {
     const d = open();
     const snapshot = await loadLiftSnapshot(d);

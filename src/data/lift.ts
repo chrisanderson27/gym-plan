@@ -321,5 +321,10 @@ export async function changeBlockEquipment(db: GymDb, sessionId: string, blockId
   await setPreferredEquipment(db, block.exerciseId, equipmentId);
   if (block.equipmentId === equipmentId) return;
   const snap = await historySnapshot(db, sessionId);
-  await swapExerciseInSession(db, sessionId, blockId, block.exerciseId, equipmentId, blockPrescriptionPatch(snap, block.exerciseId, equipmentId, flagsFor(session, snap), block));
+  // Same exercise: keep the block's own (possibly custom) rep range instead of resetting to library defaults.
+  const range = { repMin: block.repMin, repMax: block.repMax };
+  await swapExerciseInSession(db, sessionId, blockId, block.exerciseId, equipmentId, {
+    ...blockPrescriptionPatch(snap, block.exerciseId, equipmentId, flagsFor(session, snap), block, range),
+    ...range,
+  });
 }
