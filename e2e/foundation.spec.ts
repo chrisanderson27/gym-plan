@@ -14,11 +14,11 @@ test('first run: onboarding then Home with six tiles', async ({ page }) => {
     await expect(page.getByTestId(`tile-${id}`)).toBeVisible();
   }
   await expect(page.getByTestId('tile-pick')).toContainText('Lower A (calibration)');
-  const lift = page.getByTestId('tile-lift');
-  await expect(lift).toHaveAttribute('aria-disabled', 'true');
-  await expect(lift).toContainText('coming soon');
+  const hybrid = page.getByTestId('tile-hybrid');
+  await expect(hybrid).toHaveAttribute('aria-disabled', 'true');
+  await expect(hybrid).toContainText('coming soon');
   const url = page.url();
-  await lift.click({ force: true });
+  await hybrid.click({ force: true });
   expect(page.url()).toBe(url);
 });
 

@@ -52,3 +52,29 @@ a { color: var(--accent); }
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--card);
 }
 .update-bar span { flex: 1; }
+
+/* P2 lifting */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.chip { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 56px; margin: 0; }
+.chip.on { background: var(--accent); color: #04130a; font-weight: 700; }
+.chip small { font-size: 0.7rem; opacity: 0.8; }
+.badge, .warn { background: #3b2f08; border-radius: 12px; padding: 8px 12px; }
+.resume { display: block; background: var(--card); border-radius: 12px; padding: 16px; margin: 8px 0; }
+.plan { list-style: none; padding: 0; margin: 8px 0; }
+.plan li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid #22222b; }
+.card { background: var(--card); border-radius: 16px; padding: 12px; margin: 12px 0; }
+.card h2 { font-size: 1.1rem; margin: 0; }
+.card header { display: flex; justify-content: space-between; align-items: center; }
+.setrow { display: flex; align-items: center; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+.setrow button { min-width: 44px; padding: 0 8px; margin: 0; }
+.setrow .val { min-width: 36px; text-align: center; font-weight: 700; }
+.setrow .idx { width: 48px; color: var(--dim); }
+.setrow.done .tick, .tick[aria-pressed='true'] { background: var(--accent); color: #04130a; }
+.pain.on { background: #7a2a2a; }
+.rir { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.link { background: none; border: none; color: var(--accent); padding: 0; min-height: 44px; }
+.sheet { background: var(--card); border: 1px solid #33333d; border-radius: 16px; padding: 12px; margin: 12px 0; }
+.vol { width: 100%; border-collapse: collapse; }
+.vol th, .vol td { text-align: left; padding: 8px 4px; border-bottom: 1px solid #22222b; }
+.vol-over td:last-child { color: #ff6b6b; }
+.vol-met td:last-child { color: var(--accent); }

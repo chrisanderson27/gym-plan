@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { REP_RANGES } from '../engine/config';
-import { DRILLS, EXERCISES, SEED_EQUIPMENT, defaultEquipmentFor, exerciseById } from './index';
+import { DRILLS, EXERCISES, LIFT_TEMPLATES, SEED_EQUIPMENT, defaultEquipmentFor, exerciseById } from './index';
 import type { EquipmentTag, MovementGroup } from './types';
 
 const GROUPS: MovementGroup[] = ['squat', 'hinge', 'lunge', 'horizontal-push', 'horizontal-pull', 'vertical-push', 'vertical-pull', 'arms', 'carry-core', 'conditioning'];
@@ -44,6 +44,23 @@ describe('exercise library', () => {
   it('has a joint-friendly entry in each non-conditioning group', () => {
     for (const g of GROUPS.filter((g) => g !== 'conditioning')) {
       expect(EXERCISES.some((e) => e.group === g && e.jointFriendly), g).toBe(true);
+    }
+  });
+});
+
+describe('lift templates', () => {
+  it('only reference live, rep-based, non-conditioning exercises', () => {
+    for (const [variant, t] of Object.entries(LIFT_TEMPLATES)) {
+      expect(t.slots.length, variant).toBeGreaterThanOrEqual(5);
+      for (const slot of t.slots) {
+        for (const id of slot.candidates) {
+          const e = exerciseById.get(id);
+          expect(e, `${variant}: ${id}`).toBeDefined();
+          expect(e?.retired, id).toBeFalsy();
+          expect(e?.prescription.unit, id).toBe('reps');
+          expect(e?.group, id).not.toBe('conditioning');
+        }
+      }
     }
   });
 });
