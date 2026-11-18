@@ -75,6 +75,7 @@ export function CalibrationCard(p: CardProps) {
           <span class="val">{s.weight}</span>
           <span>× {s.reps}</span>
           <button type="button" aria-label="pain" aria-pressed={s.painFlag} class={s.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, s.id, !s.painFlag)}>⚠</button>
+          <FeedbackButton kind="set" context={{ sessionId: session.id, exerciseId: block.exerciseId, setId: s.id, equipmentId: s.equipmentId }} />
         </div>
       ))}
       {awaitingAnswer && (
