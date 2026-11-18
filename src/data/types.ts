@@ -17,7 +17,8 @@
  * Obligations: P2 flips the `lift`/`pick` tiles, writes `variant`, `flags.calibration` and `setKind`,
  * asks the optional lift RPE and calls `classifyHard` at log time. P3 flips burn/run/swim, copies RPE to
  * `sessions.rpe` and uses `weekIndex`. P4 replaces the static pick; budget uses `hardCardio`, the 48 h
- * spacing rule uses `hard`. P5 adds `poseId` to content and reads the `feedback` store.
+ * spacing rule uses `hard`. P5 adds `poseId` to content and reads the `feedback` store; feedback `context` also carries the optional,
+ * non-indexed `screen` (hash route) and `templateId`.
  *
  * Dates are always strings (never `Date`): instants via `toISOString()`, calendar days as local
  * `YYYY-MM-DD`, so the JSON export round-trips.
@@ -41,6 +42,7 @@ export const FEEDBACK_TAGS = [
   'makes-no-sense',
   'other',
 ] as const;
+export type FeedbackTag = (typeof FEEDBACK_TAGS)[number];
 
 // ---- Block: discriminated union on `kind` ----
 interface BlockBase {
@@ -210,12 +212,13 @@ export interface FeedbackRow {
   v: 1;
   ts: ISODateTime;
   kind: 'workout' | 'exercise' | 'set' | 'app';
-  tags: (typeof FEEDBACK_TAGS)[number][];
+  tags: FeedbackTag[];
   text: string;
   /** Id of the feedback row this corrects. */
   ref?: string;
-  context: { sessionId?: string; exerciseId?: string; setId?: string; equipmentId?: string };
+  context: { sessionId?: string; exerciseId?: string; setId?: string; equipmentId?: string; screen?: string; templateId?: string };
 }
+export type FeedbackKind = FeedbackRow['kind'];
 export interface Settings {
   id: 'settings';
   goalWeightLb: number;

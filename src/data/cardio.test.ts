@@ -36,6 +36,13 @@ describe('cardio writers', () => {
     expect(s).toMatchObject({ type: 'burn', hard: true, hardCardio: true, rpe: null, durationMin: 60, templateId: 'burn-tread-floor' });
   });
 
+  it('saveBurn uses a pre-allocated id when given', async () => {
+    const db = open();
+    const id = await saveBurn(db, { templateId: 'burn-tread-floor', blocks: [], rpe: null, startedAt: START, id: 'PRE' }, NOW);
+    expect(id).toBe('PRE');
+    expect(await db.sessions.get('PRE')).toBeTruthy();
+  });
+
   it('saveRun: intervals are hardCardio; easy RPE 5 is not hard; the run row mirrors the session', async () => {
     const db = open();
     const hard = await saveRun(db, { block: runBlock('intervals', { format: 'hill' }), distanceMi: 0, durationSec: 1500, rpe: 7, painFlag: false, startedAt: START }, NOW);

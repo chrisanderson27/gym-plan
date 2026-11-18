@@ -23,6 +23,12 @@ _Learned 2026-11-18 · costs: one verification eval per run_
 **Do:** re-snapshot between ticks, or verify with `[data-testid=set-<exercise>-<idx>]` (class `done`). Never reuse refs from before the first tick.
 **Where:** `#/lift/session/<id>`.
 
+### Judge pose animations from polled frames, not fixed-delay screenshots
+_Learned 2026-11-17 · costs: several wasted screenshot cycles_
+**You'll see:** pose SVGs (`[data-testid=pose-<exercise>]`, ~140px tall) animate continuously, so a fixed-delay screenshot rarely lands on the frame you need, and they are too small to judge.
+**Do:** enlarge them with `eval "document.querySelectorAll('svg.pose').forEach(s=>s.style.height='260px')"`. Then poll the near-limb bone coordinates (`line.bone:not(.far)`, index 4 = upper arm) with `eval` until the frame you want appears, and screenshot. Use `set media dark reduced-motion` and reload for the static filmstrip (`data-static="true"`). To screenshot an exact frame, poll inside one async `eval` each rAF, and on a match replace `requestAnimationFrame` with a stub that pushes callbacks to `window.__held`. Screenshot, then restore the original and re-queue the held callbacks so the loop resumes. Inline height is lost on route change, so re-apply it.
+**Where:** `#/lift/session/<id>`.
+
 ### Seed lift history via Settings → Import backup
 _Learned 2026-11-18 · costs: none if known; otherwise a whole calibration session_
 **You'll see:** a fresh profile has no lift history, so every exercise shows a calibration card and progression cannot be tested.

@@ -1,5 +1,6 @@
 import { ImportError } from './errors';
 import type { StoreName } from './stores';
+import { FEEDBACK_TAGS } from './types';
 
 type Rec = Record<string, unknown>;
 type Check = (v: unknown) => boolean;
@@ -102,8 +103,8 @@ const ROW_SHAPES: Record<StoreName, Check> = {
     source: oneOf('generated', 'saved', 'built'), createdAt: iso,
   }),
   feedback: shape({
-    id: str, v: (x) => x === 1, ts: iso, kind: oneOf('workout', 'exercise', 'set', 'app'), tags: arr(str), text: str,
-    context: shape({ sessionId: opt(str), exerciseId: opt(str), setId: opt(str), equipmentId: opt(str) }), ref: opt(str),
+    id: str, v: (x) => x === 1, ts: iso, kind: oneOf('workout', 'exercise', 'set', 'app'), tags: arr(oneOf(...FEEDBACK_TAGS)), text: str,
+    context: shape({ sessionId: opt(str), exerciseId: opt(str), setId: opt(str), equipmentId: opt(str), screen: opt(str), templateId: opt(str) }), ref: opt(str),
   }),
   settings: shape({
     id: oneOf('settings'), goalWeightLb: num, daysPerWeek: num, poolUnit: oneOf(...POOL_UNITS), poolLength: num,

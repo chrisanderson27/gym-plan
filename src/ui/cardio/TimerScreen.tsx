@@ -105,7 +105,7 @@ export function TimerScreen({ blocks, onFinish, onExit, feedbackContext }: Props
           </div>
         </>
       )}
-      <FeedbackButton kind="workout" context={feedbackContext} />
+      <FeedbackButton kind="workout" context={{ ...feedbackContext, ...(v.step?.exerciseId ? { exerciseId: v.step.exerciseId } : {}) }} />
     </main>
   );
 }

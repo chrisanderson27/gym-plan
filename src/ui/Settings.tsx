@@ -7,6 +7,7 @@ import { daysBetween, localDate } from '../engine/dates';
 import { isStandalone } from '../platform/display';
 import { deliverFile, backupFileName } from '../platform/share';
 import { isPersisted } from '../platform/storage';
+import { FeedbackList } from './feedback/FeedbackList';
 
 declare const __APP_VERSION__: string;
 
@@ -90,6 +91,7 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
         Import backup
         <input type="file" accept=".json,application/json" onChange={doImport} />
       </label>
+      <FeedbackList onMessage={setMessage} />
       {message && <p role="status">{message}</p>}
       <p class="dim">gym-plan v{__APP_VERSION__}</p>
     </main>

@@ -108,7 +108,7 @@ export function ExerciseCard(p: CardProps) {
             {logged && (
               <button type="button" aria-label="pain" aria-pressed={logged.painFlag} class={logged.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, logged.id, !logged.painFlag)}>⚠</button>
             )}
-            {logged && <FeedbackButton kind="set" context={{ sessionId: session.id, exerciseId: id, setId: logged.id }} />}
+            {logged && <FeedbackButton kind="set" context={{ sessionId: session.id, exerciseId: id, setId: logged.id, equipmentId: logged.equipmentId }} />}
           </div>
         );
       })}

@@ -27,6 +27,7 @@ export function RunScreen() {
   const [format, setFormat] = useState<(typeof RUN_FORMATS)[number]['format'] | undefined>(undefined);
   const [durationMin, setDurationMin] = useState<number | undefined>(undefined);
   const [stage, setStage] = useState<Stage>('plan');
+  const [sessionId] = useState(newId);
   const [timed, setTimed] = useState<{ blocks: IntervalBlock[]; startedAt: string; minutes: number } | null>(null);
   const [frozen, setFrozen] = useState<IntervalBlock[]>([]);
 
@@ -46,12 +47,14 @@ export function RunScreen() {
   if (!snap || !plan || !settings) return <main class="screen"><h1>Run</h1></main>;
 
   const plannedMin = Math.round(plan.plannedSec / 60);
+  // Matches saveRun's templateId.
+  const runTemplateId = `run-${plan.block.format ?? plan.block.runKind}`;
   const lastRun = snap.runHistory
     .filter((r) => r.modality === 'run' || r.modality === 'treadmill')
     .sort((a, b) => b.date.localeCompare(a.date))[0];
 
   const record = async (v: RunLogValues, startedAt: string) => {
-    await saveRun(db, { block: plan.block, startedAt, ...v });
+    await saveRun(db, { block: plan.block, startedAt, id: sessionId, ...v });
     navigate('/');
   };
 
@@ -59,7 +62,7 @@ export function RunScreen() {
     return (
       <TimerScreen
         blocks={frozen}
-        feedbackContext={{}}
+        feedbackContext={{ sessionId, templateId: runTemplateId }}
         onExit={() => setStage('plan')}
         onFinish={(blocks, startedAt) => {
           const sec = blocks.reduce((n, b) => n + (b.result?.actualSec ?? 0), 0);
@@ -76,7 +79,7 @@ export function RunScreen() {
       <main class="screen">
         <h1>{timed ? 'Session complete' : 'Log run'}</h1>
         <RunLog defaultMinutes={timed?.minutes ?? plannedMin} defaultModality={plan.block.modality} onSave={(v) => record(v, startedAt)} />
-        <FeedbackButton kind="workout" context={{}} />
+        <FeedbackButton kind="workout" context={{ sessionId, templateId: runTemplateId }} />
       </main>
     );
   }
@@ -126,7 +129,7 @@ export function RunScreen() {
       <button type="button" class="primary" data-testid="run-start" onClick={() => { setFrozen(runToIntervals(plan.block, plan)); setStage('timer'); }}>Start timer</button>
       <button type="button" data-testid="run-log-direct" onClick={() => { setTimed(null); setStage('log'); }}>Log without timer</button>
       <p class="dim">{lastRun ? `Last run: ${dayOf(lastRun.date)} · ${Math.round(lastRun.durationSec / 60)} min` : 'No runs yet'}</p>
-      <FeedbackButton kind="workout" context={{}} />
+      <FeedbackButton kind="workout" context={{ templateId: runTemplateId }} />
     </main>
   );
 }

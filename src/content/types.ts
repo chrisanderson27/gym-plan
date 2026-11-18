@@ -87,3 +87,23 @@ export interface Drill {
   finsRecommended: 'yes' | 'no' | 'optional';
   difficulty: 1 | 2 | 3;
 }
+
+// ---- Poses: mirror of engine/pose.ts, kept structural by the eslint fence (content may not import engine) ----
+export type Bone =
+  | 'torso' | 'head'
+  | 'upperArmN' | 'forearmN' | 'upperArmF' | 'forearmF'
+  | 'thighN' | 'shinN' | 'footN' | 'thighF' | 'shinF' | 'footF';
+export type Angles = Partial<Record<Bone, number>>;
+export interface Keyframe {
+  angles: Angles;
+  ms?: number;
+  holdMs?: number;
+}
+export interface PoseDef {
+  view: 'side' | 'front';
+  anchor: 'feet' | 'hands' | 'hip';
+  frames: Keyframe[];
+  implement?: 'bar' | 'db' | 'kb' | 'handle' | 'none';
+  prop?: 'bench' | 'incline' | 'seat' | 'floor' | 'none';
+  cable?: { x: number; y: number };
+}

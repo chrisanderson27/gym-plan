@@ -81,10 +81,10 @@ const minutesBetween = (startedAt: ISODateTime, now: Date) => Math.max(0, Math.r
 
 export async function saveBurn(
   db: GymDb,
-  input: { templateId: string; blocks: IntervalBlock[]; rpe: number | null; startedAt: ISODateTime },
+  input: { templateId: string; blocks: IntervalBlock[]; rpe: number | null; startedAt: ISODateTime; id?: string },
   now = new Date(),
 ): Promise<string> {
-  const id = newId();
+  const id = input.id ?? newId();
   const session: Session = {
     id, date: input.startedAt, type: 'burn', templateId: input.templateId, blocks: input.blocks,
     ...classifyHard({ type: 'burn', rpe: input.rpe, runKinds: [] }),
@@ -103,11 +103,11 @@ export async function saveRun(
   db: GymDb,
   input: {
     block: RunBlock; distanceMi: number; durationSec: number; rpe: number; painFlag: boolean; startedAt: ISODateTime;
-    modality?: RunBlock['modality'];
+    modality?: RunBlock['modality']; id?: string;
   },
   now = new Date(),
 ): Promise<string> {
-  const id = newId();
+  const id = input.id ?? newId();
   const { block } = input;
   const modality = input.modality ?? block.modality;
   const ratio = runWalkRatioOf(block);
@@ -155,11 +155,11 @@ export async function saveSwim(
   db: GymDb,
   input: {
     workoutId: string; blocks: SwimSetBlock[]; distance: number; rpe: number; shoulderPainFlag: boolean; durationMin: number;
-    startedAt: ISODateTime; css?: CssInput;
+    startedAt: ISODateTime; css?: CssInput; id?: string;
   },
   now = new Date(),
 ): Promise<string> {
-  const id = newId();
+  const id = input.id ?? newId();
   const times = input.css ? validateCss(input.css) : null; // fail before writing anything
   await db.transaction('rw', db.settings, db.sessions, db.swims, db.tests, async () => {
     // Read inside the transaction so the row records the pool this swim really used.

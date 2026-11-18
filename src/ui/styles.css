@@ -96,3 +96,20 @@ a { color: var(--accent); }
 .swim-card h3 { margin: 16px 0 4px; font-size: 1.2rem; color: var(--accent); }
 .swim-line { margin: 4px 0; }
 .swim-card small { font-size: 0.85rem; }
+
+/* ---- P5: feedback + pose demos ---- */
+.sheet.overlay { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 10; max-height: 80vh; overflow: auto; max-width: 480px; margin: 0 auto; }
+.sheet textarea { width: 100%; font-size: 1rem; background: var(--bg); color: var(--fg); border: 1px solid #33333d; border-radius: 8px; padding: 8px; }
+.fb { min-width: 56px; padding: 0 8px; margin: 0; }
+.setrow .fb { min-width: 44px; min-height: 44px; }
+.pose { height: 140px; width: auto; max-width: 100%; display: block; margin: 8px auto; color: var(--fg); }
+.pose .bone { stroke: currentColor; stroke-width: 4; stroke-linecap: round; }
+.pose .bone.far { opacity: 0.45; }
+.pose .head { fill: none; stroke: currentColor; stroke-width: 3; }
+.pose .implement { fill: var(--accent); }
+.pose .prop { stroke: var(--dim); stroke-width: 3; stroke-linecap: round; }
+.pose-strip { display: flex; gap: 4px; justify-content: center; }
+.pose-strip .pose { height: 90px; margin: 4px 0; }
+.cues { color: var(--dim); padding-left: 20px; margin: 8px 0; }
+.fb-row { border-top: 1px solid #22222b; padding: 8px 0; }
+.fb-row.corrected { opacity: 0.6; }

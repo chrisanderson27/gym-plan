@@ -18,6 +18,7 @@ export function SwimScreen() {
   const snap = useLiveQuery(() => loadCardioSnapshot(db), []);
   const [picked, setPicked] = useState<string | null>(null);
   const [logging, setLogging] = useState(false);
+  const [sessionId] = useState(newId);
   const settings = snap?.settings;
   const weekIdx = settings ? weekIndex(localDate(new Date()), settings.programStart) : 1;
   const workoutId = picked ?? nextSwimWorkout(SWIM_WORKOUTS, weekIdx, snap?.lastDone ?? {});
@@ -40,11 +41,11 @@ export function SwimScreen() {
           defaultDistance={plan.totalDistance}
           onSave={async (v) => {
             const startedAt = new Date(Date.now() - v.durationMin * 60_000).toISOString();
-            await saveSwim(db, { workoutId: workout.id, blocks: plan.blocks, startedAt, ...v });
+            await saveSwim(db, { workoutId: workout.id, blocks: plan.blocks, startedAt, id: sessionId, ...v });
             navigate('/');
           }}
         />
-        <FeedbackButton kind="workout" context={{}} />
+        <FeedbackButton kind="workout" context={{ sessionId, templateId: workout.id }} />
       </main>
     );
   }
@@ -75,7 +76,7 @@ export function SwimScreen() {
       <SwimCard blocks={plan.blocks} totalDistance={plan.totalDistance} poolUnit={settings.poolUnit} />
       <button type="button" class="primary" data-testid="swim-log" onClick={() => setLogging(true)}>Log swim</button>
       <p class="dim">{lastSwim ? `Last swim: ${dayOf(lastSwim)}` : 'No swims yet'}</p>
-      <FeedbackButton kind="workout" context={{}} />
+      <FeedbackButton kind="workout" context={{ templateId: workout.id }} />
     </main>
   );
 }

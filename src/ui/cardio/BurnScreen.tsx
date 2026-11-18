@@ -27,6 +27,8 @@ export function BurnScreen() {
   const [result, setResult] = useState<{ blocks: IntervalBlock[]; startedAt: string; early: boolean } | null>(null);
   const [rpe, setRpe] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  // Cardio holds no session row until Save, so the id is pre-allocated for feedback to link to it.
+  const [sessionId] = useState(newId);
 
   const templateId = picked ?? nextBurnTemplate(BURN_TEMPLATES.map((t) => t.id), snap?.lastDone ?? {});
   const template = BURN_TEMPLATES.find((t) => t.id === templateId) ?? BURN_TEMPLATES[0]!;
@@ -51,7 +53,7 @@ export function BurnScreen() {
     return (
       <TimerScreen
         blocks={frozen}
-        feedbackContext={{}}
+        feedbackContext={{ sessionId, templateId: template.id }}
         onExit={() => setStage('preview')}
         onFinish={(blocks, startedAt, early) => { setResult({ blocks, startedAt, early }); setStage('log'); }}
       />
@@ -62,7 +64,7 @@ export function BurnScreen() {
     const save = async () => {
       setSaving(true);
       try {
-        await saveBurn(db, { templateId: template.id, blocks: result.blocks, rpe, startedAt: result.startedAt });
+        await saveBurn(db, { templateId: template.id, blocks: result.blocks, rpe, startedAt: result.startedAt, id: sessionId });
         navigate('/');
       } finally {
         setSaving(false);
@@ -74,7 +76,7 @@ export function BurnScreen() {
         <p>How hard was it? (optional)</p>
         <RpeChips value={rpe} onChange={setRpe} allowSkip />
         <button type="button" class="primary" data-testid="burn-save" disabled={saving} onClick={save}>Save</button>
-        <FeedbackButton kind="workout" context={{}} />
+        <FeedbackButton kind="workout" context={{ sessionId, templateId: template.id }} />
       </main>
     );
   }
@@ -127,7 +129,7 @@ export function BurnScreen() {
       </ul>
       <button type="button" class="primary" data-testid="burn-start" onClick={() => { setFrozen(plan.blocks); setStage('timer'); }}>Start</button>
       <p class="dim">{last ? `Last Burn: ${dayOf(last)}` : 'No Burn yet'}</p>
-      <FeedbackButton kind="workout" context={{}} />
+      <FeedbackButton kind="workout" context={{ templateId: template.id }} />
     </main>
   );
 }
