@@ -18,7 +18,7 @@ afterEach(async () => {
 const settings = (over: Partial<Settings> = {}): Settings => ({
   id: 'settings', goalWeightLb: 220, startWeightLb: 247, daysPerWeek: 5, poolUnit: 'yd', poolLength: 25,
   weightUnit: 'lb', distanceUnit: 'mi', programStart: '2026-11-01', onboardedAt: '2026-11-01T08:00:00.000Z',
-  backupAt: null, updatedAt: '2026-11-10T08:00:00.000Z', ...over,
+  backupAt: null, updatedAt: '2026-11-10T08:00:00.000Z', appearance: 'dark', ...over,
 });
 
 const blocks: Block[] = [
@@ -148,6 +148,7 @@ describe('export/import', () => {
       { sessions: [{ ...session('s1'), date: 'not-a-date' }] },
       { bodyLogs: [{ date: '2026-11-10', protein: 'yes' }] },
       { settings: [{ id: 'settings' }] },
+      { settings: [settings({ appearance: 'neon' as never })] },
       { sessions: [{ ...session('s1'), flags: 'broken' }] },
       { sessions: [{ ...session('s1'), variant: 'nope' }] },
       { sessions: [{ ...session('s1'), blocks: [{ ...blocks[0], result: { actualSec: 'broken' } }] }] },

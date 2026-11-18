@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { buildExport, ImportError, importExport, markBackedUp, parseExport } from '../data/backup';
 import { db } from '../data/db';
 import { saveSettings } from '../data/settings';
-import type { PoolUnit, Settings as SettingsRow } from '../data/types';
+import type { Appearance, PoolUnit, Settings as SettingsRow } from '../data/types';
 import { daysBetween, localDate } from '../engine/dates';
 import { isStandalone } from '../platform/display';
 import { deliverFile, backupFileName } from '../platform/share';
@@ -59,6 +59,16 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
           Home
         </a>
       </header>
+      <h2>Appearance</h2>
+      <label>
+        Appearance
+        <select data-testid="appearance" value={settings.appearance ?? 'light'} onChange={(e) => saveSettings(db, { appearance: e.currentTarget.value as Appearance })}>
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+
       <label>
         Goal weight (lb)
         <input inputMode="decimal" value={settings.goalWeightLb} onChange={(e) => { const v = Number(e.currentTarget.value); if (v > 0) saveSettings(db, { goalWeightLb: v }); }} />

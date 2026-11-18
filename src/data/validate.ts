@@ -1,6 +1,6 @@
 import { ImportError } from './errors';
 import type { StoreName } from './stores';
-import { FEEDBACK_TAGS } from './types';
+import { APPEARANCES, FEEDBACK_TAGS } from './types';
 
 type Rec = Record<string, unknown>;
 type Check = (v: unknown) => boolean;
@@ -110,7 +110,7 @@ const ROW_SHAPES: Record<StoreName, Check> = {
   settings: shape({
     id: oneOf('settings'), goalWeightLb: num, daysPerWeek: num, poolUnit: oneOf(...POOL_UNITS), poolLength: num,
     weightUnit: oneOf('lb'), distanceUnit: oneOf('mi'), programStart: localDate, onboardedAt: iso,
-    backupAt: nullable(iso), updatedAt: iso, startWeightLb: opt(num),
+    backupAt: nullable(iso), updatedAt: iso, startWeightLb: opt(num), appearance: opt(oneOf(...APPEARANCES)),
   }),
 };
 

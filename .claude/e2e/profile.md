@@ -5,7 +5,7 @@
 - **Auth:** none. Single user, all data in IndexedDB on the device.
 - **First run:** onboarding asks bodyweight, goal weight, pool unit and length. A fresh browser
   profile always lands there; clear site data to reset.
-- **Viewport:** design target is an iPhone (one-handed, dark mode default). Prefer a ~390×844 viewport.
+- **Viewport:** design target is an iPhone (one-handed, light theme default; Appearance in Settings: System/Light/Dark, `<html data-theme>` holds the preference). Prefer a ~390×844 viewport.
 - **Service worker:** registers with `registerType: 'prompt'`; an update shows a prompt, never reloads.
 
 ## Learned quirks
@@ -14,7 +14,7 @@
 ### Drive cardio timers with Skip and read phase from data-role
 _Learned 2026-11-17 · costs: a source lookup per run; real-time Burn is 30–60 min_
 **You'll see:** Burn/Run timers run in real time; phase colour is only a background colour.
-**Do:** loop `find testid timer-skip click` until the text `Session complete` appears (~27 skips for a 30 min Burn). Read the phase from `[data-testid=timer]` `data-role` (warmup/cooldown blue, work orange, rest green, transition grey). Confirm saved rows by reading IndexedDB `gym-plan` stores `sessions`, `runs`, `swims`, `tests` with `eval`.
+**Do:** loop `find testid timer-skip click` until the text `Session complete` appears (~27 skips for a 30 min Burn). Read the phase from `[data-testid=timer]` `data-role` (warmup/cooldown blue, work red, rest green, transition grey). Confirm saved rows by reading IndexedDB `gym-plan` stores `sessions`, `runs`, `swims`, `tests` with `eval`.
 **Where:** `#/burn`, `#/run` timer; `#/swim`.
 
 ### Re-snapshot after ticking a set row

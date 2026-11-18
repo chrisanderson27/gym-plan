@@ -43,6 +43,8 @@ export const FEEDBACK_TAGS = [
   'other',
 ] as const;
 export type FeedbackTag = (typeof FEEDBACK_TAGS)[number];
+export const APPEARANCES = ['system', 'light', 'dark'] as const;
+export type Appearance = (typeof APPEARANCES)[number];
 
 // ---- Block: discriminated union on `kind` ----
 interface BlockBase {
@@ -234,4 +236,6 @@ export interface Settings {
   onboardedAt: ISODateTime;
   backupAt: ISODateTime | null;
   updatedAt: ISODateTime;
+  /** UI theme preference; absent = 'light'. */
+  appearance?: Appearance;
 }

@@ -1,3 +1,4 @@
+import { useEffect } from 'preact/hooks';
 import { db } from './data/db';
 import { useLiveQuery } from './data/live';
 import { getSettings } from './data/settings';
@@ -13,12 +14,18 @@ import { LiftRoutes } from './ui/lift/LiftRoutes';
 import { Onboarding } from './ui/Onboarding';
 import { useRoute } from './ui/router';
 import { SettingsScreen } from './ui/Settings';
+import { applyAppearance } from './ui/theme';
 import { UpdatePrompt } from './ui/UpdatePrompt';
 
 export function App() {
   // null = loaded but no settings row yet; undefined = first tick still loading.
   const settings = useLiveQuery(async () => (await getSettings(db)) ?? null, []);
   const route = useRoute();
+  // Only apply once a row exists: applying while loading would flash the pre-painted theme back to light.
+  const appearance = settings ? (settings.appearance ?? 'light') : undefined;
+  useEffect(() => {
+    if (appearance) applyAppearance(appearance);
+  }, [appearance]);
 
   let body;
   if (settings === undefined) {
