@@ -138,4 +138,22 @@ describe('runToIntervals', () => {
     const p = generateRun(input(4, 'intervals', { format: 'norwegian-4x4', history: [hist(3, { durationSec: 300 })] }));
     expect(p.plannedSec).toBeLessThanOrEqual(330);
   });
+
+  it('a cap smaller than the segment count stays finite, non-empty and bounded', () => {
+    const p = generateRun(input(4, 'intervals', { format: '30-30', history: [hist(3, { durationSec: 1 })] }));
+    expect(Number.isFinite(p.block.repeats)).toBe(true);
+    expect(Number.isFinite(p.plannedSec)).toBe(true);
+    expect(p.block.segments.length).toBeGreaterThan(0);
+    expect(p.block.segments.every((s) => (s.sec ?? 1) > 0)).toBe(true);
+    expect(p.plannedSec).toBeLessThanOrEqual(p.warmupSec + p.cooldownSec + 2);
+    const blocks = runToIntervals(p.block, p);
+    expect(blocks.length).toBeGreaterThan(0);
+  });
+
+  it('a 1 s run-walk history stays finite and bounded', () => {
+    const p = generateRun(input(2, 'easy', { history: [hist(1, { durationSec: 1, rpe: 7 })] }));
+    expect(Number.isFinite(p.plannedSec)).toBe(true);
+    expect(p.block.segments.length).toBeGreaterThan(0);
+    expect(p.plannedSec).toBeLessThanOrEqual(2);
+  });
 });

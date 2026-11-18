@@ -73,7 +73,13 @@ function trimToCap(segments: RunSegment[], capSec: number): RunSegment[] {
   const total = segSec(segments);
   if (total <= capSec || total <= 0) return segments;
   const k = Math.max(0, capSec) / total;
-  return segments.map((s) => (s.sec === undefined ? s : { ...s, sec: Math.floor(s.sec * k) }));
+  const scaled = segments
+    .map((s) => (s.sec === undefined ? s : { ...s, sec: Math.floor(s.sec * k) }))
+    .filter((s) => s.sec !== 0);
+  if (scaled.some((s) => (s.sec ?? 0) > 0)) return scaled;
+  // Cap smaller than the segment count: keep one 1 s segment so the prescription stays finite and non-empty.
+  const first = segments.find((s) => (s.sec ?? 0) > 0);
+  return first ? [{ ...first, sec: 1 }] : segments;
 }
 
 export function generateRun(input: RunInput): RunPlan {
@@ -174,7 +180,8 @@ export function generateRun(input: RunInput): RunPlan {
     } else {
       const [r0, w0] = RUN_WALK_LADDER[rung] as readonly [number, number];
       segments = trimToCap([{ role: 'run', sec: r0 }, { role: 'walk', sec: w0 }], capSec);
-      const [r, w] = [segments[0]?.sec ?? r0, segments[1]?.sec ?? w0];
+      const r = segments.find((s) => s.role === 'run')?.sec ?? 0;
+      const w = segments.find((s) => s.role === 'walk')?.sec ?? 0;
       repeats = fitRepeats(0, Math.max(1, r + w), Math.max(1, Math.floor(wantedSec / Math.max(1, r + w))), capSec);
       plannedSec = repeats * (r + w);
       format = 'run-walk';
