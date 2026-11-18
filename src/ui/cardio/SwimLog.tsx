@@ -27,6 +27,10 @@ export function SwimLog({ defaultDistance, onSave }: { defaultDistance: number; 
     if (rpe === null || !ok) return;
     const a = parseMSS(t400);
     const b = parseMSS(t200);
+    if (didTest && (a === undefined || b === undefined)) {
+      setError('Enter both CSS test times as m:ss, or untick the CSS test.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {

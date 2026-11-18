@@ -42,6 +42,8 @@ export interface TimerState {
   /** Time credited by skipping the rest of a step. */
   creditMs: number;
   skipped: number[];
+  /** Seconds credited by each skip, parallel to `skipped`; absent on older state. */
+  skipCreditSec?: number[];
 }
 export const initialTimer = (): TimerState => ({ startedAt: null, pausedAt: null, pausedMs: 0, creditMs: 0, skipped: [] });
 
@@ -74,7 +76,8 @@ export function timerReducer(state: TimerState, action: TimerAction, nowMs: numb
       const idx = stepIndexAt(steps, el / 1000);
       const step = steps[idx];
       if (!step || el >= totalSecOf(steps) * 1000) return state;
-      return { ...state, creditMs: state.creditMs + (step.endSec * 1000 - el), skipped: [...state.skipped, idx] };
+      const credit = step.endSec * 1000 - el;
+      return { ...state, creditMs: state.creditMs + credit, skipped: [...state.skipped, idx], skipCreditSec: [...(state.skipCreditSec ?? []), credit / 1000] };
     }
   }
 }
@@ -139,8 +142,10 @@ export function summarize(blocks: IntervalBlock[], steps: TimerStep[], state: Ti
     let spent = 0;
     for (const s of mine) {
       const idx = steps.indexOf(s);
-      if (state.skipped.includes(idx)) continue; // skipped time is credit, not effort
-      spent += Math.max(0, Math.min(elSec, s.endSec) - s.startSec);
+      const spentInStep = Math.max(0, Math.min(elSec, s.endSec) - s.startSec);
+      const at = state.skipped.indexOf(idx);
+      // Skipped time is credit, not effort: keep only what was done before pressing Skip.
+      spent += at === -1 ? spentInStep : Math.max(0, spentInStep - (state.skipCreditSec?.[at] ?? spentInStep));
     }
     const skipped = mine.some((s) => state.skipped.includes(steps.indexOf(s)));
     const roundsDone = Array.from({ length: b.rounds }, (_, r) => mine.filter((s) => s.round === r)).filter(

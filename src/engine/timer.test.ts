@@ -60,7 +60,14 @@ describe('timer', () => {
     expect(v.step?.label).toBe('Work');
     const sum = summarize(blocks, steps, st, T0 + 5_000);
     expect(sum[0]?.result?.skipped).toBe(true);
-    expect(sum[0]?.result?.actualSec).toBe(0);
+    expect(sum[0]?.result?.actualSec).toBe(5);
+  });
+
+  it('skip keeps effort done before pressing Skip and drops only the credit', () => {
+    let st = timerReducer(initialTimer(), { type: 'start' }, T0);
+    st = timerReducer(st, { type: 'skip' }, T0 + 12_000, steps);
+    const sum = summarize(blocks, steps, st, T0 + 12_000);
+    expect(sum[0]?.result?.actualSec).toBe(12);
   });
 
   it('skip on the last step finishes; skip when done is a no-op', () => {

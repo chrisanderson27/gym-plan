@@ -128,4 +128,14 @@ describe('runToIntervals', () => {
     expect(blocks).toHaveLength(1);
     expect(blocks[0]?.phases).toHaveLength(1);
   });
+
+  it('never exceeds the 1.10× cap when one run-walk cycle is longer than the cap', () => {
+    const p = generateRun(input(2, 'easy', { history: [hist(1, { durationSec: 60, rpe: 7 })] }));
+    expect(p.plannedSec).toBeLessThanOrEqual(66);
+  });
+
+  it('never exceeds the cap when one interval repeat is longer than the cap', () => {
+    const p = generateRun(input(4, 'intervals', { format: 'norwegian-4x4', history: [hist(3, { durationSec: 300 })] }));
+    expect(p.plannedSec).toBeLessThanOrEqual(330);
+  });
 });

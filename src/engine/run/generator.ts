@@ -68,6 +68,14 @@ function fitRepeats(fixedSec: number, repSec: number, repeats: number, capSec: n
   return Math.max(1, r);
 }
 
+/** When even one repetition exceeds the cap, shrink its segments proportionally so the hard cap holds. */
+function trimToCap(segments: RunSegment[], capSec: number): RunSegment[] {
+  const total = segSec(segments);
+  if (total <= capSec || total <= 0) return segments;
+  const k = Math.max(0, capSec) / total;
+  return segments.map((s) => (s.sec === undefined ? s : { ...s, sec: Math.floor(s.sec * k) }));
+}
+
 export function generateRun(input: RunInput): RunPlan {
   const { history, kind, programStart, today, now } = input;
   const weekIdx = weekIndex(today, programStart);
@@ -121,6 +129,7 @@ export function generateRun(input: RunInput): RunPlan {
     segments = band.segments.map((s) => (s.role === 'sprint' || s.role === 'run' ? { ...s, rpeTarget: rpe } : { ...s }));
     format = def.format;
     modality = def.modality;
+    if (segSec(segments) > capSec) segments = trimToCap(segments, capSec);
     const repSec = segSec(segments);
     warmupSec = RUN_WARMUP_SEC;
     cooldownSec = RUN_COOLDOWN_SEC;
@@ -163,9 +172,10 @@ export function generateRun(input: RunInput): RunPlan {
       repeats = 1;
       plannedSec = sec;
     } else {
-      const [r, w] = RUN_WALK_LADDER[rung] as readonly [number, number];
-      segments = [{ role: 'run', sec: r }, { role: 'walk', sec: w }];
-      repeats = fitRepeats(0, r + w, Math.max(1, Math.floor(wantedSec / (r + w))), capSec);
+      const [r0, w0] = RUN_WALK_LADDER[rung] as readonly [number, number];
+      segments = trimToCap([{ role: 'run', sec: r0 }, { role: 'walk', sec: w0 }], capSec);
+      const [r, w] = [segments[0]?.sec ?? r0, segments[1]?.sec ?? w0];
+      repeats = fitRepeats(0, Math.max(1, r + w), Math.max(1, Math.floor(wantedSec / Math.max(1, r + w))), capSec);
       plannedSec = repeats * (r + w);
       format = 'run-walk';
       reasons.push(`run-walk ${r}:${w} s${weekIdx <= RUN_WALK_WEEKS ? ` (weeks 1–${RUN_WALK_WEEKS})` : ''}`);
