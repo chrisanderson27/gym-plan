@@ -74,6 +74,7 @@
   --timer-warmup: var(--blue-70);
   --timer-transition: var(--gray-70);
   --timer-text: var(--gray-0);
+  --timer-focus: var(--gray-0);
   --timer-control-bg: var(--black-a35);
   --timer-control-border: var(--white-a30);
   --timer-primary-bg: var(--gray-0);

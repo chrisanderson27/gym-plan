@@ -78,6 +78,8 @@ const PAIRS: [string, string, number][] = [
 const TIMER: [string, string, number][] = [
   ...['timer-idle', 'timer-work', 'timer-rest', 'timer-warmup', 'timer-transition'].map((f): [string, string, number] => ['timer-text', f, BODY]),
   ['timer-primary-text', 'timer-primary-bg', BODY],
+  // Focus ring sits in the outline-offset gap, so it is judged against every phase fill (non-text 3:1).
+  ...['timer-idle', 'timer-work', 'timer-rest', 'timer-warmup', 'timer-transition'].map((f): [string, string, number] => ['timer-focus', f, NONTEXT]),
 ];
 
 describe('design tokens: WCAG contrast', () => {
@@ -100,6 +102,22 @@ describe('design tokens: structure', () => {
   it('light and dark declare the same --color-* keys', () => {
     const keys = (m: Record<string, string>) => Object.keys(m).filter((k) => k.startsWith('--color-')).sort();
     expect(keys(dark)).toEqual(keys(light));
+  });
+});
+
+describe('stylesheet contracts', () => {
+  const styles = readFileSync(join(__dirname, 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  it('timer button colours do not leak into the nested feedback sheet', () => {
+    expect(styles).not.toMatch(/\.timer button/);
+    expect(styles).toMatch(/\.timer > \.sheet\s*\{[^}]*color:\s*var\(--color-text-primary\)/);
+  });
+  it('timer focus ring uses --timer-focus', () => {
+    expect(styles).toMatch(/\.timer > button:focus-visible[^{]*\{\s*outline-color:\s*var\(--timer-focus\)/);
+  });
+  it('selected chip text is not composited with opacity', () => {
+    const m = styles.match(/\.chip small\s*\{([^}]*)\}/);
+    expect(m, 'missing .chip small rule').not.toBeNull();
+    expect(m![1]).not.toMatch(/opacity/);
   });
 });
 
