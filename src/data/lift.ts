@@ -193,6 +193,15 @@ export function startLiftSession(db: GymDb, plan: LiftPlan, now = new Date()): P
   );
 }
 
+export function startOrResumePlannedLift(db: GymDb, variant: LiftVariant, budgetMin: number, now = new Date()): Promise<string> {
+  return db.transaction('rw', [db.sessions, db.settings, db.sets, db.equipment, db.exerciseOverrides], async () => {
+    const open = await findOpenLiftSession(db, now, ['lift']);
+    if (open) return open.id;
+    const snapshot = await loadLiftSnapshot(db, now);
+    return startLiftSession(db, buildLiftPlan(snapshot, variant, budgetMin), now);
+  });
+}
+
 /** Primary muscles of a variant's lead exercises, used for readiness. */
 export function variantMuscles(v: LiftVariant): string[] {
   const muscles = LIFT_TEMPLATES[v].slots.flatMap((s) => LIFT_EXERCISES.get(s.candidates[0]!)?.primary ?? []);

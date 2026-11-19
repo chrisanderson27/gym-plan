@@ -14,7 +14,7 @@ test('settings backup downloads and restores into a fresh context', async ({ pag
   // (merge rule D3), so the backup's settings must be the more recent edit to win.
   const context = await browser.newContext({ ...testInfo.project.use });
   const fresh = await context.newPage();
-  await onboard(fresh, { bodyweight: '180' });
+  await onboard(fresh, { bodyweight: '180', target: '170' });
 
   const storedGoalOf = (p: Page) => () =>
     p.evaluate(
@@ -97,6 +97,6 @@ test('CSP is present and nothing violates it', async ({ page, request }) => {
   page.on('console', (m) => {
     if (/content security policy|refused to/i.test(m.text())) violations.push(m.text());
   });
-  await onboard(page, { bodyweight: '200' });
+  await onboard(page, { bodyweight: '200', target: '190' });
   expect(violations).toEqual([]);
 });

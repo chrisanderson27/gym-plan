@@ -1,6 +1,7 @@
 import { useRef, useState } from 'preact/hooks';
-import { buildLiftPlan, loadLiftSnapshot, startLiftSession } from '../data/lift';
+import { loadCardioSnapshot } from '../data/cardio';
 import { db } from '../data/db';
+import { startOrResumePlannedLift } from '../data/lift';
 import { useLiveQuery } from '../data/live';
 import { loadPlanInput, loadRingInput } from '../data/plan';
 import type { Settings } from '../data/types';
@@ -9,7 +10,7 @@ import { programWeekRange } from '../engine/lift/volume';
 import { rankToday } from '../engine/plan/pick';
 import { streak, weekRing } from '../engine/plan/ring';
 import { BackupBanner } from './BackupBanner';
-import { HeroCard } from './home/HeroCard';
+import { HeroCard, heroFor } from './home/HeroCard';
 import { Ring } from './home/Ring';
 import { SomethingElse } from './home/SomethingElse';
 import { WeekStrip } from './home/WeekStrip';
@@ -25,15 +26,19 @@ export function Home({ settings }: { settings: Settings }) {
   const home = useLiveQuery(async () => {
     const now = new Date();
     const [plan, input] = await Promise.all([loadPlanInput(db, now), loadRingInput(db, now)]);
-    return { ranked: rankToday(plan), input };
+    const ranked = rankToday(plan);
+    const { pick } = ranked;
+    if (input.done || pick.id === 'rest') return { ranked, input, hero: null };
+    const cardio = pick.tile === 'run' || pick.tile === 'swim' ? await loadCardioSnapshot(db, now) : null;
+    return { ranked, input, hero: heroFor(pick, cardio, now) };
   }, []);
   if (!home) return <main class="screen today-screen" aria-busy="true"><h1>Today</h1><div class="hero loading-hero" /></main>;
 
-  const { ranked: { pick, reason, budget }, input: { sessions, programStart, today, activities, done } } = home;
+  const { ranked: { pick, reason, budget }, input: { sessions, programStart, today, activities, done }, hero } = home;
   const range = programWeekRange(today, programStart);
   const ring = weekRing(sessions, range, activities);
   const { count, freezeAvailable } = streak(sessions, programStart, today, activities);
-  const workout = !done && pick.id !== 'rest';
+  const workout = hero !== null;
 
   return (
     <main class={`screen today-screen${workout ? ' has-start' : ''}`}>
@@ -45,8 +50,8 @@ export function Home({ settings }: { settings: Settings }) {
       {done ? (
         <HeroCard state="done" detail={`${done.variant ? variantName(done.variant) : sessionTypeLabel(done.type)} · ${done.durationMin} min`}
           progress={`${ring.done}/${ring.target}`} />
-      ) : pick.id === 'rest' ? <HeroCard state="rest" /> : (
-        <HeroCard state={pick.route.startsWith('#/lift/calibrate/') ? 'first-run' : 'workout'} pick={pick} settings={settings} reason={reason} />
+      ) : !hero ? <HeroCard state="rest" /> : (
+        <HeroCard state={pick.route.startsWith('#/lift/calibrate/') ? 'first-run' : 'workout'} {...hero} reason={reason} />
       )}
       <p class="streak num" data-testid="streak"><FlameIcon /> {count}-week streak</p>
       <SomethingElse activities={activities} quiet={!!done} />
@@ -61,9 +66,7 @@ export function Home({ settings }: { settings: Settings }) {
             starting.current = true;
             setStartError(false);
             try {
-              const snapshot = await loadLiftSnapshot(db);
-              const plan = buildLiftPlan(snapshot, pick.variant, DEFAULT_LIFT_BUDGET_MIN);
-              const id = await startLiftSession(db, plan);
+              const id = await startOrResumePlannedLift(db, pick.variant, DEFAULT_LIFT_BUDGET_MIN);
               navigate('/lift/session/' + id);
             } catch {
               setStartError(true);

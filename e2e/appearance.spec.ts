@@ -6,7 +6,7 @@ const LIGHT = 'rgb(244, 244, 244)';
 const DARK = 'rgb(22, 22, 22)';
 
 test('appearance: light default, dark persists across reload, system follows OS', async ({ page }) => {
-  await onboard(page, { bodyweight: '200' });
+  await onboard(page, { bodyweight: '200', target: '190' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   expect(await canvas(page)).toBe(LIGHT);
 

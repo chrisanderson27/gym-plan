@@ -1,6 +1,6 @@
 import { useState } from 'preact/hooks';
 import { db } from '../data/db';
-import { completeOnboarding } from '../data/settings';
+import { completeOnboarding, onboardingGoalError } from '../data/settings';
 import { GOAL_DIRECTIONS, type GoalDirection } from '../data/types';
 import { ACTIVITIES, type Activity } from '../engine/plan/activities';
 import { requestPersistence } from '../platform/storage';
@@ -60,7 +60,8 @@ export function Onboarding() {
       return move(step + 1);
     }
     const goalLb = Number(goal);
-    if (!Number.isFinite(goalLb) || goalLb <= 0) return setError('Enter a target weight.');
+    const goalError = onboardingGoalError(bw, goalLb, direction);
+    if (goalError) return setError(goalError);
     setSaving(true);
     try {
       await completeOnboarding(db, { bodyweightLb: bw, goalWeightLb: goalLb, goalDirection: direction, activities });

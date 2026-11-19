@@ -76,6 +76,7 @@ export const RUN_LONG_STEP_MIN = 5;
 export const RUN_LONG_PROGRESS_MAX_RPE = 5;
 export const SWIM_CSS_FALLBACK_ADD_SEC = 5; // 3×100 avg + 5 s (flagged estimate)
 export const SWIM_YD_TO_M_PACE = 1.09;
+export const SWIM_ESTIMATE_YD_SEC_PER_100 = 150;
 export const SWIM_SENDOFF_ROUND_SEC = 5; // round UP to :05
 export const SWIM_SENDOFF_OFFSET_SEC = { EZ: 30, MOD: 20, CSS: 15, FAST: 20 } as const; // per 100, added to CSS
 export const SWIM_DRILL_OFFSET_SEC = 40;

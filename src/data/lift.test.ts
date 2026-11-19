@@ -16,6 +16,7 @@ import {
   setLastSetRir,
   setNotAtMyGym,
   startLiftSession,
+  startOrResumePlannedLift,
   toggleWorkingSet,
   updateEquipmentSteps,
   updateSetValues,
@@ -48,6 +49,16 @@ const setRow = (sessionId: string, exerciseId: string, equipmentId: string, idx:
 });
 
 describe('lift data layer', () => {
+  it('reuses the open planned lift on repeated or concurrent Today starts', async () => {
+    const db = open();
+    await seedSettings(db);
+    const start = () => startOrResumePlannedLift(db, 'upper-a', 60, NOW);
+    const [first, second] = await Promise.all([start(), start()]);
+    expect(second).toBe(first);
+    expect(await startOrResumePlannedLift(db, 'lower-a', 60, NOW)).toBe(first);
+    expect(await db.sessions.toArray()).toMatchObject([{ id: first, type: 'lift', variant: 'upper-a' }]);
+  });
+
   it('start → log → rir → finish records flags, hard and endedAt', async () => {
     const db = open();
     await seedSettings(db);

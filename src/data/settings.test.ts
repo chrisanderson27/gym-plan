@@ -8,6 +8,18 @@ afterEach(async () => {
 });
 
 describe('settings', () => {
+  it.each([
+    ['lose', 260, 'below'], ['lose', 250, 'below'],
+    ['gain', 240, 'above'], ['gain', 250, 'above'],
+  ] as const)('rejects a %s target of %i lb for a 250 lb starter', async (goalDirection, goalWeightLb, side) => {
+    const db = openTestDb();
+    dbs.push(db);
+    await expect(completeOnboarding(db, { bodyweightLb: 250, goalWeightLb, goalDirection, activities: ['lift'] }))
+      .rejects.toThrow(`Target weight must be ${side} your bodyweight.`);
+    expect(await getSettings(db)).toBeUndefined();
+    expect(await db.bodyLogs.count()).toBe(0);
+  });
+
   it('completeOnboarding anchors programStart to the local date and logs bodyweight', async () => {
     const db = openTestDb();
     dbs.push(db);
