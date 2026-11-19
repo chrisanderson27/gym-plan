@@ -195,7 +195,7 @@ export function startLiftSession(db: GymDb, plan: LiftPlan, now = new Date()): P
 
 export function startOrResumePlannedLift(db: GymDb, variant: LiftVariant, budgetMin: number, now = new Date()): Promise<string> {
   return db.transaction('rw', [db.sessions, db.settings, db.sets, db.equipment, db.exerciseOverrides], async () => {
-    const open = await findOpenLiftSession(db, now, ['lift']);
+    const open = await findOpenTodayLift(db, now);
     if (open) return open.id;
     const snapshot = await loadLiftSnapshot(db, now);
     return startLiftSession(db, buildLiftPlan(snapshot, variant, budgetMin), now);
@@ -282,6 +282,14 @@ export async function findOpenLiftSession(db: GymDb, now = new Date(), types: Se
   const since = new Date(now.getTime() - RESUME_WINDOW_HOURS * HOUR).toISOString();
   const rows = await db.sessions.where('date').aboveOrEqual(since).toArray();
   return rows.filter((s) => types.includes(s.type) && !s.endedAt).sort((a, b) => b.date.localeCompare(a.date))[0];
+}
+
+export async function findOpenTodayLift(db: GymDb, now: Date): Promise<Session | undefined> {
+  const today = localDate(now);
+  const rows = await db.sessions.where('type').equals('lift')
+    .filter((s) => !s.endedAt && localDate(new Date(s.date)) === today)
+    .toArray();
+  return rows.sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0];
 }
 
 async function upsertOverride(db: GymDb, exerciseId: string, patch: Partial<ExerciseOverride>): Promise<void> {

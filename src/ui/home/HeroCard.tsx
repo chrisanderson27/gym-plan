@@ -54,7 +54,7 @@ export function heroFor(pick: Candidate, cardio: CardioSnapshot | null, now: Dat
 }
 
 type HeroProps =
-  | ({ state: 'workout' | 'first-run'; reason: string } & ReturnType<typeof heroFor>)
+  | ({ state: 'workout' | 'first-run' | 'resume'; reason: string } & ReturnType<typeof heroFor>)
   | { state: 'done'; detail: string; progress: string }
   | { state: 'rest' };
 

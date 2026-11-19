@@ -59,6 +59,18 @@ describe('lift data layer', () => {
     expect(await db.sessions.toArray()).toMatchObject([{ id: first, type: 'lift', variant: 'upper-a' }]);
   });
 
+  it('starts a new lift when the open lift began before local midnight', async () => {
+    const db = open();
+    await seedSettings(db);
+    const yesterday = new Date(2026, 2, 9, 23);
+    const today = new Date(2026, 2, 10, 1);
+    const previous = await startOrResumePlannedLift(db, 'upper-a', 60, yesterday);
+    const current = await startOrResumePlannedLift(db, 'lower-a', 60, today);
+    expect(current).not.toBe(previous);
+    expect(await db.sessions.get(current)).toMatchObject({ variant: 'lower-a', date: today.toISOString() });
+    expect((await db.sessions.get(previous))?.endedAt).toBeUndefined();
+  });
+
   it('start → log → rir → finish records flags, hard and endedAt', async () => {
     const db = open();
     await seedSettings(db);
