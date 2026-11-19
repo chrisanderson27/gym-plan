@@ -54,6 +54,9 @@ export function HistoryDetailScreen({ id }: { id: string }) {
       {run && <p>{modalityName(run.modality ?? 'run')} · {runKindName(run.kind)} ·{Math.round(run.durationSec / 60)} min{run.distanceMi ? ` · ${run.distanceMi} mi` : ''} · RPE {run.rpe}</p>}
       {swim && <p>Swim · {swim.distance} {swim.poolUnit} · RPE {swim.rpe}</p>}
       {session.blocks.some((b) => b.kind === 'interval') && <p class="dim">{session.blocks.length} timed blocks</p>}
+      {session.blocks.map((b) => b.kind === 'circuit' && (
+        <p key={b.id} data-testid="circuit-summary">{b.label ?? 'Block'} · {b.log ? `${b.log.completedRounds} rounds${b.log.partialReps ? ' + partial' : ''}` : 'not logged'}</p>
+      ))}
       <div class="actions">
         <a class="btn" href={'#/again/' + id} data-testid="again">Do this again</a>
         <button type="button" data-testid="save-mine" onClick={async () => { await saveAsMine(db, id); setSaved(true); }}>Save as mine</button>

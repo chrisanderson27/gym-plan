@@ -14,7 +14,7 @@ import { deloadState } from './deload';
 import { isLowerBarbell, prescribe } from './progression';
 import { summarizeLiftSession } from './session';
 import { isWorking, type LiftExercise, type LiftSnapshot, type Prescription } from './types';
-import { fractionalSets, weekSets } from './volume';
+import { weekFractionalSets } from './volume';
 
 export interface LiftPlan {
   variant: LiftVariant;
@@ -153,7 +153,7 @@ export function generateLift(input: {
   }
 
   // Ceiling: cut the last slots that hit a muscle already near the weekly ceiling (floor 1 set).
-  const done = fractionalSets(weekSets(snapshot), exercises);
+  const done = weekFractionalSets(snapshot, exercises);
   const planned = new Map<string, number>();
   const weights = (e: Entry) => [...e.ex.primary.map((m) => [m, PRIMARY_SET_WEIGHT] as const), ...e.ex.secondary.map((m) => [m, SECONDARY_SET_WEIGHT] as const)];
   const total = (m: string) => (done.get(m) ?? 0) + entries.reduce((n, e) => n + (e.calibrate ? 0 : e.block.sets * (weights(e).find(([x]) => x === m)?.[1] ?? 0)), 0);

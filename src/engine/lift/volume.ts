@@ -8,7 +8,7 @@ import {
 } from '../config';
 import { addDays, localDate } from '../dates';
 import { weekIndex } from '../week';
-import { isWorking, type LiftExercise, type LiftSnapshot } from './types';
+import { isWorking, type HistorySession, type LiftExercise, type LiftSnapshot } from './types';
 
 /** Working sets only: primary counts 1, secondary 0.5. Warm-up and calibration never count. */
 export function fractionalSets(sets: SetRow[], exById: Map<string, LiftExercise>): Map<string, number> {
@@ -55,10 +55,40 @@ export function weekSets(snapshot: LiftSnapshot): SetRow[] {
     .flatMap((h) => h.sets);
 }
 
+export function circuitSets(
+  history: HistorySession[], from: LocalDate, to: LocalDate, exById: Map<string, LiftExercise>,
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const { session } of history) {
+    const day = localDate(new Date(session.date));
+    if (day < from || day > to) continue;
+    for (const block of session.blocks) {
+      if (block.kind !== 'circuit' || !block.log || block.log.completedRounds <= 0) continue;
+      const { completedRounds, stations } = block.log;
+      for (const station of stations) {
+        const ex = exById.get(station.exerciseId);
+        if (!ex || ex.group === 'conditioning' || ex.primary.includes('cardio')) continue;
+        for (const m of ex.primary) out.set(m, (out.get(m) ?? 0) + completedRounds * PRIMARY_SET_WEIGHT);
+        for (const m of ex.secondary) out.set(m, (out.get(m) ?? 0) + completedRounds * SECONDARY_SET_WEIGHT);
+      }
+    }
+  }
+  return out;
+}
+
+export function weekFractionalSets(snapshot: LiftSnapshot, exById: Map<string, LiftExercise>): Map<string, number> {
+  const { from, to } = programWeekRange(localDate(new Date(snapshot.now)), snapshot.programStart);
+  const done = fractionalSets(weekSets(snapshot), exById);
+  for (const [muscle, count] of circuitSets(snapshot.history, from, to, exById)) {
+    done.set(muscle, (done.get(muscle) ?? 0) + count);
+  }
+  return done;
+}
+
 export function weeklyVolume(snapshot: LiftSnapshot, exById: Map<string, LiftExercise>): MuscleVolume[] {
   const today = localDate(new Date(snapshot.now));
   const t = weeklyTarget(weekIndex(today, snapshot.programStart));
-  const done = fractionalSets(weekSets(snapshot), exById);
+  const done = weekFractionalSets(snapshot, exById);
   return TRACKED_MUSCLES.map((muscle) => {
     const d = done.get(muscle) ?? 0;
     return { muscle, done: d, ...t, status: d > t.max ? 'over' : d >= t.min ? 'met' : 'under' };

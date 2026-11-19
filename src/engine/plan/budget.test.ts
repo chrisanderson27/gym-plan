@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import type { Session } from '../../data/types';
+import { toPlanSession } from './classify';
 import { weeklyBudget } from './budget';
 import { burn, input, lowerA, session, upperA } from './plan-test-utils';
 
@@ -20,6 +22,22 @@ describe('weeklyBudget', () => {
     const hybrid = session(30, { type: 'hybrid', variant: 'upper-b', lifted: true });
     const w = weeklyBudget(input([lowerA(24), upperA(48), hybrid]));
     expect(line(w, 'lifts')).toMatchObject({ done: 3, status: 'met' });
+  });
+  it('counts logged loaded lift circuits toward lifts and Burn circuits toward hard cardio', () => {
+    const start = session(24);
+    const lift: Session = {
+      id: 'circuit-lift', date: start.start, endedAt: start.end, type: 'lift', hard: false, hardCardio: false,
+      notes: '', rpe: null, durationMin: 30, blocks: [{
+        id: 'c', kind: 'circuit', role: 'block', podId: 'turf', targetRounds: 4, durationSec: 480,
+        stations: [{ exerciseId: 'goblet-squat', load: 15, target: { unit: 'reps', amount: 10 } }],
+        log: { completedRounds: 3, actualDurationSec: 480, stations: [{ exerciseId: 'goblet-squat' }] },
+      }],
+    };
+    const liftPlan = toPlanSession(lift, [], undefined, new Map());
+    const burnPlan = toPlanSession({ ...lift, id: 'circuit-burn', type: 'burn', hard: true, hardCardio: true }, [], undefined, new Map());
+    const w = weeklyBudget(input([liftPlan, burnPlan]));
+    expect(line(w, 'lifts').done).toBe(1);
+    expect(line(w, 'hard').done).toBe(1);
   });
   it('excludes a session from last program week', () => {
     const w = weeklyBudget(input([upperA(24 * 6)]));

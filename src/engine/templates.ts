@@ -67,6 +67,7 @@ export function templateDurationMin(blocks: Block[]): number {
   for (const b of blocks) {
     if (b.kind === 'interval') min += intervalSec(b) / 60;
     else if (b.kind === 'lift') min += b.warmup ? 7 : b.sets * MIN_PER_SET.other;
+    else if (b.kind === 'circuit') min += b.durationSec / 60;
     else if (b.kind === 'run') min += (b.repeats * b.segments.reduce((n, s) => n + (s.sec ?? 0), 0)) / 60;
   }
   return Math.round(min);

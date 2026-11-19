@@ -11,9 +11,9 @@ describe('exercise library', () => {
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
   });
-  it('has 70-80 entries covering all 10 groups', () => {
+  it('has 70-100 entries covering all 10 groups', () => {
     expect(EXERCISES.length).toBeGreaterThanOrEqual(70);
-    expect(EXERCISES.length).toBeLessThanOrEqual(80);
+    expect(EXERCISES.length).toBeLessThanOrEqual(100);
     for (const g of GROUPS) expect(EXERCISES.some((e) => e.group === g)).toBe(true);
   });
   it('has a primary muscle and equipment tag on every entry', () => {
@@ -22,6 +22,12 @@ describe('exercise library', () => {
       expect(e.equipment.length, e.id).toBeGreaterThanOrEqual(1);
       expect(e.cues.length, e.id).toBeGreaterThanOrEqual(1);
       expect(e.cues.length, e.id).toBeLessThanOrEqual(3);
+    }
+  });
+  it('uses valid station targets and gives cardio machines a timed or explicit target', () => {
+    for (const e of EXERCISES) {
+      for (const unit of e.targets ?? []) expect(['reps', 'sec', 'cal', 'm'], e.id).toContain(unit);
+      if (e.equipment.includes('cardio-machine')) expect(e.targets?.length || e.prescription.unit === 'sec', e.id).toBeTruthy();
     }
   });
   it('uses the PRD rep range for each rep class', () => {

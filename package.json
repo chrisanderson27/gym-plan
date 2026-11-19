@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test --project=webkit",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "gen-gym": "node scripts/gen-gym.mjs"
   },
   "dependencies": {
     "dexie": "4.4.7",
@@ -34,6 +35,7 @@
     "typescript-eslint": "8.73.0",
     "vite": "7.3.8",
     "vite-plugin-pwa": "1.2.0",
-    "vitest": "4.1.12"
+    "vitest": "4.1.12",
+    "yaml": "2.9.1"
   }
 }

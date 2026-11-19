@@ -35,6 +35,7 @@ const DEFAULT_EQUIPMENT: Record<EquipmentTag, string> = {
   smith: 'smith-machine',
   'ez-bar': 'ez-bar',
   db: 'dumbbells',
+  sandbag: 'kettlebells',
   kb: 'kettlebells',
   cable: 'cable-stack',
   bodyweight: 'bodyweight',

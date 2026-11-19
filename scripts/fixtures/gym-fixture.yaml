@@ -1,0 +1,31 @@
+gym_id: home-gym
+schema_version: 1
+generated: 2026-01-01
+name: Fixture Gym
+sources: [fixture-photo.png]
+excluded_areas: [fixture-room]
+zones:
+  - { id: upper-turf, floor: 2, neighbours: [upper-weights], name: Fixture Room, position: north, walk_note: fixture walk }
+  - { id: upper-weights, floor: 2, neighbours: [upper-turf] }
+  - { id: lower-weights, floor: 1, neighbours: [lower-empty] }
+  - { id: lower-empty, floor: 1, neighbours: [lower-weights] }
+items:
+  - { id: upper-weights-db, floor: 2, zone: upper-weights, type: dumbbells, count: 2, confidence: C, exercises: [dumbbell bench press, dumbbell row, dumbbell rdl, dumbbell shoulder press, dumbbell curl, goblet squat], name: Fixture Dumbbells, brand: Acme, model: Fake, zone_name: Fixture Weights, count_claims: [2], weight_range_lb: [5, 70], evidence: [fixture-photo.png], notes: fixture note, position: east }
+  - { id: upper-weights-leg, floor: 2, zone: upper-weights, type: machine, count: 2, confidence: C, exercises: [machine leg press, lat pulldown] }
+  - { id: upper-turf-cable, floor: 2, zone: upper-turf, type: cable, count: 2, confidence: G, exercises: [cable row, cable woodchop, standing cable press] }
+  - { id: upper-turf-strap, floor: 2, zone: upper-turf, type: strap, count: 2, confidence: G, exercises: [suspension row], verified_on_site: 2026-01-01 }
+  - { id: upper-turf-kb, floor: 2, zone: upper-turf, type: kettlebells, count: 2, confidence: C, exercises: [kettlebell swing, kettlebell press, kettlebell clean, goblet squat, farmer carry] }
+  - { id: upper-turf-bag, floor: 2, zone: upper-turf, type: sandbags, count: 2, confidence: C, exercises: [sandbag carry, sandbag squat, sandbag clean, sandbag lunge] }
+  - { id: upper-turf-bike, floor: 2, zone: upper-turf, type: bike, count: 1, confidence: C, exercises: [air bike intervals, air bike steady state] }
+  - { id: upper-turf-row, floor: 2, zone: upper-turf, type: rower, count: 2, confidence: C, exercises: [row intervals, imaginary lift, foam rolling] }
+  - { id: upper-turf-ball, floor: 2, zone: upper-turf, type: medicine-balls, count: 2, confidence: C, exercises: [med ball slam, wall ball] }
+  - { id: lower-weights-db, floor: 1, zone: lower-weights, type: dumbbells, count: 2, confidence: C, exercises: [dumbbell bench press, dumbbell row, dumbbell rdl, dumbbell shoulder press, dumbbell curl, lat pulldown, machine leg press] }
+  - { id: lower-weights-kb, floor: 1, zone: lower-weights, type: kettlebells, count: 2, confidence: C, exercises: [kettlebell press, kettlebell clean, goblet squat, farmer carry] }
+  - { id: lower-weights-row, floor: 1, zone: lower-weights, type: rower, count: 2, confidence: L, exercises: [row intervals] }
+pending:
+  - { id: upper-turf-unknown, floor: 2, zone: upper-turf, type: machine, count: 1, confidence: C, exercises: [standing hip abduction], awaiting: fixture approval }
+  - { id: missing-zone, awaiting: further evidence }
+pods:
+  - { id: upper-turf-pod, zone: upper-turf, items: [upper-turf-cable, upper-turf-strap, upper-turf-kb, upper-turf-bag, upper-turf-bike, upper-turf-row, upper-turf-ball, upper-turf-unknown, missing-zone], why: fixture rationale, walk: fixture route }
+  - { id: upper-weights-pod, zone: upper-weights, items: [upper-weights-db, upper-weights-leg] }
+  - { id: lower-weights-pod, zone: lower-weights, items: [lower-weights-db, lower-weights-kb, lower-weights-row] }

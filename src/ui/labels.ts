@@ -64,6 +64,7 @@ export const EQUIPMENT_TAG_LABELS: Record<EquipmentTag, string> = {
   bodyweight: 'Bodyweight',
   bench: 'Bench',
   box: 'Box',
+  sandbag: 'Sandbag',
   sled: 'Sled',
   trx: 'TRX',
   band: 'Band',

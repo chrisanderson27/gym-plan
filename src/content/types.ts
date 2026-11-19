@@ -49,6 +49,7 @@ export type EquipmentTag =
   | 'bodyweight'
   | 'bench'
   | 'box'
+  | 'sandbag'
   | 'sled'
   | 'trx'
   | 'band'
@@ -59,7 +60,7 @@ export type EquipmentTag =
 
 export type Prescription =
   | { unit: 'reps'; min: number; max: number }
-  | { unit: 'sec' | 'm' | 'steps' | 'amrap'; min?: number; max?: number };
+  | { unit: 'sec' | 'cal' | 'm' | 'steps' | 'amrap'; min?: number; max?: number };
 
 export interface Exercise {
   /** Permanent kebab-case slug. User rows reference it forever; never rename, flag `retired` instead. */
@@ -71,6 +72,7 @@ export interface Exercise {
   secondary: Muscle[];
   repClass: 'compound' | 'machine' | 'isolation' | 'other';
   prescription: Prescription;
+  targets?: StationUnit[];
   jointFriendly: boolean;
   impact: 'none' | 'low' | 'med' | 'high';
   cues: string[];
@@ -78,6 +80,23 @@ export interface Exercise {
   poseId?: string;
   retired?: boolean;
 }
+
+export type StationUnit = 'reps' | 'sec' | 'cal' | 'm';
+export type GymConfidence = 'C' | 'L' | 'G';
+export interface GymZone { id: string; floor: number; neighbours: string[] }
+export interface GymItem {
+  id: string;
+  floor: number;
+  zone: string;
+  type: string;
+  count: number;
+  confidence: GymConfidence;
+  exercises: string[];
+  verified: boolean;
+  pending?: true;
+}
+export interface GymPod { id: string; zone: string; items: string[] }
+export interface GymProfile { id: 'home-gym'; zones: GymZone[]; items: GymItem[]; pods: GymPod[] }
 
 export interface Drill {
   id: string;

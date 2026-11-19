@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { SetRow } from '../../data/types';
-import { fractionalSets, programWeekRange, weeklyTarget, weeklyVolume } from './volume';
+import type { CircuitBlock, SetRow } from '../../data/types';
+import { fractionalSets, programWeekRange, weekFractionalSets, weeklyTarget, weeklyVolume } from './volume';
 import type { LiftExercise, LiftSnapshot } from './types';
 
 const row: LiftExercise = { id: 'seated-cable-row', group: 'horizontal-pull', equipment: ['cable'], primary: ['mid-back', 'lats'], secondary: ['biceps'], repClass: 'machine', repMin: 8, repMax: 12, jointFriendly: true, substitutes: [] };
@@ -18,6 +18,35 @@ describe('volume', () => {
   it('excludes warm-up and calibration sets', () => {
     const v = fractionalSets([set({ setKind: 'warmup' }), set({ setKind: 'calibration' }), set({ reps: 0 })], exById);
     expect(v.size).toBe(0);
+  });
+  it('adds completed circuit rounds using actual exercises, skipping cardio, partial and unlogged work', () => {
+    const squat = { ...row, id: 'goblet-squat', group: 'squat', primary: ['quads', 'glutes'], secondary: ['deep-core'] };
+    const cable = { ...row, id: 'standing-cable-row' };
+    const erg = { ...row, id: 'rower', group: 'conditioning', primary: ['cardio'], secondary: [] };
+    const block: CircuitBlock = {
+      id: 'b', kind: 'circuit', role: 'block', podId: 'turf', durationSec: 480, targetRounds: 4,
+      stations: [cable, cable, erg].map(({ id }) => ({ exerciseId: id, target: { unit: 'reps', amount: 10 } })),
+      log: {
+        completedRounds: 5, actualDurationSec: 480, partialReps: { stationIndex: 1, count: 5 },
+        stations: [{ exerciseId: squat.id, swappedFromExerciseId: cable.id }, { exerciseId: cable.id }, { exerciseId: erg.id }],
+      },
+    };
+    const snap: LiftSnapshot = {
+      now: '2026-01-14T12:00:00Z', programStart: '2026-01-01', overrides: new Map(), equipment: new Map(),
+      history: [{
+        session: {
+          id: 's', date: '2026-01-12T12:00:00Z', type: 'lift', blocks: [block, { ...block, log: undefined }],
+          hard: false, hardCardio: false, rpe: null, durationMin: 30, notes: '',
+        },
+        sets: [set({ exerciseId: cable.id })],
+      }],
+    };
+    const v = weekFractionalSets(snap, new Map([squat, cable, erg].map((e) => [e.id, e])));
+    expect(v.get('quads')).toBe(5);
+    expect(v.get('glutes')).toBe(5);
+    expect(v.get('deep-core')).toBe(2.5);
+    expect(v.get('lats')).toBe(6);
+    expect(v.get('cardio') ?? 0).toBe(0);
   });
   it('targets step up by week', () => {
     expect(weeklyTarget(1).max).toBe(6);

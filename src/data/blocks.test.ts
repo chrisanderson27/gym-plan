@@ -7,6 +7,8 @@ const blocks: Block[] = [
   { id: 'b2', kind: 'lift', exerciseId: 'leg-press', sets: 3, repMin: 8, repMax: 12, supersetGroup: 'ss1' },
   { id: 'b3', kind: 'swim', section: 'main', rounds: 2, items: [{ reps: 4, distance: 50, stroke: 'FR', swimKind: 'swim', equipment: [], mode: 'rest', seconds: 15, intensity: 'MOD' }] },
   { id: 'b4', kind: 'run', runKind: 'intervals', modality: 'treadmill', repeats: 4, segments: [{ role: 'sprint', sec: 30 }, { role: 'walk', sec: 90 }], format: 'sprint-walk' },
+  { id: 'b5', kind: 'circuit', role: 'finisher', durationSec: 240, targetRounds: 3, podId: 'turf',
+    stations: [{ exerciseId: 'sled-push', itemId: 'fixture-sled', target: { unit: 'm', amount: 20 } }] },
 ];
 
 // Compile-time exhaustiveness: adding a Block variant without handling it here fails typecheck.
@@ -16,6 +18,7 @@ function describeBlock(b: Block): string {
     case 'lift':
     case 'swim':
     case 'run':
+    case 'circuit':
       return b.kind;
     default: {
       const never: never = b;
@@ -31,7 +34,7 @@ afterEach(async () => {
 
 describe('Block union', () => {
   it('covers every kind exhaustively', () => {
-    expect(blocks.map(describeBlock)).toEqual(['interval', 'lift', 'swim', 'run']);
+    expect(blocks.map(describeBlock)).toEqual(['interval', 'lift', 'swim', 'run', 'circuit']);
   });
   it('round-trips through Dexie and JSON', async () => {
     const db = openTestDb();

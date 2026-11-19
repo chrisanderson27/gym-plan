@@ -8,6 +8,7 @@ import type { Activity } from '../engine/plan/activities';
  *   `LiftBlock[]` (executed truth stays in `sets`). A Burn writes executed `IntervalBlock[]` with
  *   `result`. A run writes one `RunBlock`. A swim writes `SwimSetBlock[]`. A hybrid writes
  *   `LiftBlock[]` plus one `RunBlock`.
+ * - PRD 3: a lift day writes LiftBlock (warm-up, main, cool-down with `warmup: true`) plus CircuitBlock[]; P3 fills `log`.
  * - "Do this again" and "Save as mine" (P4) copy `blocks` straight into `templates.blocks`, so no new
  *   template shape is ever needed.
  * - Superset pairing (P4 builder) shares one `supersetGroup` string across the paired `LiftBlock`s and
@@ -115,7 +116,38 @@ export interface RunBlock extends BlockBase {
   segments: RunSegment[];
   format?: 'sprint-walk' | 'sprint-jog' | '30-30' | 'norwegian-4x4' | 'hill' | 'treadmill-incline' | 'run-walk';
 }
-export type Block = IntervalBlock | LiftBlock | SwimSetBlock | RunBlock;
+export type StationUnit = 'reps' | 'sec' | 'cal' | 'm';
+export interface StationTarget { unit: StationUnit; amount: number }
+export interface CircuitStation {
+  exerciseId: string;
+  /** Equipment row whose steps the load uses. */
+  equipmentId?: string;
+  /** Item id in the home-gym profile. */
+  itemId?: string;
+  load?: number;
+  target: StationTarget;
+  backup?: { exerciseId: string; equipmentId?: string; itemId?: string; load?: number; target: StationTarget };
+}
+/** P3 writes this at block end. Progression and PRs interpret it through circuitWork(). */
+export interface CircuitLog {
+  completedRounds: number;
+  /** Earlier stations in the unfinished round were completed; count uses this station's own unit. */
+  partialReps?: { stationIndex: number; count: number };
+  lastRoundRir?: number;
+  /** Same order and length as the plan; exerciseId reflects any swap. */
+  stations: { exerciseId: string; actualLoad?: number; swappedFromExerciseId?: string }[];
+  actualDurationSec: number;
+}
+export interface CircuitBlock extends BlockBase {
+  kind: 'circuit';
+  role: 'block' | 'finisher';
+  durationSec: number;
+  targetRounds: number;
+  podId: string;
+  stations: CircuitStation[];
+  log?: CircuitLog;
+}
+export type Block = IntervalBlock | LiftBlock | SwimSetBlock | RunBlock | CircuitBlock;
 
 // ---- rows ----
 export interface ExerciseOverride {

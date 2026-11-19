@@ -55,6 +55,14 @@ const swimBlock = shape({
   rounds: num, items: arr(swimItem),
 });
 const result = shape({ completed: bool, actualSec: opt(num), completedRounds: opt(num), skipped: opt(bool) });
+const target = shape({ unit: oneOf('reps', 'sec', 'cal', 'm'), amount: num });
+const stationFields = { exerciseId: str, target, equipmentId: opt(str), itemId: opt(str), load: opt(num) };
+const station = shape({ ...stationFields, backup: opt(shape(stationFields)) });
+const circuitLog = shape({
+  completedRounds: num, actualDurationSec: num, lastRoundRir: opt(num),
+  stations: arr(shape({ exerciseId: str, actualLoad: opt(num), swappedFromExerciseId: opt(str) })),
+  partialReps: opt(shape({ stationIndex: num, count: num })),
+});
 const block: Check = (v) => {
   if (!isRec(v) || !str(v.id)) return false;
   if (!opt(str)(v.label) || !opt(str)(v.notes) || !opt(result)(v.result)) return false;
@@ -68,6 +76,11 @@ const block: Check = (v) => {
     case 'swim': return swimBlock(v);
     case 'run':
       return shape({ runKind: oneOf(...RUN_KINDS), modality: oneOf(...MODALITIES), repeats: num, segments: arr(segment), format: opt(oneOf(...RUN_FORMATS)) })(v);
+    case 'circuit':
+      return shape({
+        role: oneOf('block', 'finisher'), durationSec: num, targetRounds: num, podId: str,
+        stations: arr(station), log: opt(circuitLog),
+      })(v);
     default: return false;
   }
 };

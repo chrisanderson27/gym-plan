@@ -112,3 +112,23 @@ export const WAIST_EVERY_DAYS = 7;
 export const BODY_WEIGHT_RANGE_LB = [50, 700] as const;
 export const BODY_WAIST_RANGE_IN = [15, 80] as const;
 export const HISTORY_PAGE = 50;
+
+// ---- PRD 3 P2 blocks ----
+export const LIFT_DAY_SHAPES = [[12, 8, 8, 4], [12, 8, 4], [8, 8, 4], [12, 4], [8, 4], [8]] as const;
+export const BLOCK_STATIONS = { 12: 4, 8: 3, 4: 3 } as const;
+export const BLOCK_TRANSITION_MIN = 1;
+export const COOLDOWN_MIN = 5;
+export const MAIN_REST_SEC = 150;
+export const BLOCK_START_LOAD_PCT = 0.875;
+export const BLOCK_DROP_PCT = 0.1;
+export const BLOCK_DROP_SESSIONS = 2;
+export const BLOCK_ATTEMPTS = 40;
+export const TRANSITION_SEC = 10;
+export const SEC_PER_UNIT = { reps: 3, sec: 1, cal: 4, m: 0.25 } as const;
+export const SEC_PER_M_CARRY = 1.5;
+export const STATION_TARGETS = {
+  reps: { normal: 'mid', short: 'min' },
+  cal: { normal: 15, short: 8 },
+  m: { erg: { normal: 250, short: 150 }, carry: { normal: 20, short: 20 } },
+  sec: { normal: 30, short: 20 },
+} as const;

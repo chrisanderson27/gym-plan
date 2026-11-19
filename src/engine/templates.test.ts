@@ -45,6 +45,10 @@ describe('template blocks', () => {
     expect(out).toHaveLength(1);
     expect(out[0]!.supersetGroup).toBeUndefined();
   });
+  it('includes each circuit duration in the template estimate', () => {
+    const circuit: Block = { id: 'c', kind: 'circuit', role: 'block', durationSec: 480, targetRounds: 4, stations: [], podId: 'turf' };
+    expect(templateDurationMin([lift('a'), circuit])).toBe(14);
+  });
   it('builds a 3-set block and estimates duration', () => {
     const b = newLiftBlock({ id: 'x', repMin: 6, repMax: 10 }, mk);
     expect(b).toMatchObject({ sets: 3, repMin: 6, repMax: 10, restSec: 90 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RunRow, Session, SetRow } from '../../data/types';
+import type { CircuitBlock, RunRow, Session, SetRow } from '../../data/types';
 import { weeklyBudget } from './budget';
 import { input } from './plan-test-utils';
 import { weekRing } from './ring';
@@ -46,6 +46,17 @@ describe('toPlanSession', () => {
     expect(toPlanSession(base, [{ ...calibration, reps: 0 }], undefined, ex).lifted).toBe(false);
     expect(weeklyBudget(input([p])).lines.find((line) => line.id === 'lifts')?.done).toBe(1);
     expect(weekRing([p], { from: '2026-03-09', to: '2026-03-15' }, ['lift']).done).toBe(1);
+  });
+  it('counts logged loaded circuits as lift work and excludes Burn and unlogged circuits', () => {
+    const circuit: CircuitBlock = {
+      id: 'c', kind: 'circuit', role: 'block', durationSec: 480, targetRounds: 4, podId: 'turf',
+      stations: [{ exerciseId: 'leg-press', load: 20, target: { unit: 'reps', amount: 10 } }],
+      log: { completedRounds: 2, actualDurationSec: 480, stations: [{ exerciseId: 'leg-press', actualLoad: 20 }] },
+    };
+    expect(toPlanSession({ ...base, blocks: [circuit] }, [], undefined, ex).lifted).toBe(true);
+    expect(toPlanSession({ ...base, type: 'burn', hardCardio: true, blocks: [circuit] }, [], undefined, ex))
+      .toMatchObject({ lifted: false, hardCardio: true });
+    expect(toPlanSession({ ...base, blocks: [{ ...circuit, log: undefined }] }, [], undefined, ex).lifted).toBe(false);
   });
   it('an open session ends at its start and is unfinished', () => {
     const { endedAt: _e, ...open } = base;

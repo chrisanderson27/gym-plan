@@ -26,6 +26,18 @@ const blocks: Block[] = [
   { id: 'b2', kind: 'lift', exerciseId: 'leg-press', sets: 3, repMin: 8, repMax: 12, supersetGroup: 'g' },
   { id: 'b3', kind: 'swim', section: 'main', rounds: 1, items: [{ reps: 4, distance: 50, stroke: 'FR', swimKind: 'swim', equipment: [], mode: 'rest', intensity: 'EZ' }] },
   { id: 'b4', kind: 'run', runKind: 'easy', modality: 'run', repeats: 1, segments: [{ role: 'run', sec: 600 }] },
+  {
+    id: 'b5', kind: 'circuit', role: 'block', label: 'Block A', durationSec: 480, targetRounds: 5, podId: 'turf',
+    stations: [
+      { exerciseId: 'kb-swing', equipmentId: 'kettlebells', itemId: 'turf-bells', load: 25, target: { unit: 'reps', amount: 15 },
+        backup: { exerciseId: 'goblet-squat', equipmentId: 'dumbbells', itemId: 'turf-dumbbells', load: 20, target: { unit: 'reps', amount: 10 } } },
+      { exerciseId: 'rower', itemId: 'turf-rower', target: { unit: 'cal', amount: 15 } },
+    ],
+    log: {
+      completedRounds: 4, partialReps: { stationIndex: 1, count: 6 }, lastRoundRir: 2, actualDurationSec: 468,
+      stations: [{ exerciseId: 'goblet-squat', actualLoad: 20, swappedFromExerciseId: 'kb-swing' }, { exerciseId: 'rower' }],
+    },
+  },
 ];
 const session = (id: string, type: Session['type'] = 'lift'): Session => ({
   id, date: '2026-11-10T10:00:00.000Z', type, blocks, hard: false, hardCardio: false, rpe: null, durationMin: 45, notes: 'n',
@@ -73,6 +85,26 @@ describe('export/import', () => {
       // A fresh DB is pre-seeded with equipment, so compare the seeded ids the export carried.
       expect(after[n], n).toEqual(before[n]);
     }
+  });
+
+  it('imports an older backup with no circuit blocks unchanged', async () => {
+    const db = open();
+    const old = { ...session('old'), blocks: blocks.filter((block) => block.kind !== 'circuit') };
+    const backup = await buildExport(db, new Date(), 'test');
+    backup.stores.sessions = [old];
+    const { file } = parseExport(JSON.stringify(backup));
+    await importExport(db, file);
+    expect(await db.sessions.get(old.id)).toEqual(old);
+  });
+
+  it('rejects a circuit with an invalid station target unit', async () => {
+    const db = open();
+    const backup = await buildExport(db, new Date(), 'test');
+    const invalid = blocks.map((block) => block.kind === 'circuit'
+      ? { ...block, stations: [{ ...block.stations[0]!, target: { unit: 'mile', amount: 1 } }] }
+      : block);
+    backup.stores.sessions = [{ ...session('bad'), blocks: invalid }];
+    expect(() => parseExport(JSON.stringify(backup))).toThrow('Row 1 in "sessions" is malformed.');
   });
 
   it('round-trips activity and goal settings with no pool and rejects an empty activity list', async () => {
@@ -174,7 +206,7 @@ describe('export/import', () => {
       { feedback: [{ id: 'f', v: 1, ts: '2026-11-10T11:00:00.000Z', kind: 'app', tags: [], text: '', context: { sessionId: 5 } }] },
     ];
     for (const stores of bad) expect(() => parseExport(mk(stores))).toThrow(ImportError);
-    expect((await db.sessions.get('s1'))?.blocks).toHaveLength(4);
+    expect((await db.sessions.get('s1'))?.blocks).toEqual(blocks);
   });
 
   it('accepts valid optional fields and unknown extension fields', () => {
