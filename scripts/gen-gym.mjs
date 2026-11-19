@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -105,25 +106,68 @@ export const EXERCISE_ALIASES = Object.freeze(Object.fromEntries([
 
 const isSlug = (value) => typeof value === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 const positiveInt = (value) => Number.isInteger(value) && value > 0;
-const idsOf = (rows) => new Set(rows.map((row) => row.id));
+
+const PUBLIC_TYPES = new Set([
+  'adjustable-bench', 'air-bike', 'bar-storage-specialty', 'battle-rope', 'bike', 'bumper-plate-tree', 'bumper-plates',
+  'cable', 'curved-manual-treadmill', 'dual-adjustable-pulley', 'dumbbell-set-round-urethane', 'dumbbells',
+  'elliptical-or-ascent-trainer', 'exercise-bike', 'fixed-barbell-rack', 'flat-bench', 'foam-roller-rack',
+  'functional-rig-dual-adjustable-pulley', 'heavy-bag', 'kettlebell-set', 'kettlebells', 'landmine',
+  'lifting-platform', 'machine', 'medicine-ball-set', 'medicine-balls', 'motorised-treadmill',
+  'multi-station-cable-tower', 'olympic-bench-mixed', 'olympic-flat-bench', 'open-rubber-floor',
+  'plate-loaded-45-leg-press', 'plate-loaded-belt-squat', 'plate-loaded-hip-thrust', 'plate-loaded-squat-unidentified',
+  'plate-loaded-standing-calf-raise', 'plate-loaded-unidentified', 'plate-tree-iron', 'plyo-box-soft', 'power-rack',
+  'preacher-curl-bench', 'push-sled', 'rear-drive-elliptical', 'recumbent-cross-trainer', 'revolving-stair-climber',
+  'rower', 'rowing-ergometer', 'sandbag-set', 'sandbags', 'selectorized-abdominal-crunch',
+  'selectorized-assisted-chin-dip', 'selectorized-back-extension', 'selectorized-biceps-curl', 'selectorized-chest-press',
+  'selectorized-glute-kickback', 'selectorized-hip-abductor-adductor', 'selectorized-lat-pulldown-diverging',
+  'selectorized-lateral-raise', 'selectorized-leg-extension', 'selectorized-low-back-extension',
+  'selectorized-pec-fly-rear-delt', 'selectorized-rotary-torso', 'selectorized-seated-leg-curl', 'selectorized-seated-leg-press',
+  'selectorized-seated-row', 'selectorized-shoulder-press', 'selectorized-triceps-extension', 'selectorized-unidentified',
+  'single-adjustable-cable-column', 'ski-erg', 'soft-training-tyre', 'squat-rack', 'standing-hip-abductor',
+  'strap', 'stretch-table', 'suspension-trainer', 'turf-sprint-lanes', 'unidentified-dual-pad-unit',
+  'unidentified-strap-loaded-standing-unit', 'vkr-dip-station',
+]);
+
+function publicType(type) {
+  if (PUBLIC_TYPES.has(type)) return type;
+  if (type.startsWith('dumbbell-')) return 'dumbbells';
+  if (type.startsWith('kettlebell-')) return 'kettlebells';
+  if (type.startsWith('plate-loaded-')) return 'plate-loaded';
+  if (type.startsWith('selectorized-')) return 'selectorized';
+  return 'unknown';
+}
+
+// Derive IDs from the private key, so reordering catalog rows keeps published references stable.
+function catalogRows(rows, key, prefix) {
+  if (!Array.isArray(rows)) throw new Error(`Expected ${key} to be an array`);
+  const ids = new Map();
+  for (const row of rows) {
+    if (typeof row !== 'object' || row === null || !isSlug(row.id)) throw new Error(`Malformed ${key} row`);
+    if (ids.has(row.id)) throw new Error(`Duplicate ${key} id`);
+    ids.set(row.id, `${prefix}-${createHash('sha256').update(row.id).digest('hex').slice(0, 16)}`);
+  }
+  return ids;
+}
 
 export function buildProfile(doc) {
   if (doc?.gym_id !== 'home-gym') throw new Error('Expected gym_id home-gym');
-  const pending = doc.pending ?? [];
+  const pending = doc.pending === undefined ? [] : doc.pending;
   const unmapped = [];
+  const zoneIds = catalogRows(doc.zones, 'zones', 'zone');
+  const itemIds = catalogRows(doc.items, 'items', 'item');
+  const pendingIds = catalogRows(pending, 'pending', 'item');
+  const catalogIds = new Map([...pendingIds, ...itemIds]);
+  const podIds = catalogRows(doc.pods, 'pods', 'pod');
   const zones = doc.zones.map(({ id, floor, neighbours }) => {
-    if (!isSlug(id) || !positiveInt(floor) || !Array.isArray(neighbours) || !neighbours.every(isSlug)) {
-      throw new Error('Malformed zone id, floor or neighbours');
+    if (!positiveInt(floor) || !Array.isArray(neighbours) || !neighbours.every(isSlug)) {
+      throw new Error('Malformed zone floor or neighbours');
     }
-    return { id, floor, neighbours };
-  });
-  const zoneIds = idsOf(zones);
-  for (const { id, neighbours } of zones) {
     if (!neighbours.every((zone) => zoneIds.has(zone))) throw new Error(`Unknown neighbour in zone ${id}`);
-  }
+    return { id: zoneIds.get(id), floor, neighbours: neighbours.map((zone) => zoneIds.get(zone)) };
+  });
   function itemOf({ id, floor, zone, type, count, confidence, exercises, verified_on_site }, isPending) {
-    if (!isSlug(id) || !isSlug(type) || !positiveInt(floor) || !positiveInt(count) || !['C', 'L', 'G'].includes(confidence)) {
-      throw new Error('Malformed item id, type, floor, count or confidence');
+    if (!isSlug(type) || !positiveInt(floor) || !positiveInt(count) || !['C', 'L', 'G'].includes(confidence)) {
+      throw new Error('Malformed item type, floor, count or confidence');
     }
     if (!zoneIds.has(zone)) throw new Error(`Unknown zone for item ${id}`);
     const mapped = new Set();
@@ -139,20 +183,23 @@ export function buildProfile(doc) {
       if (!isSlug(slug)) throw new Error(`Invalid mapped exercise for item ${id}`);
       mapped.add(slug);
     }
-    return { id, floor, zone, type, count, confidence, exercises: [...mapped], verified: verified_on_site != null, ...(isPending && { pending: true }) };
+    return { id: catalogIds.get(id), floor, zone: zoneIds.get(zone), type: publicType(type), count, confidence,
+      exercises: [...mapped], verified: verified_on_site != null, ...(isPending && { pending: true }) };
   }
   const items = [
     ...doc.items.map((item) => itemOf(item, false)),
     ...pending.filter((item) => [item.floor, item.zone, item.type, item.count].every((value) => value != null))
-      .map((item) => itemOf(item, true)),
+      .map((item) => {
+        if (itemIds.has(item.id)) throw new Error('Duplicate pending id');
+        return itemOf(item, true);
+      }),
   ];
-  const catalogIds = idsOf([...doc.items, ...pending]);
-  const itemIds = idsOf(items);
+  const publishedItems = new Set(items.map((item) => item.id));
   const pods = doc.pods.map(({ id, zone, items }) => {
-    if (!isSlug(id)) throw new Error('Malformed pod id');
     if (!zoneIds.has(zone)) throw new Error(`Unknown zone for pod ${id}`);
     if (!Array.isArray(items) || !items.every((item) => catalogIds.has(item))) throw new Error(`Unknown item for pod ${id}`);
-    return { id, zone, items: items.filter((item) => itemIds.has(item)) };
+    return { id: podIds.get(id), zone: zoneIds.get(zone),
+      items: items.map((item) => catalogIds.get(item)).filter((item) => publishedItems.has(item)) };
   });
   return { profile: { id: 'home-gym', zones, items, pods }, unmapped };
 }

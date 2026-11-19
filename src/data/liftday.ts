@@ -1,16 +1,14 @@
 import { EXERCISES, HOME_GYM, LIFT_TEMPLATES, defaultEquipmentFor, exerciseById, type EquipmentTag, type Exercise, type GymProfile } from '../content';
 import { generateLiftDay, type LiftDayInput } from '../engine/block/generate';
 import type { BlockExerciseShape } from '../engine/block/rules';
-import { localDate } from '../engine/dates';
 import type { LiftSnapshot } from '../engine/lift/types';
-import { weekIndex } from '../engine/week';
 import type { GymDb } from './db';
 import { loadLiftSnapshot, resolveEquipmentId, toLiftExercise } from './lift';
 import type { LiftVariant } from './types';
 
 export function toBlockExercise(e: Exercise): BlockExerciseShape {
   return {
-    ...toLiftExercise(e), unit: e.prescription.unit, unitMin: e.prescription.min, unitMax: e.prescription.max,
+    ...toLiftExercise(e), group: e.group, unit: e.prescription.unit, unitMin: e.prescription.min, unitMax: e.prescription.max,
     targets: e.targets && [...e.targets],
   };
 }
@@ -35,13 +33,11 @@ function equipmentTagFor(itemType: string, tags: EquipmentTag[]): EquipmentTag |
 export function liftDayInputFrom(
   snapshot: LiftSnapshot, variant: LiftVariant, budgetMin: number, seed: number, profile: GymProfile = HOME_GYM,
 ): LiftDayInput {
-  const weekIdx = weekIndex(localDate(new Date(snapshot.now)), snapshot.programStart);
   let id = 0;
   return {
     snapshot, variant, budgetMin, seed, profile, exercises: BLOCK_EXERCISES, bodyweightIds: BODYWEIGHT_IDS,
     mainCandidates: LIFT_TEMPLATES[variant].slots[0]!.candidates,
-    notAtMyGym: new Set([...snapshot.overrides.values()].filter((override) => override.notAtMyGym).map((override) => override.exerciseId)),
-    resolveEquipmentId: (id, item) => {
+    resolveEquipmentId: (id, item, weekIdx) => {
       const exercise = exerciseById.get(id)!;
       const resolved = resolveEquipmentId(snapshot, exercise, weekIdx);
       const tag = item && equipmentTagFor(item.type, exercise.equipment);

@@ -29,6 +29,17 @@ export type ISODateTime = string;
 export type LocalDate = string;
 export type SessionType = 'lift' | 'burn' | 'run' | 'swim' | 'hybrid' | 'custom';
 export type LiftVariant = 'upper-a' | 'upper-b' | 'lower-a' | 'lower-b';
+export type MovementGroup =
+  | 'squat'
+  | 'hinge'
+  | 'lunge'
+  | 'horizontal-push'
+  | 'horizontal-pull'
+  | 'vertical-push'
+  | 'vertical-pull'
+  | 'arms'
+  | 'carry-core'
+  | 'conditioning';
 export type RunKind = 'easy' | 'long' | 'intervals';
 export type CardioModality = 'run' | 'treadmill' | 'bike' | 'row' | 'ski' | 'stair' | 'elliptical';
 export type PoolUnit = 'yd' | 'm';
@@ -116,7 +127,8 @@ export interface RunBlock extends BlockBase {
   segments: RunSegment[];
   format?: 'sprint-walk' | 'sprint-jog' | '30-30' | 'norwegian-4x4' | 'hill' | 'treadmill-incline' | 'run-walk';
 }
-export type StationUnit = 'reps' | 'sec' | 'cal' | 'm';
+export const STATION_UNITS = ['reps', 'sec', 'cal', 'm'] as const;
+export type StationUnit = typeof STATION_UNITS[number];
 export interface StationTarget { unit: StationUnit; amount: number }
 export interface CircuitStation {
   exerciseId: string;

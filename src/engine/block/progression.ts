@@ -80,6 +80,8 @@ export function prescribeBlock(input: BlockPrescriptionInput): { targetRounds: n
   const log = last.log!;
   const hit = log.completedRounds >= last.targetRounds;
   const work = recent.map((block) => circuitWork(block)!.perStation);
+  const consecutiveMisses = recent.length === BLOCK_DROP_SESSIONS + 1
+    && recent.slice(1).every((block) => block.log && block.log.completedRounds < block.targetRounds);
   for (const station of stations) {
     if (station.load === undefined || station.equipmentId === undefined) continue;
     const i = log.stations.findIndex((entry) => entry.exerciseId === station.exerciseId);
@@ -91,7 +93,7 @@ export function prescribeBlock(input: BlockPrescriptionInput): { targetRounds: n
     if (load === undefined || !eq) continue;
 
     const amounts = work.map((entries) => entries.find((entry) => entry.exerciseId === station.exerciseId));
-    const dropped = amounts.length === BLOCK_DROP_SESSIONS + 1 && amounts.slice(1).every((current, j) => {
+    const dropped = consecutiveMisses && amounts.slice(1).every((current, j) => {
       const prior = amounts[j];
       return current && prior && current.unit === prior.unit && current.amount < prior.amount * (1 - BLOCK_DROP_PCT);
     });

@@ -1,15 +1,19 @@
 import { readFileSync } from 'node:fs';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { parse } from 'yaml';
 import { buildProfile } from '../../../scripts/gen-gym.mjs';
 import { SEED_EQUIPMENT } from '../../content';
 import { liftDayInputFrom } from '../../data/liftday';
 import type { CircuitBlock, LiftBlock, LiftVariant, SetRow } from '../../data/types';
+import { FINISHER_MIN, LIFT_DAY_MAIN_SETS } from '../config';
 import type { LiftSnapshot } from '../lift/types';
 import { generateLiftDay, type LiftDayPlan } from './generate';
+import { groupOf } from './rules';
 import { blockContext, validateBlock, validateLiftDay } from './validate';
 
 const fixture = buildProfile(parse(readFileSync(new URL('../../../scripts/fixtures/gym-fixture.yaml', import.meta.url), 'utf8'))).profile;
+const turfPod = fixture.pods[0]!;
+const turfItem = (exerciseId: string) => fixture.items.find((item) => turfPod.items.includes(item.id) && item.exercises.includes(exerciseId))!.id;
 const variants: LiftVariant[] = ['upper-a', 'upper-b', 'lower-a', 'lower-b'];
 const working: SetRow = {
   id: 'set', sessionId: 'baseline', exerciseId: 'db-bench', equipmentId: 'dumbbells',
@@ -50,6 +54,40 @@ it('uses the ladder at 30, 45, 60 and 75 minutes while keeping the main intact',
   expect(minutes(planFor(6, 10))).toEqual([8]);
 });
 
+it('uses the configured set range and finisher duration', () => {
+  const plan = planFor(6);
+  expect(main(plan)?.sets).toBeGreaterThanOrEqual(LIFT_DAY_MAIN_SETS.min);
+  expect(main(plan)?.sets).toBeLessThanOrEqual(LIFT_DAY_MAIN_SETS.max);
+  expect(circuits(plan).filter((block) => block.role === 'finisher').map((block) => block.durationSec / 60))
+    .toEqual([FINISHER_MIN]);
+});
+
+it('passes the plan week to equipment resolution and merges caller and snapshot exclusions', () => {
+  const overrides = new Map([['air-bike', { exerciseId: 'air-bike', notAtMyGym: true }]]);
+  const input = liftDayInputFrom({ ...snapshot, overrides }, 'upper-a', 60, 6, fixture);
+  const resolveEquipmentId = vi.fn(input.resolveEquipmentId);
+  const plan = generateLiftDay({ ...input, notAtMyGym: new Set(['rower']), resolveEquipmentId });
+  expect(resolveEquipmentId.mock.calls.length).toBeGreaterThan(0);
+  expect(resolveEquipmentId.mock.calls.every((call: unknown[]) => call[2] === plan.weekIdx)).toBe(true);
+  const exercises = plan.blocks.flatMap((block) => block.kind === 'lift' ? [block.exerciseId]
+    : block.kind === 'circuit' ? block.stations.map((station) => station.exerciseId) : []);
+  expect(exercises).not.toContain('air-bike');
+  expect(exercises).not.toContain('rower');
+});
+
+it('uses a no-equipment warm-up and cool-down when the floor has no allowed cardio machine', () => {
+  const profile = structuredClone(fixture);
+  profile.items.find((item) => item.id === turfItem('rower'))!.exercises.push('elliptical');
+  const overrides = new Map(['air-bike', 'rower', 'elliptical'].map((exerciseId) => [exerciseId, { exerciseId, notAtMyGym: true }]));
+  const plan = planFor(6, 60, 'upper-a', { ...snapshot, overrides }, profile);
+  const warmup = plan.blocks.filter((block) => block.kind === 'lift' && block.warmup);
+  expect(warmup).toHaveLength(2);
+  expect(warmup).toEqual([
+    expect.objectContaining({ exerciseId: '', notes: expect.stringMatching(/walking in place/i) }),
+    expect.objectContaining({ exerciseId: '', notes: expect.stringMatching(/walking in place/i) }),
+  ]);
+});
+
 it('uses a downstairs main when upstairs has no trustworthy candidate', () => {
   const profile = structuredClone(fixture);
   for (const item of profile.items) {
@@ -73,12 +111,14 @@ it('drops a floor gracefully when every item is a guess and no main can be presc
 
 it('rejects a single-count cardio station when its pod cannot offer another option', () => {
   const profile = structuredClone(fixture);
-  const turf = profile.pods.find((pod) => pod.id === 'upper-turf-pod')!;
-  turf.items = turf.items.filter((id) => !['upper-turf-row', 'upper-turf-ball'].includes(id));
+  const turf = profile.pods.find((pod) => pod.id === turfPod.id)!;
+  const alternatives = [turfItem('rower'), turfItem('med-ball-slam')];
+  turf.items = turf.items.filter((id) => !alternatives.includes(id));
+  const bike = turfItem('air-bike');
   const snap = { ...snapshot, overrides: new Map([['burpee', { exerciseId: 'burpee', notAtMyGym: true }]]) };
   for (let seed = 0; seed < 20; seed++) {
     expect(circuits(planFor(seed, 60, 'upper-a', snap, profile)).flatMap((block) => block.stations)
-      .some((station) => station.itemId === 'upper-turf-bike')).toBe(false);
+      .some((station) => station.itemId === bike)).toBe(false);
   }
 });
 
@@ -99,6 +139,8 @@ it('uses joint-friendly exercises through week 4 and follows main-lift deload an
 it('validates at least one circuit over 500 seeds for each of four variants', () => {
   let sawBike = false;
   const ctx = blockContext(fixture, liftDayInputFrom(snapshot, 'upper-a', 60, 0, fixture).exercises, 2);
+  const cable = turfItem('standing-cable-row');
+  const bike = turfItem('air-bike');
   for (let seed = 0; seed < 500; seed++) {
     for (const variant of variants) {
       const plan = planFor(seed, [45, 60, 75][seed % 3], variant);
@@ -106,12 +148,14 @@ it('validates at least one circuit over 500 seeds for each of four variants', ()
       if (!blocks.length || plan.floor !== 2) throw new Error(`No upstairs circuit at seed ${seed} for ${variant}`);
       for (const block of blocks) {
         expect(validateBlock(block, ctx, 'lift'), `${seed}: ${variant}`).toEqual([]);
+        expect(block.stations.filter((station) => groupOf(ctx.exercise(station.exerciseId)!) === 'cardio').length)
+          .toBeLessThanOrEqual(1);
         for (const station of block.stations) {
-          expect(station.itemId).not.toBe('upper-turf-cable');
-          if (station.itemId === 'upper-turf-bike') {
+          expect(station.itemId).not.toBe(cable);
+          if (station.itemId === bike) {
             expect(station.backup).toBeDefined();
             expect(station.backup?.itemId).not.toBe(station.itemId);
-            if (station.backup?.itemId) expect(ctx.podsOfItem(station.backup.itemId)).toContain('upper-turf-pod');
+            if (station.backup?.itemId) expect(ctx.podsOfItem(station.backup.itemId)).toContain(turfPod.id);
             sawBike = true;
           }
         }

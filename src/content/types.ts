@@ -1,14 +1,6 @@
-export type MovementGroup =
-  | 'squat'
-  | 'hinge'
-  | 'lunge'
-  | 'horizontal-push'
-  | 'horizontal-pull'
-  | 'vertical-push'
-  | 'vertical-pull'
-  | 'arms'
-  | 'carry-core'
-  | 'conditioning';
+import type { MovementGroup, StationUnit } from '../data/types';
+
+export type { MovementGroup, StationUnit } from '../data/types';
 
 export type Muscle =
   | 'quads'
@@ -81,7 +73,6 @@ export interface Exercise {
   retired?: boolean;
 }
 
-export type StationUnit = 'reps' | 'sec' | 'cal' | 'm';
 export type GymConfidence = 'C' | 'L' | 'G';
 export interface GymZone { id: string; floor: number; neighbours: string[] }
 export interface GymItem {

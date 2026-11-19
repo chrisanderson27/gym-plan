@@ -1,13 +1,7 @@
-import { expect, expectTypeOf, it } from 'vitest';
+import { expect, it } from 'vitest';
 import { EXERCISE_ALIASES } from '../../../scripts/gen-gym.mjs';
-import type { StationUnit as DataStationUnit } from '../../data/types';
 import { exerciseById } from '../index';
-import type { StationUnit } from '../types';
 import { HOME_GYM } from './home-gym';
-
-it('shares station units with the persisted contract', () => {
-  expectTypeOf<StationUnit>().toEqualTypeOf<DataStationUnit>();
-});
 
 it('contains only allowlisted fields, with a boolean verification marker and library exercise ids', () => {
   expect(Object.keys(HOME_GYM).sort()).toEqual(['id', 'items', 'pods', 'zones']);

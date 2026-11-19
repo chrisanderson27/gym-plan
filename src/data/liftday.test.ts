@@ -53,9 +53,9 @@ it('uses downstairs when all upstairs main candidates for the variant are marked
 
 it('only offers bodyweight movements requiring kit at their catalog items', () => {
   const upstairs = availableOn(HOME_GYM, 2, { notAtMyGym: new Set(), bodyweightIds: BODYWEIGHT_IDS });
-  expect(upstairs.filter((option) => option.exerciseId === 'hanging-knee-raise')).toEqual([
-    expect.objectContaining({ itemId: 'f2-mx-vkr-dip' }),
-  ]);
+  const kneeRaise = upstairs.filter((option) => option.exerciseId === 'hanging-knee-raise');
+  expect(kneeRaise).toHaveLength(1);
+  expect(HOME_GYM.items.find((item) => item.id === kneeRaise[0]?.itemId)?.type).toBe('vkr-dip-station');
   expect(upstairs.some((option) => option.exerciseId === 'ab-wheel')).toBe(false);
   expect(upstairs.some((option) => option.exerciseId === 'plank' && !option.itemId)).toBe(true);
 });

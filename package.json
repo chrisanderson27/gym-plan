@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test --project=webkit",
     "icons": "node scripts/make-icons.mjs",
-    "gen-gym": "node scripts/gen-gym.mjs"
+    "gen-gym": "node scripts/gen-gym.mjs",
+    "check:gym-privacy": "node scripts/check-gym-privacy.mjs"
   },
   "dependencies": {
     "dexie": "4.4.7",

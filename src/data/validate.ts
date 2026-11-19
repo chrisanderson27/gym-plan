@@ -1,7 +1,7 @@
 import { ACTIVITIES } from '../engine/plan/activities';
 import { ImportError } from './errors';
 import type { StoreName } from './stores';
-import { APPEARANCES, FEEDBACK_TAGS, GOAL_DIRECTIONS } from './types';
+import { APPEARANCES, FEEDBACK_TAGS, GOAL_DIRECTIONS, STATION_UNITS } from './types';
 
 type Rec = Record<string, unknown>;
 type Check = (v: unknown) => boolean;
@@ -55,7 +55,7 @@ const swimBlock = shape({
   rounds: num, items: arr(swimItem),
 });
 const result = shape({ completed: bool, actualSec: opt(num), completedRounds: opt(num), skipped: opt(bool) });
-const target = shape({ unit: oneOf('reps', 'sec', 'cal', 'm'), amount: num });
+const target = shape({ unit: oneOf(...STATION_UNITS), amount: num });
 const stationFields = { exerciseId: str, target, equipmentId: opt(str), itemId: opt(str), load: opt(num) };
 const station = shape({ ...stationFields, backup: opt(shape(stationFields)) });
 const circuitLog = shape({

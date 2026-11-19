@@ -1,7 +1,7 @@
-import type { Block, CircuitBlock, LiftBlock, LiftVariant } from '../../data/types';
+import type { Block, CircuitBlock, LiftVariant } from '../../data/types';
 import {
-  BLOCK_ATTEMPTS, BLOCK_STATIONS, BLOCK_TRANSITION_MIN, COOLDOWN_MIN, JOINT_FRIENDLY_WEEKS, LIFT_DAY_SHAPES,
-  MAIN_REST_SEC, MIN_PER_SET, WARMUP_MIN,
+  BLOCK_ATTEMPTS, BLOCK_STATIONS, BLOCK_TRANSITION_MIN, COOLDOWN_MIN, FINISHER_MIN, JOINT_FRIENDLY_WEEKS,
+  LIFT_DAY_MAIN_SETS, LIFT_DAY_SHAPES, MAIN_REST_SEC, MIN_PER_SET, WARMUP_MIN,
 } from '../config';
 import { localDate } from '../dates';
 import { availableOn, floors, type Option } from '../gym/availability';
@@ -9,12 +9,11 @@ import type { GymItemShape, GymProfileShape } from '../gym/types';
 import { deloadState } from '../lift/deload';
 import { pickSubstitute } from '../lift/generator';
 import { isLowerBarbell, prescribe } from '../lift/progression';
-import { summarizeLiftSession } from '../lift/session';
 import { isWorking, type LiftSnapshot, type Prescription } from '../lift/types';
 import { isRampInWeek, weekIndex } from '../week';
 import { prescribeBlock, type Draft } from './progression';
 import { mulberry32, shuffle } from './rng';
-import { groupOf, kitOf, NO_BLOCK_IDS, PROFILES, type BlockExerciseShape } from './rules';
+import { FINISHER_INTENSITY_IDS, groupOf, kitOf, NO_BLOCK_IDS, PROFILES, type BlockExerciseShape } from './rules';
 import { blockContext, validateBlock, type BlockContext } from './validate';
 
 export interface LiftDayInput {
@@ -25,7 +24,7 @@ export interface LiftDayInput {
   exercises: Map<string, BlockExerciseShape>;
   snapshot: LiftSnapshot;
   mainCandidates: string[];
-  resolveEquipmentId(exerciseId: string, item?: GymItemShape): string;
+  resolveEquipmentId(exerciseId: string, item: GymItemShape | undefined, weekIdx: number): string;
   makeId(): string;
   preferFloor?: number;
   bodyweightIds: readonly string[];
@@ -52,21 +51,22 @@ function chooseStations(
 ): Choice[] {
   const picked: Choice[] = [];
   const groups = new Set<Choice['group']>();
-  const intensity = (choice: Choice) => choice.kit === 'cardio' || ['kb-swing', 'med-ball-slam'].includes(choice.ex.id);
+  const intensity = (choice: Choice) => choice.kit === 'cardio' || FINISHER_INTENSITY_IDS.includes(choice.ex.id);
   let fixed = 0;
   let cardio = 0;
   let intense = false;
   for (const choice of shuffle(pool, rand)) {
+    const isCardio = choice.group === 'cardio' || choice.kit === 'cardio';
     if (picked.some((entry) => entry.ex.id === choice.ex.id) || picked.at(-1)?.group === choice.group) continue;
     if (choice.kit === 'fixed' && fixed >= PROFILES.lift.fixedMax) continue;
-    if (choice.kit === 'cardio' && cardio >= PROFILES.lift.cardioMax) continue;
+    if (isCardio && cardio >= PROFILES.lift.cardioMax) continue;
     const remaining = size - picked.length - 1;
     if (groups.size + Number(!groups.has(choice.group)) + remaining < PROFILES.lift.minGroups) continue;
     if (!remaining && (picked[0]?.group === choice.group || (finisher && !intense && !intensity(choice)))) continue;
     picked.push(choice);
     groups.add(choice.group);
     fixed += Number(choice.kit === 'fixed');
-    cardio += Number(choice.kit === 'cardio');
+    cardio += Number(isCardio);
     intense ||= intensity(choice);
     if (picked.length === size) break;
   }
@@ -81,7 +81,7 @@ function primaryPod(choices: Choice[]): string {
 
 function buildCircuits(
   input: LiftDayInput, choices: Choice[], shape: readonly (keyof typeof BLOCK_STATIONS)[],
-  mainId: string, jfOnly: boolean, ctx: BlockContext,
+  mainId: string, jfOnly: boolean, ctx: BlockContext, weekIdx: number,
 ): { circuits: CircuitBlock[]; dropped: string[] } {
   const { profile, snapshot, seed, variant, resolveEquipmentId } = input;
   const rand = mulberry32(seed);
@@ -94,7 +94,7 @@ function buildCircuits(
 
   const draftOf = ({ ex, option }: Choice) => ({
     exercise: ex, itemId: option.itemId,
-    equipmentId: resolveEquipmentId(ex.id, option.itemId === undefined ? undefined : ctx.item(option.itemId)),
+    equipmentId: resolveEquipmentId(ex.id, option.itemId === undefined ? undefined : ctx.item(option.itemId), weekIdx),
   });
   const workingWeights = new Map<string, Map<string, number>>();
   for (const { session, sets } of snapshot.history) {
@@ -108,7 +108,7 @@ function buildCircuits(
   }
 
   for (const [index, minutes] of shape.entries()) {
-    const role = minutes === 4 ? 'finisher' : 'block';
+    const role = minutes === FINISHER_MIN ? 'finisher' : 'block';
     const label = role === 'finisher' ? 'Finisher' : `Block ${String.fromCharCode(65 + index)}`;
     const neighbours = profile.zones.find((zone) => zone.id === priorZone)?.neighbours ?? [];
     const priority = (zone: string) => zone === priorZone ? 0 : neighbours.includes(zone) ? 1 : 2;
@@ -163,12 +163,7 @@ export function generateLiftDay(input: LiftDayInput): LiftDayPlan {
   const { snapshot, variant, profile, mainCandidates, exercises, budgetMin, preferFloor = 2, bodyweightIds } = input;
   const weekIdx = weekIndex(localDate(new Date(snapshot.now)), snapshot.programStart);
   const rampIn = isRampInWeek(weekIdx);
-  const missed = new Map<string, number>();
-  for (const { session, sets } of snapshot.history) {
-    const blocks = session.blocks.filter((block): block is LiftBlock => block.kind === 'lift');
-    if (blocks.length) missed.set(session.id, summarizeLiftSession(blocks, sets).missedExercises.length);
-  }
-  const { deload } = deloadState(snapshot, missed);
+  const { deload } = deloadState(snapshot);
   const jfOnly = weekIdx <= JOINT_FRIENDLY_WEEKS;
   const notAtMyGym = new Set(input.notAtMyGym);
   for (const [id, override] of snapshot.overrides) if (override.notAtMyGym) notAtMyGym.add(id);
@@ -183,7 +178,7 @@ export function generateLiftDay(input: LiftDayInput): LiftDayPlan {
     for (const { option, ex } of choices) {
       if (availableMain.has(ex.id) || !option.anchorOk || ex.unit !== 'reps' || (jfOnly && !ex.jointFriendly)) continue;
       const item = option.itemId === undefined ? undefined : ctx.item(option.itemId);
-      const equipmentId = input.resolveEquipmentId(ex.id, item);
+      const equipmentId = input.resolveEquipmentId(ex.id, item, weekIdx);
       if (snapshot.equipment.has(equipmentId)) availableMain.set(ex.id, equipmentId);
     }
     const first = mainCandidates[0];
@@ -195,11 +190,12 @@ export function generateLiftDay(input: LiftDayInput): LiftDayPlan {
 
     const blocks: Block[] = [];
     const warm = choices.find(({ option, kit, ex }) => option.anchorOk && kit === 'cardio' && (!jfOnly || ex.jointFriendly));
-    const warmId = warm?.ex.id ?? 'elliptical';
+    const warmId = warm?.ex.id ?? '';
+    const easyMovement = warm ? `Easy ${warm.ex.id.replaceAll('-', ' ')}` : 'Easy walking in place';
     blocks.push({
       id: '', kind: 'lift', exerciseId: warmId, sets: 1, repMin: 0, repMax: 0, warmup: true,
       label: `Warm-up · ${WARMUP_MIN} min`,
-      notes: "3–5 min easy bike or rower, then hip airplane, world's greatest stretch, band pull-apart, glute bridge, cat-cow, ankle rocks",
+      notes: `${easyMovement} for 3–5 min, then hip airplane, world's greatest stretch, glute bridge, cat-cow, ankle rocks`,
     });
 
     let main: Prescription = { mode: 'hold', weight: 0, reps: 0, sets: 0, rirTarget: 0, reason: 'No available main lift' };
@@ -212,7 +208,10 @@ export function generateLiftDay(input: LiftDayInput): LiftDayPlan {
       main = prescribe(ex, eq, snapshot.history.filter(({ session }) => !session.flags?.deload), {
         deload, rampIn, isLowerBarbell: isLowerBarbell(ex, eq),
       });
-      main.sets = main.mode === 'calibrate' ? 1 : Math.min(4, Math.max(deload || rampIn ? 2 : 3, main.sets));
+      if (main.mode !== 'calibrate') {
+        const { min, max, reducedMin } = LIFT_DAY_MAIN_SETS;
+        main.sets = Math.min(max, Math.max(deload || rampIn ? reducedMin : min, main.sets));
+      }
       mainMin = main.sets * MIN_PER_SET[ex.repClass];
       blocks.push({
         id: '', kind: 'lift', exerciseId: mainId, equipmentId, sets: main.sets,
@@ -227,12 +226,12 @@ export function generateLiftDay(input: LiftDayInput): LiftDayPlan {
     const lastShape = LIFT_DAY_SHAPES[LIFT_DAY_SHAPES.length - 1]!;
     const shape = LIFT_DAY_SHAPES.find((shape) => baseMin + minutesFor(shape) <= budgetMin) ?? lastShape;
     const { circuits, dropped: missedBlocks } = mainId
-      ? buildCircuits(input, choices, shape, mainId, jfOnly, ctx)
+      ? buildCircuits(input, choices, shape, mainId, jfOnly, ctx, weekIdx)
       : { circuits: [], dropped: [] };
     blocks.push(...circuits, {
       id: '', kind: 'lift', exerciseId: warmId, sets: 1, repMin: 0, repMax: 0, warmup: true,
       label: `Cool-down · ${COOLDOWN_MIN} min`,
-      notes: 'Easy spin or walk, then stretch hips, hamstrings and chest',
+      notes: `${easyMovement}, then stretch hips, hamstrings and chest`,
     });
     const estMin = baseMin + circuits.reduce((min, block) => min + block.durationSec / 60 + BLOCK_TRANSITION_MIN, 0);
     return { variant, floor, deload, rampIn, weekIdx, blocks, main, estMin, dropped: [...dropped, ...missedBlocks] };

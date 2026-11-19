@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { openTestDb } from './test-utils';
-import type { Block, Session, SetRow, Template } from './types';
+import { STATION_UNITS, type Block, type Session, type SetRow, type Template } from './types';
+import { validateRows } from './validate';
 
 const blocks: Block[] = [
   { id: 'b1', kind: 'interval', rounds: 3, phases: [{ role: 'work', sec: 40, label: 'Squat jumps' }, { role: 'rest', sec: 20, label: 'Rest' }], result: { completed: true, completedRounds: 3 } },
@@ -33,6 +34,13 @@ afterEach(async () => {
 });
 
 describe('Block union', () => {
+  it('accepts all shared station units in imports and rejects unknown units', () => {
+    const circuit = blocks.find((block) => block.kind === 'circuit')!;
+    const row = { id: 's1', date: '2026-11-17T10:00:00.000Z', type: 'lift', rpe: null, hard: false, hardCardio: false, durationMin: 4, notes: '' };
+    const withUnit = (unit: string) => ({ ...row, blocks: [{ ...circuit, stations: [{ exerciseId: 'sled-push', target: { unit, amount: 20 } }] }] });
+    for (const unit of STATION_UNITS) expect(() => validateRows('sessions', [withUnit(unit)])).not.toThrow();
+    expect(() => validateRows('sessions', [withUnit('steps')])).toThrow();
+  });
   it('covers every kind exhaustively', () => {
     expect(blocks.map(describeBlock)).toEqual(['interval', 'lift', 'swim', 'run', 'circuit']);
   });

@@ -42,6 +42,19 @@ describe('deload', () => {
     expect(deloadState(snap('2026-02-18T12:00:00', withDeload), missed).deload).toBe(true);
     expect(deloadState(snap('2026-02-22T12:00:00', withDeload), missed).deload).toBe(false);
   });
+
+  it('derives deload misses from logged working sets in the lift history', () => {
+    const history = ['a', 'b'].map((id, i) => {
+      const blocks: LiftBlock[] = ['press', 'row'].map((exerciseId) => ({ id: exerciseId, kind: 'lift', exerciseId, sets: 1, repMin: 6, repMax: 8 }));
+      const sets: SetRow[] = blocks.map(({ exerciseId }) => ({ id: `${id}-${exerciseId}`, sessionId: id, exerciseId,
+        equipmentId: 'bells', idx: 0, targetWeight: 10, weight: 10, targetReps: 8, reps: 4, painFlag: false }));
+      return { ...mk(id, `2026-02-1${i}T10:00:00Z`, { blocks }), sets };
+    });
+    const snapshot = snap('2026-02-14T12:00:00', history);
+    expect(deloadState(snapshot).reason).toBe('triggered');
+    history[1]!.sets[0]!.setKind = 'warmup';
+    expect(deloadState(snapshot).deload).toBe(false);
+  });
 });
 
 describe('pain', () => {

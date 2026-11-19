@@ -12,7 +12,6 @@ import { localDate } from '../dates';
 import { isRampInWeek, weekIndex } from '../week';
 import { deloadState } from './deload';
 import { isLowerBarbell, prescribe } from './progression';
-import { summarizeLiftSession } from './session';
 import { isWorking, type LiftExercise, type LiftSnapshot, type Prescription } from './types';
 import { weekFractionalSets } from './volume';
 
@@ -87,12 +86,7 @@ export function generateLift(input: {
   const weekIdx = weekIndex(localDate(new Date(snapshot.now)), snapshot.programStart);
   const rampIn = isRampInWeek(weekIdx);
 
-  const missed = new Map<string, number>();
-  for (const h of snapshot.history) {
-    const blocks = h.session.blocks.filter((b): b is LiftBlock => b.kind === 'lift');
-    if (blocks.length) missed.set(h.session.id, summarizeLiftSession(blocks, h.sets).missedExercises.length);
-  }
-  const deload = deloadState(snapshot, missed).deload;
+  const { deload } = deloadState(snapshot);
 
   const jfOnly = weekIdx <= JOINT_FRIENDLY_WEEKS;
   const chosen = new Set<string>();

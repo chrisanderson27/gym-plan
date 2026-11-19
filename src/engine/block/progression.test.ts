@@ -61,10 +61,17 @@ it('keeps load on a miss and sets the next target to completed rounds plus one',
   expect(make([previous(3, 2)])).toMatchObject({ targetRounds: 3, stations: [{ load: 50 }, {}, {}] });
 });
 
-it('drops load after two consecutive volume reductions above 10 percent, overriding a hit', () => {
-  expect(make([previous(1, 9), previous(2, 7), previous(3, 5)]).stations[0]?.load).toBe(45);
-  expect(make([previous(1, 9), previous(2, 9), previous(3, 5)]).stations[0]?.load).toBe(50);
-  expect(make([previous(1, 10), previous(2, 9), previous(3, 8)]).stations[0]?.load).toBe(50);
+it('steps the load up after consecutive hits at successively lower targets', () => {
+  const hits = [previous(1, 6, 6), previous(2, 5, 5), previous(3, 4, 4)];
+  (hits[2]!.session.blocks[0] as CircuitBlock).log!.stations[0]!.actualLoad = 40;
+  expect(make(hits)).toMatchObject({ targetRounds: 3, stations: [{ load: 45 }, {}, {}] });
+});
+
+it('drops load after two consecutive misses with work down more than 10 percent each time', () => {
+  expect(make([previous(1, 9, 9), previous(2, 7, 8), previous(3, 5, 8)]).stations[0]?.load).toBe(45);
+  expect(make([previous(1, 9, 9), previous(2, 9, 10), previous(3, 5, 10)]).stations[0]?.load).toBe(50);
+  expect(make([previous(1, 10, 10), previous(2, 9, 10), previous(3, 8, 10)]).stations[0]?.load).toBe(50);
+  expect(make([previous(1, 9, 9), previous(2, 7, 7), previous(3, 5, 6)]).stations[0]?.load).toBe(50);
 });
 
 it('starts fresh for a formerly swapped station', () => {

@@ -53,7 +53,9 @@ export function validateBlock(block: CircuitBlock, ctx: BlockContext, profile: k
     return ex && kitOf(ex);
   });
   if (kits.filter((kit) => kit === 'fixed').length > rules.fixedMax) violations.add('fixed>max');
-  if (kits.filter((kit) => kit === 'cardio').length > rules.cardioMax) violations.add('cardio>max');
+  if (groups.filter((group, i) => group === 'cardio' || kits[i] === 'cardio').length > rules.cardioMax) {
+    violations.add('cardio>max');
+  }
 
   const zone = ctx.zoneOfPod(block.podId);
   if (!zone) violations.add('multi-zone');
