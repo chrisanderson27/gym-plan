@@ -1,11 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
-
-async function onboard(page: Page, bodyweight: string) {
-  await page.goto('./');
-  await page.getByLabel('Bodyweight (lb)').fill(bodyweight);
-  await page.getByRole('button', { name: 'Start' }).click();
-  await expect(page.getByTestId('tile-pick')).toBeVisible();
-}
+import { expect, test } from '@playwright/test';
+import { onboard } from './helpers';
 
 const today = () => {
   const d = new Date();
@@ -18,8 +12,8 @@ const mmss = (s: string) => {
 
 test('Burn class runs under a sped-up clock and logs', async ({ page }) => {
   await page.clock.install();
-  await onboard(page, '247.2');
-  await page.getByTestId('tile-burn').click();
+  await onboard(page);
+  await page.getByTestId('something-else-burn').click();
   await page.getByTestId('burn-template-burn-tread-floor').click();
   await expect(page.getByTestId('burn-total')).toContainText('55 min');
   await page.getByTestId('burn-start').click();
@@ -44,14 +38,14 @@ test('Burn class runs under a sped-up clock and logs', async ({ page }) => {
 
   await page.getByTestId('rpe-8').click();
   await page.getByTestId('burn-save').click();
-  await expect(page.getByTestId('tile-burn')).toBeVisible();
+  await expect(page.getByTestId('something-else-burn')).toBeVisible();
   await page.goto('./#/burn');
   await expect(page.getByText('Last Burn')).toContainText(today());
 });
 
 test('Run: week-1 easy is run-walk within the cap and logs', async ({ page }) => {
-  await onboard(page, '247.2');
-  await page.getByTestId('tile-run').click();
+  await onboard(page);
+  await page.getByTestId('something-else-run').click();
   await page.getByTestId('run-kind-easy').click();
   await expect(page.getByTestId('run-reasons')).toContainText('run-walk');
   const planned = Number(/Planned (\d+) min/.exec((await page.getByTestId('run-planned').textContent()) ?? '')?.[1]);
@@ -61,14 +55,15 @@ test('Run: week-1 easy is run-walk within the cap and logs', async ({ page }) =>
   await page.getByTestId('run-distance').fill('1.5');
   await page.getByTestId('rpe-4').click();
   await page.getByTestId('run-save').click();
-  await expect(page.getByTestId('tile-run')).toBeVisible();
+  await expect(page.getByTestId('something-else-run')).toBeVisible();
   await page.goto('./#/run');
   await expect(page.getByText('Last run')).toBeVisible();
 });
 
 test('Swim: rest fallback, CSS test, then send-offs and log', async ({ page }) => {
-  await onboard(page, '247.2');
-  await page.getByTestId('tile-swim').click();
+  await onboard(page);
+  await page.getByTestId('something-else-swim').click();
+  await page.getByRole('button', { name: 'Save pool' }).click();
   await page.getByTestId('swim-workout-swim-css-intro').click();
   await expect(page.getByTestId('swim-card')).toContainText('rest');
   await expect(page.getByTestId('swim-css-prompt')).toBeVisible();
@@ -84,7 +79,7 @@ test('Swim: rest fallback, CSS test, then send-offs and log', async ({ page }) =
   await page.getByTestId('swim-log').click();
   await page.getByTestId('rpe-6').click();
   await page.getByTestId('swim-save').click();
-  await expect(page.getByTestId('tile-swim')).toBeVisible();
+  await expect(page.getByTestId('something-else-swim')).toBeVisible();
   await page.goto('./#/swim');
   await expect(page.getByText('Last swim')).toBeVisible();
 });

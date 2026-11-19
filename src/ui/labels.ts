@@ -108,6 +108,7 @@ const SCREEN_NAMES: [RegExp, string][] = [
   [/^\/mine\//, 'Saved workout'],
   [/^\/again\//, 'Do this again'],
   [/^\/weigh-in/, 'Weigh-in'],
+  [/^\/progress/, 'Progress'],
   [/^\/settings/, 'Settings'],
 ];
 

@@ -12,6 +12,8 @@ import { TemplateRunScreen } from './ui/mine/TemplateRunScreen';
 import { Home } from './ui/Home';
 import { LiftRoutes } from './ui/lift/LiftRoutes';
 import { Onboarding } from './ui/Onboarding';
+import { ProgressScreen } from './ui/ProgressScreen';
+import { showTabs, TabBar } from './ui/TabBar';
 import { useRoute } from './ui/router';
 import { SettingsScreen } from './ui/Settings';
 import { applyAppearance } from './ui/theme';
@@ -38,6 +40,8 @@ export function App() {
     body = <Onboarding />;
   } else if (route === '/settings') {
     body = <SettingsScreen settings={settings} />;
+  } else if (route === '/progress') {
+    body = <ProgressScreen />;
   } else if (route.startsWith('/lift')) {
     body = <LiftRoutes route={route} settings={settings} />;
   } else if (/^\/(burn|run|swim)(\/|$)/.test(route)) {
@@ -62,6 +66,7 @@ export function App() {
   return (
     <>
       {body}
+      {settings?.onboardedAt && showTabs(route) && <TabBar route={route} />}
       <UpdatePrompt />
     </>
   );

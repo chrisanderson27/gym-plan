@@ -27,7 +27,7 @@ export function toPlanSession(
     ...(session.variant ? { variant: session.variant } : {}),
     lower,
     heavyLegs: lower && !session.flags?.deload,
-    lifted: working.length > 0,
+    lifted: working.length > 0 || sets.some((s) => s.setKind === 'calibration' && s.reps > 0),
     ...(run ? { runKind: run.kind } : {}),
     hardRun,
     finished: !!session.endedAt,

@@ -1,19 +1,24 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { buildExport, ImportError, importExport, markBackedUp, parseExport } from '../data/backup';
 import { db } from '../data/db';
-import { saveSettings } from '../data/settings';
+import { enabledActivities, poolOf, saveSettings } from '../data/settings';
 import type { Appearance, PoolUnit, Settings as SettingsRow } from '../data/types';
 import { daysBetween, localDate } from '../engine/dates';
 import { isStandalone } from '../platform/display';
 import { deliverFile, backupFileName } from '../platform/share';
 import { isPersisted } from '../platform/storage';
 import { FeedbackList } from './feedback/FeedbackList';
+import { ActivityChoices, DirectionChoices } from './Onboarding';
+import { PoolSheet } from './PoolSheet';
 
 declare const __APP_VERSION__: string;
 
 export function SettingsScreen({ settings }: { settings: SettingsRow }) {
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [message, setMessage] = useState('');
+  const [activityError, setActivityError] = useState(false);
+  const [showPool, setShowPool] = useState(false);
+  const pool = poolOf(settings);
   // Backup result sits next to the backup controls; feedback results stay under the feedback section.
   const [backupMsg, setBackupMsg] = useState<{ text: string; error?: boolean } | null>(null);
   useEffect(() => {
@@ -62,12 +67,7 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
 
   return (
     <main class="screen">
-      <header class="bar">
-        <h1>Settings</h1>
-        <a class="gear" href="#/">
-          Home
-        </a>
-      </header>
+      <header class="bar"><h1>Settings</h1></header>
       <h2>Appearance</h2>
       <label>
         Appearance
@@ -78,6 +78,8 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
         </select>
       </label>
 
+      <h2>Goals</h2>
+      <DirectionChoices direction={settings.goalDirection ?? 'lose'} onChange={(goalDirection) => saveSettings(db, { goalDirection })} />
       <label>
         Goal weight (lb)
         <input
@@ -86,28 +88,43 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
           onFocus={() => { goalFocused.current = true; }}
           onBlur={() => { goalFocused.current = false; }}
           onInput={(e) => setGoalDraft(e.currentTarget.value)}
-          onChange={(e) => { const v = Number(e.currentTarget.value); if (v > 0) saveSettings(db, { goalWeightLb: v }); }}
+          onChange={(e) => { const v = Number(e.currentTarget.value); if (Number.isFinite(v) && v > 0) saveSettings(db, { goalWeightLb: v }); }}
         />
       </label>
-      <label>
-        Pool unit
-        <select value={settings.poolUnit} onChange={(e) => saveSettings(db, { poolUnit: e.currentTarget.value as PoolUnit })}>
-          <option value="yd">yards</option>
-          <option value="m">meters</option>
-        </select>
-      </label>
-      <label>
-        Pool length
-        <input inputMode="decimal" value={settings.poolLength} onChange={(e) => { const v = Number(e.currentTarget.value); if (v > 0) saveSettings(db, { poolLength: v }); }} />
-      </label>
+      <h2>Activities</h2>
+      <ActivityChoices activities={enabledActivities(settings)} onChange={(activities) => {
+        setActivityError(!activities.length);
+        if (activities.length) void saveSettings(db, { activities });
+      }} />
+      {activityError && <p role="status">Keep at least one activity enabled.</p>}
+
+      <h2>Pool</h2>
+      {pool ? (
+        <>
+          <label>
+            Pool unit
+            <select value={pool.poolUnit} onChange={(e) => saveSettings(db, { poolUnit: e.currentTarget.value as PoolUnit })}>
+              <option value="yd">yards</option>
+              <option value="m">meters</option>
+            </select>
+          </label>
+          <label>
+            Pool length
+            <input inputMode="decimal" value={pool.poolLength} onChange={(e) => { const v = Number(e.currentTarget.value); if (Number.isFinite(v) && v > 0) saveSettings(db, { poolLength: v }); }} />
+          </label>
+        </>
+      ) : (
+        <>
+          <p>Set on first swim</p>
+          <button type="button" class="btn" onClick={() => setShowPool(true)}>Set pool</button>
+          {showPool && <PoolSheet onClose={() => setShowPool(false)} />}
+        </>
+      )}
+      <h2>Program start</h2>
       <label>
         Program start (week 1)
         <input type="date" value={settings.programStart} onChange={(e) => { if (e.currentTarget.value) saveSettings(db, { programStart: e.currentTarget.value }); }} />
       </label>
-
-      <h2>Storage</h2>
-      <p>{persisted === true ? 'Storage: persistent ✓' : persisted === false ? 'Storage: ⚠ best-effort — export regularly' : 'Storage: unknown — export regularly'}</p>
-      <p>Running as Home Screen app: {isStandalone() ? 'yes' : 'no'}</p>
 
       <h2>Backup</h2>
       <p>Last backup: {backupLabel}</p>
@@ -120,8 +137,13 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
       {backupMsg && (
         <p role={backupMsg.error ? 'alert' : 'status'} class={backupMsg.error ? 'warn' : 'ok'} data-testid="backup-message">{backupMsg.text}</p>
       )}
-      <FeedbackList onMessage={setMessage} />
-      {message && <p role="status" class="ok">{message}</p>}
+      <details data-testid="developer">
+        <summary>Developer</summary>
+        <FeedbackList onMessage={setMessage} />
+        {message && <p role="status" class="ok">{message}</p>}
+        <p>{persisted === true ? 'Storage: persistent' : persisted === false ? 'Storage: best-effort' : 'Storage: unknown'}</p>
+        <p>Running as Home Screen app: {isStandalone() ? 'yes' : 'no'}</p>
+      </details>
       <p class="dim">gym-plan v{__APP_VERSION__}</p>
     </main>
   );

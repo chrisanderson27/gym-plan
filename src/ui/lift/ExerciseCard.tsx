@@ -1,3 +1,4 @@
+import { CheckIcon } from '../icons';
 import { useRef, useState } from 'preact/hooks';
 import { exerciseById } from '../../content';
 import { db } from '../../data/db';
@@ -8,7 +9,6 @@ import { pickSubstitute } from '../../engine/lift/generator';
 import { painSwapOffer } from '../../engine/lift/pain';
 import { stepBy } from '../../engine/lift/steps';
 import type { LiftSnapshot } from '../../engine/lift/types';
-import { FeedbackButton } from '../slots/FeedbackButton';
 import { PoseView } from '../slots/PoseView';
 import { Stepper } from './Stepper';
 
@@ -100,7 +100,6 @@ export function ExerciseCard(p: CardProps) {
     <section class="card" data-testid={`exercise-${block.exerciseId}`}>
       <header>
         <h2>{ex?.name ?? block.exerciseId}</h2>
-        <FeedbackButton kind="exercise" context={{ sessionId: session.id, exerciseId: block.exerciseId, equipmentId: block.equipmentId }} />
       </header>
       <PoseView exerciseId={block.exerciseId} poseId={ex?.poseId} />
       <button type="button" class="link" onClick={p.onEquipment}>{eq?.name ?? 'Choose equipment'} ▾</button>
@@ -110,7 +109,7 @@ export function ExerciseCard(p: CardProps) {
         const logged = rowFor(idx);
         const id = block.exerciseId;
         return (
-          // Two deliberate lines: "Set N" + weight stepper, then reps stepper + ✓ (+ ⚠ / 💬 once logged).
+          // Two deliberate lines: "Set N" + weight stepper, then reps stepper and set controls.
           <div class={logged ? 'setrow done' : 'setrow'} key={idx} data-testid={`set-${id}-${idx}`}>
             <div class="setline">
               <span class="idx">Set {idx + 1}</span>
@@ -120,11 +119,10 @@ export function ExerciseCard(p: CardProps) {
             <div class="setline">
               <Stepper value={v.reps} unit="reps" valueTestId={`set-reps-${id}-${idx}`} downLabel="reps down" upLabel="reps up"
                 onDown={() => change(idx, (c) => ({ reps: Math.max(0, c.reps - 1) }))} onUp={() => change(idx, (c) => ({ reps: c.reps + 1 }))} />
-              <button type="button" class="tick" aria-pressed={!!logged} data-testid={`set-done-${id}-${idx}`} onClick={() => toggle(idx)}>✓</button>
+              <button type="button" class="tick" aria-pressed={!!logged} data-testid={`set-done-${id}-${idx}`} onClick={() => toggle(idx)} aria-label="Log set"><CheckIcon /></button>
               {logged && (
-                <button type="button" aria-label="pain" aria-pressed={logged.painFlag} class={logged.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, logged.id, !logged.painFlag)}>⚠</button>
+                <button type="button" aria-label="pain" aria-pressed={logged.painFlag} class={logged.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, logged.id, !logged.painFlag)}>Pain</button>
               )}
-              {logged && <FeedbackButton kind="set" context={{ sessionId: session.id, exerciseId: id, setId: logged.id, equipmentId: logged.equipmentId }} />}
             </div>
           </div>
         );

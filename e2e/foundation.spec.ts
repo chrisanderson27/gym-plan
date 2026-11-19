@@ -1,24 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
+import { onboard } from './helpers';
 
-async function onboard(page: Page, bodyweight: string) {
-  await page.goto('./');
-  await page.getByLabel('Bodyweight (lb)').fill(bodyweight);
-  await page.getByRole('button', { name: 'Start' }).click();
-  await expect(page.getByTestId('tile-pick')).toBeVisible();
-}
-
-test('first run: onboarding then Home with six tiles', async ({ page }) => {
-  await onboard(page, '247.2');
-  await expect(page.locator('h1')).toHaveText('gym-plan');
-  for (const id of ['pick', 'lift', 'burn', 'run', 'swim', 'hybrid']) {
-    await expect(page.getByTestId(`tile-${id}`)).toBeVisible();
-  }
-  await expect(page.getByTestId('tile-pick')).toContainText('Lower A (calibration)');
-  // P4 made these live: they are links now, and nothing on Home says "coming soon".
-  for (const [id, href] of [['hybrid', '#/hybrid'], ['weigh-in', '#/weigh-in'], ['history', '#/history'], ['builder', '#/builder']] as const) {
-    await expect(page.getByTestId(`tile-${id}`)).toHaveAttribute('href', href);
-  }
-  await expect(page.locator('.soon')).toHaveCount(0);
+test('first run: onboarding then Today with a hero and three tabs', async ({ page }) => {
+  await onboard(page);
+  await expect(page.getByTestId('hero')).toContainText('Lower A (calibration)');
+  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'first-run');
+  await expect(page.getByTestId('start')).toHaveAttribute('href', '#/lift/calibrate/lower-a');
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Today', 'Progress', 'Settings']);
 });
 
 test('settings backup downloads and restores into a fresh context', async ({ page, browser }, testInfo) => {
@@ -26,7 +14,7 @@ test('settings backup downloads and restores into a fresh context', async ({ pag
   // (merge rule D3), so the backup's settings must be the more recent edit to win.
   const context = await browser.newContext({ ...testInfo.project.use });
   const fresh = await context.newPage();
-  await onboard(fresh, '180');
+  await onboard(fresh, { bodyweight: '180' });
 
   const storedGoalOf = (p: Page) => () =>
     p.evaluate(
@@ -49,7 +37,7 @@ test('settings backup downloads and restores into a fresh context', async ({ pag
   await expect.poll(storedGoalOf(fresh), { timeout: 10_000 }).toBe(190);
   await expect(freshGoal).toHaveValue('190');
 
-  await onboard(page, '247.2');
+  await onboard(page);
   await page.getByRole('link', { name: 'Settings' }).click();
   const goal = page.getByLabel('Goal weight (lb)');
   const storedGoal = storedGoalOf(page);
@@ -109,6 +97,6 @@ test('CSP is present and nothing violates it', async ({ page, request }) => {
   page.on('console', (m) => {
     if (/content security policy|refused to/i.test(m.text())) violations.push(m.text());
   });
-  await onboard(page, '200');
+  await onboard(page, { bodyweight: '200' });
   expect(violations).toEqual([]);
 });

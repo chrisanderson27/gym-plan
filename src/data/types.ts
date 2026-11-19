@@ -1,3 +1,4 @@
+import type { Activity } from '../engine/plan/activities';
 /**
  * The data contract. Every row type and the `Block` union live here so that later phases never need
  * a Dexie migration for a missing field.
@@ -223,13 +224,18 @@ export interface FeedbackRow {
   context: { sessionId?: string; exerciseId?: string; setId?: string; equipmentId?: string; screen?: string; templateId?: string };
 }
 export type FeedbackKind = FeedbackRow['kind'];
+export const GOAL_DIRECTIONS = ['lose', 'gain', 'maintain'] as const;
+export type GoalDirection = typeof GOAL_DIRECTIONS[number];
+
 export interface Settings {
   id: 'settings';
   goalWeightLb: number;
   startWeightLb?: number;
   daysPerWeek: number;
-  poolUnit: PoolUnit;
-  poolLength: number;
+  activities?: Activity[];
+  goalDirection?: GoalDirection;
+  poolUnit?: PoolUnit;
+  poolLength?: number;
   weightUnit: 'lb';
   distanceUnit: 'mi';
   programStart: LocalDate;

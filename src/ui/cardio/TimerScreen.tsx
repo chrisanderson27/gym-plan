@@ -6,7 +6,7 @@ import {
 } from '../../engine/timer';
 import { beep, unlockAudio } from '../../platform/audio';
 import { holdWakeLock } from '../../platform/wakelock';
-import { FeedbackButton, type FeedbackContext } from '../slots/FeedbackButton';
+import { MoreMenu, type FeedbackContext } from '../MoreMenu';
 import { fmtMSS } from './format';
 
 interface Props {
@@ -76,6 +76,7 @@ export function TimerScreen({ blocks, onFinish, onExit, feedbackContext }: Props
 
   return (
     <main class="timer" data-role={role} data-testid="timer">
+      <header class="timer-header"><MoreMenu feedback={{ kind: 'workout', context: { ...feedbackContext, ...(v.step?.exerciseId ? { exerciseId: v.step.exerciseId } : {}) } }} /></header>
       {!v.started ? (
         <>
           <h1>Ready</h1>
@@ -105,7 +106,6 @@ export function TimerScreen({ blocks, onFinish, onExit, feedbackContext }: Props
           </div>
         </>
       )}
-      <FeedbackButton kind="workout" context={{ ...feedbackContext, ...(v.step?.exerciseId ? { exerciseId: v.step.exerciseId } : {}) }} />
     </main>
   );
 }

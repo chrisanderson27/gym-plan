@@ -75,6 +75,22 @@ describe('export/import', () => {
     }
   });
 
+  it('round-trips activity and goal settings with no pool and rejects an empty activity list', async () => {
+    const src = open();
+    const { poolUnit: _unit, poolLength: _length, ...noPool } = settings({ activities: ['run'], goalDirection: 'gain' });
+    void _unit;
+    void _length;
+    await src.settings.put(noPool);
+    const backup = await buildExport(src, new Date(), 'test');
+    const dst = open();
+    await importExport(dst, parseExport(JSON.stringify(backup)).file);
+    const row = await dst.settings.get('settings');
+    expect(row).toMatchObject({ activities: ['run'], goalDirection: 'gain' });
+    expect(row).not.toHaveProperty('poolUnit');
+    expect(row).not.toHaveProperty('poolLength');
+    expect(() => parseExport(JSON.stringify({ ...backup, stores: { settings: [{ ...noPool, activities: [] }] } }))).toThrow(ImportError);
+  });
+
   it('never deletes local rows absent from the file', async () => {
     const src = open();
     await src.sessions.put(session('from-file'));

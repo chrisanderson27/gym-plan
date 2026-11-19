@@ -46,6 +46,11 @@ function ratio(a: string, b: string): number {
 const BODY = 4.5;
 const NONTEXT = 3;
 const PAIRS: [string, string, number][] = [
+  ...['lift', 'burn', 'run', 'swim', 'hybrid'].flatMap((activity): [string, string, number][] => [
+    [`on-act-${activity}`, `act-${activity}`, BODY],
+    [`act-${activity}`, 'color-canvas', NONTEXT],
+    [`act-${activity}`, 'color-surface', NONTEXT],
+  ]),
   ['color-text-primary', 'color-canvas', BODY],
   ['color-text-primary', 'color-surface', BODY],
   ['color-text-primary', 'color-surface-hover', BODY],
@@ -123,14 +128,10 @@ describe('stylesheet contracts', () => {
   const styles = readFileSync(join(__dirname, 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   it('timer button colours do not leak into the nested feedback sheet', () => {
     expect(styles).not.toMatch(/\.timer button/);
-    expect(styles).toMatch(/\.timer > \.sheet\s*\{[^}]*color:\s*var\(--color-text-primary\)/);
+    expect(styles).toMatch(/\.timer-header > \.sheet\s*\{[^}]*color:\s*var\(--color-text-primary\)/);
   });
   it('timer focus ring uses --timer-focus', () => {
     expect(styles).toMatch(/\.timer > button:focus-visible[^{]*\{\s*outline-color:\s*var\(--timer-focus\)/);
-  });
-  it('tile helper text rule does not out-specify the status chip colours', () => {
-    expect(styles).not.toMatch(/\.tile small\s*[,{]/);
-    expect(styles).toMatch(/\.tile small:not\(\.status\)/);
   });
   it('selected chips are tinted, never solid action blue', () => {
     expect(styles).toMatch(/\.chip\.on\s*\{[^}]*var\(--chip-on-bg\)/);
@@ -177,7 +178,7 @@ describe('design tokens: no colour literals outside tokens.css', () => {
   it('has no fill=/stroke= JSX colour attributes in ui tsx', () => {
     const hits = files
       .filter((f) => f.startsWith('ui/') && f.endsWith('.tsx'))
-      .filter((f) => /\b(fill|stroke)="/.test(readFileSync(join(srcRoot, f), 'utf8')));
+      .filter((f) => /\b(fill|stroke)="(?!none"|currentColor")/.test(readFileSync(join(srcRoot, f), 'utf8')));
     expect(hits).toEqual([]);
   });
 });

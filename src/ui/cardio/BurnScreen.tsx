@@ -9,7 +9,7 @@ import { generateBurn, nextBurnTemplate } from '../../engine/burn';
 import { BURN_BUDGETS_MIN, BURN_DEFAULT_MIN } from '../../engine/config';
 import { MineRow } from '../mine/MineRow';
 import { navigate } from '../router';
-import { FeedbackButton } from '../slots/FeedbackButton';
+import { MoreMenu } from '../MoreMenu';
 import { dayOf } from './format';
 import { RpeChips } from './RpeChips';
 import { TimerScreen } from './TimerScreen';
@@ -73,11 +73,13 @@ export function BurnScreen() {
     };
     return (
       <main class="screen">
-        <header class="bar"><h1>{result.early ? 'Session ended early' : 'Session complete'}</h1></header>
+        <header class="bar">
+          <h1>{result.early ? 'Session ended early' : 'Session complete'}</h1>
+          <MoreMenu feedback={{ kind: 'workout', context: { sessionId, templateId: template.id } }} />
+        </header>
         <p>How hard was it? (optional)</p>
         <RpeChips value={rpe} onChange={setRpe} allowSkip />
         <button type="button" class="primary" data-testid="burn-save" disabled={saving} onClick={save}>Save</button>
-        <FeedbackButton kind="workout" context={{ sessionId, templateId: template.id }} />
       </main>
     );
   }
@@ -95,6 +97,7 @@ export function BurnScreen() {
       <header class="bar">
         <h1>Burn class</h1>
         <a class="gear" href="#/">Home</a>
+        <MoreMenu feedback={{ kind: 'workout', context: { templateId: template.id } }} />
       </header>
       <div class="chips">
         {BURN_TEMPLATES.map((t) => (
@@ -134,7 +137,6 @@ export function BurnScreen() {
       <button type="button" class="primary" data-testid="burn-start" onClick={() => { setFrozen(plan.blocks); setStage('timer'); }}>Start</button>
       <p class="dim">{last ? `Last Burn: ${dayOf(last)}` : 'No Burn yet'}</p>
       <MineRow types={['burn']} />
-      <FeedbackButton kind="workout" context={{ templateId: template.id }} />
     </main>
   );
 }

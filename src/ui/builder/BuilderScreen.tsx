@@ -9,7 +9,7 @@ import { TRACKED_MUSCLES } from '../../engine/config';
 import { moveBlock, newLiftBlock, pairWithNext, removeBlock, unpair } from '../../engine/templates';
 import { equipmentTagName, muscleName } from '../labels';
 import { navigate } from '../router';
-import { FeedbackButton } from '../slots/FeedbackButton';
+import { MoreMenu } from '../MoreMenu';
 
 // Rep-based lifts only; the warm-up machines (repMax 0) are not builder material.
 const CHOICES = [...LIFT_EXERCISES.values()].filter((e) => e.repMax > 0);
@@ -60,6 +60,7 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
       <header class="bar">
         <h1>Build a session</h1>
         <a class="gear" href="#/">Home</a>
+        <MoreMenu feedback={{ kind: 'workout', context: {} }} />
       </header>
       <label>
         Name
@@ -113,7 +114,6 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
       {!ok && <p class="dim" data-testid="builder-hint">{name.trim().length === 0 ? 'Name your workout to start' : 'Add an exercise to start'}</p>}
       <button type="button" class="primary" data-testid="builder-start" disabled={!ok || busy} onClick={onStart}>Start</button>
       <button type="button" data-testid="builder-save" disabled={!ok || busy} onClick={onSave}>Save</button>
-      <FeedbackButton kind="workout" context={{}} />
     </main>
   );
 }

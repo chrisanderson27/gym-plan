@@ -4,6 +4,7 @@ import { burnInputs, loadCardioSnapshot, saveBurn, saveRun, saveSwim, type Cardi
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
 import { useLiveQuery } from '../../data/live';
+import { poolOf } from '../../data/settings';
 import { loadRunnable, startFromBlocks, type Runnable } from '../../data/templates';
 import type { IntervalBlock, RunBlock, SwimSetBlock } from '../../data/types';
 import { localDate } from '../../engine/dates';
@@ -17,8 +18,9 @@ import { RunLog } from '../cardio/RunLog';
 import { SwimCard } from '../cardio/SwimCard';
 import { SwimLog } from '../cardio/SwimLog';
 import { TimerScreen } from '../cardio/TimerScreen';
+import { PoolSheet } from '../PoolSheet';
 import { navigate } from '../router';
-import { FeedbackButton } from '../slots/FeedbackButton';
+import { MoreMenu } from '../MoreMenu';
 
 const { substitutesOf, labelOf } = burnInputs();
 
@@ -30,9 +32,11 @@ export function TemplateRunScreen(src: { templateId: string } | { sessionId: str
   if (!run) {
     return (
       <main class="screen">
-        <h1>Not found</h1>
-        <a href="#/history">History</a>
-        <FeedbackButton kind="workout" context={{}} />
+        <header class="bar">
+          <h1>Not found</h1>
+          <a href="#/history">History</a>
+          <MoreMenu feedback={{ kind: 'workout', context: {} }} />
+        </header>
       </main>
     );
   }
@@ -41,7 +45,7 @@ export function TemplateRunScreen(src: { templateId: string } | { sessionId: str
   if (first?.kind === 'interval') return <BurnAgain run={run} snap={snap} />;
   if (first?.kind === 'run') return <RunAgain run={run} block={first} snap={snap} />;
   if (first?.kind === 'swim') return <SwimAgain run={run} snap={snap} />;
-  return <main class="screen"><h1>Nothing to run</h1><FeedbackButton kind="workout" context={{}} /></main>;
+  return <main class="screen"><header class="bar"><h1>Nothing to run</h1><MoreMenu feedback={{ kind: 'workout', context: {} }} /></header></main>;
 }
 
 function LiftAgain({ run }: { run: Runnable }) {
@@ -53,10 +57,13 @@ function LiftAgain({ run }: { run: Runnable }) {
   };
   return (
     <main class="screen">
-      <header class="bar"><h1>{run.name}</h1><a class="gear" href="#/history">History</a></header>
+      <header class="bar">
+        <h1>{run.name}</h1>
+        <a class="gear" href="#/history">History</a>
+        <MoreMenu feedback={{ kind: 'workout', context: { ...(run.templateId ? { templateId: run.templateId } : {}) } }} />
+      </header>
       <p class="dim">Weights are re-prescribed from your current history.</p>
       <button type="button" class="primary" data-testid="again-start" disabled={busy} onClick={start}>Start</button>
-      <FeedbackButton kind="workout" context={{ ...(run.templateId ? { templateId: run.templateId } : {}) }} />
     </main>
   );
 }
@@ -92,20 +99,25 @@ function BurnAgain({ run, snap }: { run: Runnable; snap: CardioSnapshot }) {
   if (stage === 'log' && result) {
     return (
       <main class="screen">
-        <header class="bar"><h1>Session complete</h1></header>
+        <header class="bar">
+          <h1>Session complete</h1>
+          <MoreMenu feedback={{ kind: 'workout', context: { sessionId, templateId } }} />
+        </header>
         <RpeChips value={rpe} onChange={setRpe} allowSkip />
         <button type="button" class="primary" data-testid="burn-save"
           onClick={async () => { await saveBurn(db, { templateId, blocks: result.blocks, rpe, startedAt: result.startedAt, id: sessionId }); navigate('/'); }}>Save</button>
-        <FeedbackButton kind="workout" context={{ sessionId, templateId }} />
       </main>
     );
   }
   return (
     <main class="screen">
-      <header class="bar"><h1>{run.name}</h1><a class="gear" href="#/history">History</a></header>
+      <header class="bar">
+        <h1>{run.name}</h1>
+        <a class="gear" href="#/history">History</a>
+        <MoreMenu feedback={{ kind: 'workout', context: { sessionId, templateId } }} />
+      </header>
       <ul class="plan">{blocks.map((b) => <li key={b.id}>{b.label ?? 'Block'} · {b.rounds}×</li>)}</ul>
       <button type="button" class="primary" data-testid="again-start" onClick={() => setStage('timer')}>Start timer</button>
-      <FeedbackButton kind="workout" context={{ sessionId, templateId }} />
     </main>
   );
 }
@@ -137,16 +149,22 @@ function RunAgain({ run, block, snap }: { run: Runnable; block: RunBlock; snap: 
   if (stage === 'log') {
     return (
       <main class="screen">
-        <header class="bar"><h1>Log run</h1></header>
+        <header class="bar">
+          <h1>Log run</h1>
+          <MoreMenu feedback={{ kind: 'workout', context: ctx }} />
+        </header>
         <RunLog defaultMinutes={Math.round(plan.plannedSec / 60)} defaultModality={plan.block.modality}
           onSave={async (v) => { await saveRun(db, { block: plan.block, startedAt, id: sessionId, ...v }); navigate('/'); }} />
-        <FeedbackButton kind="workout" context={ctx} />
       </main>
     );
   }
   return (
     <main class="screen">
-      <header class="bar"><h1>{run.name}</h1><a class="gear" href="#/history">History</a></header>
+      <header class="bar">
+        <h1>{run.name}</h1>
+        <a class="gear" href="#/history">History</a>
+        <MoreMenu feedback={{ kind: 'workout', context: ctx }} />
+      </header>
       <p data-testid="run-planned"><strong>Planned {Math.round(plan.plannedSec / 60)} min</strong></p>
       <ul class="plan">
         {plan.reasons.map((r) => <li key={r}>{r}</li>)}
@@ -154,7 +172,6 @@ function RunAgain({ run, block, snap }: { run: Runnable; block: RunBlock; snap: 
       </ul>
       <button type="button" class="primary" data-testid="again-start" onClick={() => { setFrozen(runToIntervals(plan.block, plan)); setStage('timer'); }}>Start timer</button>
       <button type="button" data-testid="run-log-direct" onClick={() => setStage('log')}>Log without timer</button>
-      <FeedbackButton kind="workout" context={ctx} />
     </main>
   );
 }
@@ -163,34 +180,41 @@ function SwimAgain({ run, snap }: { run: Runnable; snap: CardioSnapshot }) {
   const [sessionId] = useState(newId);
   const [logging, setLogging] = useState(false);
   const settings = snap.settings;
+  const pool = poolOf(settings);
   const plan = useMemo(() => {
-    if (!settings) return null;
+    if (!settings || !pool) return null;
     const weekIdx = weekIndex(localDate(new Date()), settings.programStart);
-    const css = latestCss(snap.cssTests, settings.poolUnit);
+    const css = latestCss(snap.cssTests, pool.poolUnit);
     // Send-offs always come from the latest CSS, never from the stored blocks.
-    return generateSwim({ blocks: run.blocks.filter((b): b is SwimSetBlock => b.kind === 'swim'), css, poolLength: settings.poolLength, poolUnit: settings.poolUnit, weekIdx, makeId: newId });
-  }, [run, snap, settings]);
-  if (!plan || !settings) return <main class="screen"><h1>{run.name}</h1></main>;
+    return generateSwim({ blocks: run.blocks.filter((b): b is SwimSetBlock => b.kind === 'swim'), css, ...pool, weekIdx, makeId: newId });
+  }, [run, snap, settings, pool?.poolUnit, pool?.poolLength]);
+  if (!settings) return <main class="screen"><h1>{run.name}</h1></main>;
+  if (!pool || !plan) return <main class="screen"><h1>{run.name}</h1><PoolSheet onClose={() => navigate('/progress')} /></main>;
   const ctx = { sessionId, ...(run.templateId ? { templateId: run.templateId } : {}) };
   if (logging) {
     return (
       <main class="screen">
-        <header class="bar"><h1>Log swim</h1></header>
+        <header class="bar">
+          <h1>Log swim</h1>
+          <MoreMenu feedback={{ kind: 'workout', context: ctx }} />
+        </header>
         <SwimLog defaultDistance={plan.totalDistance} onSave={async (v) => {
           const startedAt = new Date(Date.now() - v.durationMin * 60_000).toISOString();
           await saveSwim(db, { workoutId: run.templateId ?? 'mine', blocks: plan.blocks, startedAt, id: sessionId, ...v });
           navigate('/');
         }} />
-        <FeedbackButton kind="workout" context={ctx} />
       </main>
     );
   }
   return (
     <main class="screen">
-      <header class="bar"><h1>{run.name}</h1><a class="gear" href="#/history">History</a></header>
-      <SwimCard blocks={plan.blocks} totalDistance={plan.totalDistance} poolUnit={settings.poolUnit} />
+      <header class="bar">
+        <h1>{run.name}</h1>
+        <a class="gear" href="#/history">History</a>
+        <MoreMenu feedback={{ kind: 'workout', context: ctx }} />
+      </header>
+      <SwimCard blocks={plan.blocks} totalDistance={plan.totalDistance} poolUnit={pool.poolUnit} />
       <button type="button" class="primary" data-testid="again-start" onClick={() => setLogging(true)}>Log swim</button>
-      <FeedbackButton kind="workout" context={ctx} />
     </main>
   );
 }

@@ -10,7 +10,7 @@ import { RunLog } from '../cardio/RunLog';
 import { TimerScreen } from '../cardio/TimerScreen';
 import { modalityName, runKindName } from '../labels';
 import { navigate } from '../router';
-import { FeedbackButton } from '../slots/FeedbackButton';
+import { MoreMenu } from '../MoreMenu';
 
 const LEG_OPTIONS = HYBRID_LEG_MODALITIES.map((id) => ({ id: id as CardioModality, label: modalityName(id) }));
 const UPPER_OPTIONS: { id: CardioModality; label: string }[] = [{ id: 'run', label: 'Outdoors' }, { id: 'treadmill', label: 'Treadmill' }];
@@ -26,9 +26,11 @@ export function HybridCardioScreen({ sessionId }: { sessionId: string }) {
   if (!session || !block) {
     return (
       <main class="screen">
-        <h1>Session not found</h1>
-        <a href="#/hybrid">Back to Hybrid</a>
-        <FeedbackButton kind="workout" context={{}} />
+        <header class="bar">
+          <h1>Session not found</h1>
+          <a href="#/hybrid">Back to Hybrid</a>
+          <MoreMenu feedback={{ kind: 'workout', context: {} }} />
+        </header>
       </main>
     );
   }
@@ -53,14 +55,16 @@ export function HybridCardioScreen({ sessionId }: { sessionId: string }) {
   if (stage === 'log') {
     return (
       <main class="screen">
-        <header class="bar"><h1>Log cardio</h1></header>
+        <header class="bar">
+          <h1>Log cardio</h1>
+          <MoreMenu feedback={{ kind: 'workout', context: { sessionId } }} />
+        </header>
         <RunLog
           defaultMinutes={timed?.minutes ?? plannedMin}
           defaultModality={block.modality}
           modalities={lower ? LEG_OPTIONS : UPPER_OPTIONS}
           onSave={async (v) => { await finishHybridSession(db, sessionId, v); navigate('/'); }}
         />
-        <FeedbackButton kind="workout" context={{ sessionId }} />
       </main>
     );
   }
@@ -70,12 +74,12 @@ export function HybridCardioScreen({ sessionId }: { sessionId: string }) {
       <header class="bar">
         <h1>Hybrid cardio</h1>
         <a class="gear" href="#/">Home</a>
+        <MoreMenu feedback={{ kind: 'workout', context: { sessionId } }} />
       </header>
       <p data-testid="hybrid-cardio-planned"><strong>{modalityName(block.modality)} · {plannedMin} min</strong> ({runKindName(block.runKind)})</p>
       {/* The lift part was the warm-up, so the timer adds none. */}
       <button type="button" class="primary" data-testid="hybrid-timer-start" onClick={() => { setFrozen(runToIntervals(block, { warmupSec: 0, cooldownSec: 0 })); setStage('timer'); }}>Start timer</button>
       <button type="button" data-testid="hybrid-log-direct" onClick={() => { setTimed(null); setStage('log'); }}>Log without timer</button>
-      <FeedbackButton kind="workout" context={{ sessionId }} />
     </main>
   );
 }

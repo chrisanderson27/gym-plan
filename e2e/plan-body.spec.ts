@@ -1,35 +1,21 @@
 import { expect, test, type Page } from '@playwright/test';
-
-async function onboard(page: Page, bodyweight: string) {
-  await page.goto('./');
-  await page.getByLabel('Bodyweight (lb)').fill(bodyweight);
-  await page.getByRole('button', { name: 'Start' }).click();
-  await expect(page.getByTestId('tile-pick')).toBeVisible();
-}
+import { onboard, localDay, seedBackup, openFeedback } from './helpers';
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
-const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
 type Row = Record<string, unknown>;
 
 /** Backup-import seeding (see lifting.spec): settings.updatedAt is ahead so the file's settings win. programStart = today − 32 d is week 5, which began 4 days ago. */
 async function seed(page: Page, stores: Record<string, Row[]>) {
   const now = Date.now();
   const iso = (ms: number) => new Date(ms).toISOString();
-  const backup = {
-    schemaVersion: 1, exportedAt: iso(now), appVersion: 'e2e',
-    stores: {
-      settings: [{
-        id: 'settings', goalWeightLb: 220, startWeightLb: 247.2, daysPerWeek: 5, poolUnit: 'yd', poolLength: 25, weightUnit: 'lb', distanceUnit: 'mi',
-        programStart: localDay(new Date(now - 32 * DAY)), onboardedAt: iso(now - 33 * DAY), backupAt: null, updatedAt: iso(now + 60_000),
-      }],
-      ...stores,
-    },
-  };
-  await page.getByRole('link', { name: 'Settings' }).click();
-  await page.locator('input[type=file]').setInputFiles({ name: 'seed.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
-  await expect(page.getByRole('status').filter({ hasText: 'Imported' })).toBeVisible();
+  await seedBackup(page, {
+    settings: [{
+      id: 'settings', goalWeightLb: 220, startWeightLb: 247.2, daysPerWeek: 5, poolUnit: 'yd', poolLength: 25, weightUnit: 'lb', distanceUnit: 'mi',
+      programStart: localDay(new Date(now - 32 * DAY)), onboardedAt: iso(now - 33 * DAY), backupAt: null, updatedAt: iso(now + 60_000),
+    }],
+    ...stores,
+  });
 }
 
 const liftSession = (id: string, variant: string, startMs: number): Row => ({
@@ -43,7 +29,7 @@ const setsFor = (sid: string, exerciseId: string, equipmentId: string, ts: numbe
   }));
 
 test('simulated week: pick respects 48 h and the 2-hard-session cap', async ({ page }, testInfo) => {
-  await onboard(page, '247.2');
+  await onboard(page);
   const now = Date.now();
   const burn: Row = {
     id: '01HZZZZZZZZZZZZZZZZZZZZZB1', date: new Date(now - 3.5 * DAY).toISOString(), type: 'burn', blocks: [], hard: true, hardCardio: true, rpe: null,
@@ -53,28 +39,27 @@ test('simulated week: pick respects 48 h and the 2-hard-session cap', async ({ p
     id: '01HZZZZZZZZZZZZZZZZZZZZZR1', date: new Date(now - 2.5 * DAY).toISOString(), type: 'run', blocks: [], hard: true, hardCardio: true, rpe: 8,
     durationMin: 25, notes: '', endedAt: new Date(now - 2.5 * DAY + 25 * 60_000).toISOString(),
   };
-  const lower = liftSession('01HZZZZZZZZZZZZZZZZZZZZZL1', 'lower-a', now - 20 * HOUR);
+  const lower = liftSession('01HZZZZZZZZZZZZZZZZZZZZZL1', 'lower-a', now - 26 * HOUR);
   const upper = liftSession('01HZZZZZZZZZZZZZZZZZZZZZU1', 'upper-a', now - 6 * DAY);
   await seed(page, {
     sessions: [burn, run, lower, upper],
     runs: [{ sessionId: '01HZZZZZZZZZZZZZZZZZZZZZR1', kind: 'intervals', modality: 'run', distanceMi: 1.5, durationSec: 1500, intervals: [], rpe: 8, painFlag: false }],
     sets: [
-      ...setsFor('01HZZZZZZZZZZZZZZZZZZZZZL1', 'leg-press', 'pin-stack', now - 20 * HOUR, 200, 10),
+      ...setsFor('01HZZZZZZZZZZZZZZZZZZZZZL1', 'leg-press', 'pin-stack', now - 26 * HOUR, 200, 10),
       ...setsFor('01HZZZZZZZZZZZZZZZZZZZZZU1', 'chest-press-machine', 'pin-stack', now - 6 * DAY, 100, 11),
     ],
   });
 
   await page.goto('./#/');
-  await expect(page.getByTestId('budget-hard')).toContainText('2/2');
-  const pick = page.getByTestId('tile-pick');
+  await page.getByTestId('ring').click();
+  await expect(page.getByRole('dialog', { name: 'This week' })).toContainText('Hard workouts: 2 of 2 maximum');
+  await page.getByRole('button', { name: 'Close' }).click();
+  const pick = page.getByTestId('hero');
   await expect(pick).not.toContainText('Lower');
   await expect(pick).not.toContainText('Burn');
   await expect(pick).not.toContainText('Intervals');
-  await expect(page.getByTestId('status-burn')).toContainText('blocked');
-  await expect(page.getByTestId('status-lift')).not.toContainText('blocked');
-  await expect(page.getByTestId('status-hybrid')).not.toContainText('blocked');
 
-  // Marked, not hidden: a blocked lower is still reachable.
+  // A lower session is still reachable directly.
   await page.goto('./#/lift/start/lower-b');
   await expect(page.getByTestId('start-lift')).toBeVisible();
   await expect(page.getByTestId('variant-lower-b')).toHaveClass(/on/);
@@ -82,22 +67,22 @@ test('simulated week: pick respects 48 h and the 2-hard-session cap', async ({ p
 });
 
 test('hybrid: lift then cardio is one session, with feedback', async ({ page }, testInfo) => {
-  await onboard(page, '247.2');
+  await onboard(page);
   const now = Date.now();
   await seed(page, {
     sessions: [liftSession('01HZZZZZZZZZZZZZZZZZZZZZU1', 'upper-a', now - 4 * DAY)],
     sets: setsFor('01HZZZZZZZZZZZZZZZZZZZZZU1', 'chest-press-machine', 'pin-stack', now - 4 * DAY, 100, 11),
   });
 
-  await page.goto('./#/');
-  await page.getByTestId('tile-hybrid').click();
+  await page.goto('./#/progress');
+  await page.getByTestId('progress-link-hybrid').click();
   await page.getByTestId('hybrid-variant-upper-a').click();
   await page.getByTestId('hybrid-start').click();
   await expect(page).toHaveURL(/\/hybrid\/session\//);
   await expect(page.getByTestId('hybrid-next')).toBeVisible();
 
   // Gap g5: the P5 feedback button is live inside the hybrid session.
-  await page.getByTestId('feedback-workout').click();
+  await openFeedback(page);
   await page.getByTestId('feedback-tag-too-hard').click();
   await page.getByTestId('feedback-save').click();
   await expect(page.getByRole('status').filter({ hasText: 'Feedback saved' }).first()).toBeVisible();
@@ -107,12 +92,12 @@ test('hybrid: lift then cardio is one session, with feedback', async ({ page }, 
   await page.getByTestId(`rir-${ex}-1`).click();
   await page.getByTestId('finish').click();
   await expect(page).toHaveURL(/\/hybrid\/cardio\//);
-  await expect(page.getByTestId('feedback-workout')).toBeVisible();
+  await expect(page.getByTestId('more')).toBeVisible();
   await page.getByTestId('hybrid-log-direct').click();
   await page.getByTestId('run-duration').fill('20');
   await page.getByTestId('rpe-5').click();
   await page.getByTestId('run-save').click();
-  await expect(page.getByTestId('tile-pick')).toBeVisible();
+  await expect(page.getByTestId('hero')).toBeVisible();
 
   await page.goto('./#/history');
   const first = page.locator('[data-testid^="history-"]').first();
@@ -133,7 +118,7 @@ test('hybrid: lift then cardio is one session, with feedback', async ({ page }, 
 });
 
 test('body: weigh-in shows trend and rate', async ({ page }, testInfo) => {
-  await onboard(page, '247.2');
+  await onboard(page);
   const now = Date.now();
   // 60 days at −0.25 lb/day: the EMA needs ~6 weeks to settle on the true slope (−1.75 lb/wk).
   const rows: Row[] = Array.from({ length: 60 }, (_, k) => {
@@ -153,7 +138,7 @@ test('body: weigh-in shows trend and rate', async ({ page }, testInfo) => {
 });
 
 test('builder will not add the same exercise twice', async ({ page }) => {
-  await onboard(page, '247');
+  await onboard(page, { bodyweight: '247' });
   await page.goto('./#/builder');
   await page.getByTestId('builder-search').fill('chest press');
   const add = page.getByTestId('builder-add-chest-press-machine');

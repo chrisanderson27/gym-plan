@@ -1,5 +1,6 @@
 import { BUDGET } from '../config';
 import { daysBetween } from '../dates';
+import { activityOf, enabled } from './activities';
 import { weeklyBudget } from './budget';
 import { concurrency, type CandidateFlags } from './concurrency';
 import type { BudgetLine, Candidate, CandidateId, PlanInput, PlanSession, Status } from './types';
@@ -38,24 +39,30 @@ export interface Ranked {
   candidates: Candidate[];
   budget: BudgetLine[];
   why: string;
+  reason: string;
 }
 
 export function rankToday(input: PlanInput): Ranked {
   const week = weeklyBudget(input);
   const line = (id: BudgetLine['id']) => week.lines.find((l) => l.id === id)!;
 
-  if (!input.hasLiftHistory && input.sessions.length === 0) {
+  const activities = enabled(input.activities);
+  if (activities.includes('lift') && !input.hasLiftHistory && input.sessions.length === 0) {
     const pick: Candidate = {
       id: 'lift-lower', tile: 'lift', title: 'Lower A (calibration)', route: '#/lift/calibrate/lower-a', variant: 'lower-a', status: 'eligible',
       reasons: ['No history yet — calibrate first'], score: { unmet: 0, daysSince: Infinity, readyHoursLeft: 0 },
     };
-    return { pick, candidates: [pick], budget: week.lines, why: 'No history yet — calibrate first' };
+    const reason = pick.reasons[0]!;
+    return { pick, candidates: [pick], budget: week.lines, why: reason, reason };
   }
 
   const trainedToday = input.sessions.some((s) => s.finished && s.day === input.today);
   const full = week.trainingDays >= input.daysPerWeek;
 
-  const candidates: Candidate[] = DEFS.map((d) => {
+  const candidates: Candidate[] = DEFS.filter(({ id }) => {
+    const activity = activityOf(id);
+    return !activity || activities.includes(activity);
+  }).map((d) => {
     const reasons: string[] = [];
     let status: Status = 'eligible';
     const mark = (s: Status, r: string) => { status = worst(status, s); reasons.push(r); };
@@ -108,6 +115,7 @@ export function rankToday(input: PlanInput): Ranked {
 
   const pick = candidates.find((c) => c.status !== 'blocked')!;
   const hard = line('hard');
-  const why = `${pick.reasons.find((r) => !/\d h ago/.test(r)) ?? pick.reasons[0] ?? 'next up'} · ${hard.done}/${hard.max} hard used`;
-  return { pick, candidates, budget: week.lines, why };
+  const reason = pick.reasons.find((r) => !/\d h ago/.test(r)) ?? pick.reasons[0] ?? 'next up';
+  const why = `${reason} · ${hard.done}/${hard.max} hard used`;
+  return { pick, candidates, budget: week.lines, why, reason };
 }

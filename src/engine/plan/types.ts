@@ -1,5 +1,7 @@
 import type { ISODateTime, LiftVariant, LocalDate, RunKind, SessionType } from '../../data/types';
 
+import type { Activity } from './activities';
+
 export interface PlanSession {
   id: string;
   start: ISODateTime;
@@ -11,7 +13,7 @@ export interface PlanSession {
   variant?: LiftVariant;
   lower: boolean;
   heavyLegs: boolean;
-  /** True when the session has working lift sets (counts toward the lifts line). */
+  /** True when the session has working or completed calibration sets (counts toward the lifts line). */
   lifted: boolean;
   runKind?: RunKind;
   hardRun: boolean;
@@ -48,6 +50,7 @@ export interface PlanInput {
   today: LocalDate;
   programStart: LocalDate;
   daysPerWeek: number;
+  activities?: readonly Activity[];
   sessions: PlanSession[];
   lift: Record<'upper' | 'lower', { variant: LiftVariant; ready: boolean; hoursLeft: number; blocking: string[] }>;
   hasLiftHistory: boolean;

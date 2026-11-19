@@ -3,6 +3,7 @@ import { classifyHard } from '../engine/hard';
 import type { RunHistoryItem } from '../engine/run/generator';
 import type { GymDb } from './db';
 import { newId } from './ids';
+import { poolOf } from './settings';
 import type {
   CssTest, IntervalBlock, ISODateTime, RunBlock, RunSegment, Session, SessionType, Settings, SwimSetBlock,
 } from './types';
@@ -163,18 +164,18 @@ export async function saveSwim(
   const times = input.css ? validateCss(input.css) : null; // fail before writing anything
   await db.transaction('rw', db.settings, db.sessions, db.swims, db.tests, async () => {
     // Read inside the transaction so the row records the pool this swim really used.
-    const settings = await db.settings.get('settings');
-    if (!settings) throw new Error('Settings are missing: finish onboarding first');
+    const pool = poolOf(await db.settings.get('settings'));
+    if (!pool) throw new Error('Set your pool before logging a swim');
     await db.sessions.add({
       id, date: input.startedAt, type: 'swim', templateId: input.workoutId, blocks: input.blocks,
       ...classifyHard({ type: 'swim', rpe: input.rpe, runKinds: [] }),
       rpe: input.rpe, durationMin: input.durationMin, notes: '', endedAt: now.toISOString(),
     });
     await db.swims.add({
-      sessionId: id, poolLength: settings.poolLength, poolUnit: settings.poolUnit, distance: input.distance, sets: input.blocks,
+      sessionId: id, ...pool, distance: input.distance, sets: input.blocks,
       rpe: input.rpe, shoulderPainFlag: input.shoulderPainFlag,
     });
-    if (times) await db.tests.add({ id: newId(), kind: 'css', date: now.toISOString(), poolUnit: settings.poolUnit, ...times });
+    if (times) await db.tests.add({ id: newId(), kind: 'css', date: now.toISOString(), poolUnit: pool.poolUnit, ...times });
   });
   return id;
 }

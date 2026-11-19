@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { GymDb } from './db';
-import { loadPlanInput } from './plan';
+import { localDate } from '../engine/dates';
+import { loadPlanInput, loadRingInput } from './plan';
 import { NOW, seedSettings, session, topSets } from './p4-test-utils';
 import { openTestDb } from './test-utils';
 
@@ -36,4 +37,21 @@ describe('loadPlanInput', () => {
     expect(input.lift.upper.variant).toBe('upper-b');
     expect(input.lift.lower.variant).toBe('lower-a');
   });
+});
+
+it('loads program history beyond the pick window and reports only finished sessions for today', async () => {
+  const db = open();
+  const now = new Date(2026, 10, 12, 16);
+  const today = localDate(now);
+  await seedSettings(db, { activities: ['lift'] });
+  const date = new Date(2026, 10, 12, 10).toISOString();
+  const openToday = { ...session('active', 0), date };
+  delete openToday.endedAt;
+  await db.sessions.bulkPut([session('past', 24 * 20), openToday]);
+  expect(await loadRingInput(db, now)).toMatchObject({
+    programStart: '2026-10-12', today, activities: ['lift'], done: undefined,
+    sessions: [{ id: 'past', finished: true }, { id: 'active', finished: false }],
+  });
+  await db.sessions.update('active', { endedAt: now.toISOString() });
+  expect((await loadRingInput(db, now)).done).toMatchObject({ id: 'active', durationMin: 45 });
 });

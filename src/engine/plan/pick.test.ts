@@ -33,6 +33,18 @@ describe('rankToday', () => {
     expect(r.pick).toMatchObject({ title: 'Lower A (calibration)', route: '#/lift/calibrate/lower-a' });
     expect(r.why).toBe('No history yet — calibrate first');
   });
+  it('excludes disabled swim and separates the reason from the hard count', () => {
+    const ranked = rankToday(input([], { activities: ['lift', 'run'] }));
+    expect(ranked.candidates.map((candidate) => candidate.id)).not.toContain('swim');
+    expect(ranked.reason).not.toContain('hard used');
+    expect(ranked.why).toContain('hard used');
+  });
+  it('skips the first-lift calibration for a Burn-only user', () => {
+    const ranked = rankToday(input([], { activities: ['burn'], hasLiftHistory: false }));
+    expect(ranked.pick.id).toBe('burn');
+    expect(ranked.candidates.map((candidate) => candidate.id)).toEqual(['burn', 'rest']);
+    expect(rankToday(input([], { activities: [] })).pick.id).toBe('rest');
+  });
   it('rest is the pick once the training days are used', () => {
     // Mon, Tue and Wed trained with a 3-day plan: 3/3 used.
     const r = rankToday(input([upperA(24), session(48, { type: 'swim' }), burn(72)], { daysPerWeek: 3 }));

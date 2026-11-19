@@ -1,3 +1,4 @@
+import { CheckIcon } from '../icons';
 import { useState } from 'preact/hooks';
 import { exerciseById } from '../../content';
 import { db } from '../../data/db';
@@ -8,7 +9,6 @@ import { pickSubstitute } from '../../engine/lift/generator';
 import { painSwapOffer } from '../../engine/lift/pain';
 import { calibrationLanding, calibrationStart } from '../../engine/lift/progression';
 import { stepBy } from '../../engine/lift/steps';
-import { FeedbackButton } from '../slots/FeedbackButton';
 import { PoseView } from '../slots/PoseView';
 import type { CardProps } from './ExerciseCard';
 import { Stepper } from './Stepper';
@@ -66,7 +66,6 @@ export function CalibrationCard(p: CardProps) {
     <section class="card" data-testid={`exercise-${block.exerciseId}`}>
       <header>
         <h2>{ex?.name ?? block.exerciseId}</h2>
-        <FeedbackButton kind="exercise" context={{ sessionId: session.id, exerciseId: block.exerciseId, equipmentId: block.equipmentId }} />
       </header>
       <PoseView exerciseId={block.exerciseId} poseId={ex?.poseId} />
       <button type="button" class="link" onClick={p.onEquipment}>{eq?.name ?? 'Choose equipment'} ▾</button>
@@ -78,8 +77,7 @@ export function CalibrationCard(p: CardProps) {
             <span class="loggedval"><span class="val">{s.weight}</span> lb × {s.reps}</span>
           </div>
           <div class="setline">
-            <button type="button" aria-label="pain" aria-pressed={s.painFlag} class={s.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, s.id, !s.painFlag)}>⚠</button>
-            <FeedbackButton kind="set" context={{ sessionId: session.id, exerciseId: block.exerciseId, setId: s.id, equipmentId: s.equipmentId }} />
+            <button type="button" aria-label="pain" aria-pressed={s.painFlag} class={s.painFlag ? 'pain on' : 'pain'} onClick={() => setPainFlag(db, s.id, !s.painFlag)}>Pain</button>
           </div>
         </div>
       ))}
@@ -106,7 +104,7 @@ export function CalibrationCard(p: CardProps) {
           </div>
           <div class="setline">
             <Stepper value={reps} unit="reps" downLabel="reps down" upLabel="reps up" onDown={() => setReps(Math.max(1, reps - 1))} onUp={() => setReps(reps + 1)} />
-            <button type="button" class="tick" data-testid={`cal-log-${block.exerciseId}`} onClick={log}>✓</button>
+            <button type="button" class="tick" data-testid={`cal-log-${block.exerciseId}`} onClick={log} aria-label="Log set"><CheckIcon /></button>
           </div>
         </div>
       )}

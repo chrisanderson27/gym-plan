@@ -1,6 +1,19 @@
 /* The only stylesheet in src/ allowed to contain colour literals (guarded by tokens.test.ts).
    Tiers: primitive (:root) -> semantic (per theme) -> component. data-theme holds the preference. */
 :root {
+  --s-1: 8px;
+  --s-2: 16px;
+  --s-3: 24px;
+  --s-4: 32px;
+  --s-5: 40px;
+  --s-6: 48px;
+  --s-7: 56px;
+  --s-8: 64px;
+  --fs-display: clamp(48px, 14vw, 64px);
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
+  --dur-slow: 250ms;
+  --tab-height: 64px;
   --gray-0: #ffffff;
   --gray-10: #f4f4f4;
   --gray-10-hover: #e8e8e8;
@@ -84,6 +97,16 @@
 
 :root, [data-theme='light'], [data-theme='system'] {
   color-scheme: light;
+  --act-lift: #4f46e5;
+  --on-act-lift: var(--gray-0);
+  --act-burn: #c2410c;
+  --on-act-burn: var(--gray-0);
+  --act-run: #237a37;
+  --on-act-run: var(--gray-0);
+  --act-swim: #1971c2;
+  --on-act-swim: var(--gray-0);
+  --act-hybrid: var(--act-lift);
+  --on-act-hybrid: var(--on-act-lift);
   --color-canvas: var(--gray-10);
   --color-surface: var(--gray-0);
   --color-surface-hover: var(--gray-10-hover);
@@ -139,6 +162,14 @@
 
 [data-theme='dark'] {
   color-scheme: dark;
+  --act-lift: #a5a0ff;
+  --on-act-lift: var(--gray-100);
+  --act-burn: #ff925c;
+  --on-act-burn: var(--gray-100);
+  --act-run: #69db7c;
+  --on-act-run: var(--gray-100);
+  --act-swim: #74c0fc;
+  --on-act-swim: var(--gray-100);
   --color-canvas: var(--gray-100);
   --color-surface: var(--gray-90);
   --color-surface-hover: var(--gray-90-hover);
@@ -171,6 +202,14 @@
 @media (prefers-color-scheme: dark) {
   [data-theme='system'] {
     color-scheme: dark;
+    --act-lift: #a5a0ff;
+    --on-act-lift: var(--gray-100);
+    --act-burn: #ff925c;
+    --on-act-burn: var(--gray-100);
+    --act-run: #69db7c;
+    --on-act-run: var(--gray-100);
+    --act-swim: #74c0fc;
+    --on-act-swim: var(--gray-100);
     --color-canvas: var(--gray-100);
     --color-surface: var(--gray-90);
     --color-surface-hover: var(--gray-90-hover);
@@ -198,5 +237,13 @@
     --color-selected-bg: var(--blue-90);
     --color-selected-text: var(--blue-40);
     --pose-implement: var(--blue-40);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
   }
 }

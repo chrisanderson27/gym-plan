@@ -1,6 +1,7 @@
+import { ACTIVITIES } from '../engine/plan/activities';
 import { ImportError } from './errors';
 import type { StoreName } from './stores';
-import { APPEARANCES, FEEDBACK_TAGS } from './types';
+import { APPEARANCES, FEEDBACK_TAGS, GOAL_DIRECTIONS } from './types';
 
 type Rec = Record<string, unknown>;
 type Check = (v: unknown) => boolean;
@@ -30,6 +31,7 @@ const shape = (fields: Record<string, Check>): Check => (v) =>
   isRec(v) && Object.entries(fields).every(([k, c]) => c(v[k]));
 
 const SESSION_TYPES = ['lift', 'burn', 'run', 'swim', 'hybrid', 'custom'];
+const activityArray = arr(oneOf(...ACTIVITIES));
 const POOL_UNITS = ['yd', 'm'];
 const MODALITIES = ['run', 'treadmill', 'bike', 'row', 'ski', 'stair', 'elliptical'];
 const RUN_FORMATS = ['sprint-walk', 'sprint-jog', '30-30', 'norwegian-4x4', 'hill', 'treadmill-incline', 'run-walk'];
@@ -108,7 +110,9 @@ const ROW_SHAPES: Record<StoreName, Check> = {
     context: shape({ sessionId: opt(str), exerciseId: opt(str), setId: opt(str), equipmentId: opt(str), screen: opt(str), templateId: opt(str) }), ref: opt(str),
   }),
   settings: shape({
-    id: oneOf('settings'), goalWeightLb: num, daysPerWeek: num, poolUnit: oneOf(...POOL_UNITS), poolLength: num,
+    id: oneOf('settings'), goalWeightLb: num, daysPerWeek: num, poolUnit: opt(oneOf(...POOL_UNITS)), poolLength: opt(num),
+    activities: opt((v) => Array.isArray(v) && v.length > 0 && activityArray(v)),
+    goalDirection: opt(oneOf(...GOAL_DIRECTIONS)),
     weightUnit: oneOf('lb'), distanceUnit: oneOf('mi'), programStart: localDate, onboardedAt: iso,
     backupAt: nullable(iso), updatedAt: iso, startWeightLb: opt(num), appearance: opt(oneOf(...APPEARANCES)),
   }),

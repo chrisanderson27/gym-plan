@@ -40,6 +40,19 @@ describe('body trend', () => {
     expect(etaToGoal(248, 220, null, TODAY)).toBeNull();
     expect(etaToGoal(219.5, 220, -1, TODAY)).toBe('reached');
   });
+  it('gain needs to reach the target from below and projects with a positive rate', () => {
+    expect(etaToGoal(205, 220, -1.5, TODAY, 'gain')).toBeNull();
+    expect(etaToGoal(205, 220, 1.5, TODAY, 'gain')).toBe(addDays(TODAY, 70));
+    expect(etaToGoal(220, 220, null, TODAY, 'gain')).toBe('reached');
+  });
+  it('lose treats a trend below the target as reached', () => {
+    expect(etaToGoal(205, 220, null, TODAY, 'lose')).toBe('reached');
+  });
+  it('maintain has a two-pound band and no ETA', () => {
+    expect(etaToGoal(218, 220, -1, TODAY, 'maintain')).toBe('reached');
+    expect(etaToGoal(222, 220, 1, TODAY, 'maintain')).toBe('reached');
+    expect(etaToGoal(222.1, 220, -1, TODAY, 'maintain')).toBeNull();
+  });
   it('waist is due when none was logged in the last 7 days', () => {
     expect(waistDue([], TODAY)).toBe(true);
     expect(waistDue([{ date: addDays(TODAY, -3), waistIn: 40 }], TODAY)).toBe(false);

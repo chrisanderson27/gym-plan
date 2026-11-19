@@ -12,7 +12,7 @@ import { weekIndex } from '../../engine/week';
 import { durationLabel } from '../labels';
 import { MineRow } from '../mine/MineRow';
 import { navigate } from '../router';
-import { FeedbackButton } from '../slots/FeedbackButton';
+import { MoreMenu } from '../MoreMenu';
 import { dayOf } from './format';
 import { RunLog, type RunLogValues } from './RunLog';
 import { TimerScreen } from './TimerScreen';
@@ -79,9 +79,11 @@ export function RunScreen({ initialKind }: { initialKind?: RunKind }) {
     const startedAt = timed?.startedAt ?? new Date().toISOString();
     return (
       <main class="screen">
-        <header class="bar"><h1>{timed ? 'Session complete' : 'Log run'}</h1></header>
+        <header class="bar">
+          <h1>{timed ? 'Session complete' : 'Log run'}</h1>
+          <MoreMenu feedback={{ kind: 'workout', context: { sessionId, templateId: runTemplateId } }} />
+        </header>
         <RunLog defaultMinutes={timed?.minutes ?? plannedMin} defaultModality={plan.block.modality} onSave={(v) => record(v, startedAt)} />
-        <FeedbackButton kind="workout" context={{ sessionId, templateId: runTemplateId }} />
       </main>
     );
   }
@@ -93,6 +95,7 @@ export function RunScreen({ initialKind }: { initialKind?: RunKind }) {
       <header class="bar">
         <h1>Run</h1>
         <a class="gear" href="#/">Home</a>
+        <MoreMenu feedback={{ kind: 'workout', context: { templateId: runTemplateId } }} />
       </header>
       <div class="chips">
         {KINDS.map((k) => (
@@ -132,7 +135,6 @@ export function RunScreen({ initialKind }: { initialKind?: RunKind }) {
       <button type="button" data-testid="run-log-direct" onClick={() => { setTimed(null); setStage('log'); }}>Log without timer</button>
       <p class="dim">{lastRun ? `Last run: ${dayOf(lastRun.date)} · ${Math.round(lastRun.durationSec / 60)} min` : 'No runs yet'}</p>
       <MineRow types={['run']} />
-      <FeedbackButton kind="workout" context={{ templateId: runTemplateId }} />
     </main>
   );
 }

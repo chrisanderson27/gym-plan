@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { LIFT_TEMPLATES } from '../../content';
 import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
@@ -15,7 +15,7 @@ import type { LiftBlock } from '../../data/types';
 import { localDate } from '../../engine/dates';
 import { pickSubstitute } from '../../engine/lift/generator';
 import { isRampInWeek, weekIndex } from '../../engine/week';
-import { FeedbackButton } from '../slots/FeedbackButton';
+import { MoreMenu } from '../MoreMenu';
 import { modalityName, runKindName } from '../labels';
 import { navigate } from '../router';
 import { CalibrationCard } from './CalibrationCard';
@@ -36,6 +36,10 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
   }, [sessionId]);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [rpePrompt, setRpePrompt] = useState(false);
+  const rpeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (rpePrompt) rpeRef.current?.scrollIntoView({ block: 'end' });
+  }, [rpePrompt]);
   const [fatigue, setFatigue] = useState(false);
 
   if (!data) return <main class="screen"><h1>Session</h1></main>;
@@ -119,7 +123,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     <main class="screen">
       <header class="bar">
         <h1>{name}</h1>
-        <FeedbackButton kind="workout" context={{ sessionId }} />
+        <MoreMenu feedback={{ kind: 'workout', context: { sessionId } }} />
       </header>
       <p class="dim">{session.endedAt ? 'Finished' : 'In progress'} · {elapsed} min</p>
 
@@ -133,7 +137,15 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         <section class="card" data-testid="warmup">
           <h2>{warm.label}</h2>
           <p class="dim">{warm.notes}</p>
-          <label class="check"><input type="checkbox" data-testid="warmup-done" /><span>Warm-up done</span></label>
+          <label class="check">
+            <input type="checkbox" data-testid="warmup-done" onChange={(event) => {
+              if (event.currentTarget.checked) {
+                const firstSet = event.currentTarget.closest('main')?.querySelector('.setrow, [data-testid^="cal-log-"]');
+                firstSet?.scrollIntoView({ block: 'center' });
+              }
+            }} />
+            <span>Warm-up done</span>
+          </label>
         </section>
       )}
 
@@ -173,7 +185,7 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
         <button type="button" class="primary" data-testid="finish" onClick={() => (isHybrid ? navigate('/hybrid/cardio/' + sessionId) : setRpePrompt(true))}>Finish</button>
       )}
       {rpePrompt && (
-        <div class="sheet" data-testid="rpe-prompt">
+        <div ref={rpeRef} class="sheet" data-testid="rpe-prompt">
           <p>How hard was the session overall? (optional)</p>
           <div class="chips">
             {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (

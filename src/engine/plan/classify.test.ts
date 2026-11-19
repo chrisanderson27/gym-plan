@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { RunRow, Session, SetRow } from '../../data/types';
+import { weeklyBudget } from './budget';
+import { input } from './plan-test-utils';
+import { weekRing } from './ring';
 import { toPlanSession } from './classify';
 
 const ex = new Map([
@@ -35,6 +38,14 @@ describe('toPlanSession', () => {
   it('an easy run at RPE 8 is a hard run', () => {
     expect(toPlanSession({ ...base, type: 'run' }, [], run({ rpe: 8 }), ex).hardRun).toBe(true);
     expect(toPlanSession({ ...base, type: 'run' }, [], run({ rpe: 5 }), ex).hardRun).toBe(false);
+  });
+  it('counts a completed calibration set towards both lift goals', () => {
+    const calibration = { ...set('leg-press', 0), setKind: 'calibration' as const };
+    const p = toPlanSession(base, [calibration], undefined, ex);
+    expect(p.lifted).toBe(true);
+    expect(toPlanSession(base, [{ ...calibration, reps: 0 }], undefined, ex).lifted).toBe(false);
+    expect(weeklyBudget(input([p])).lines.find((line) => line.id === 'lifts')?.done).toBe(1);
+    expect(weekRing([p], { from: '2026-03-09', to: '2026-03-15' }, ['lift']).done).toBe(1);
   });
   it('an open session ends at its start and is unfinished', () => {
     const { endedAt: _e, ...open } = base;

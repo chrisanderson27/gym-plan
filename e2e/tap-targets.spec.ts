@@ -1,13 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-
-const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-async function onboard(page: Page) {
-  await page.goto('./');
-  await page.getByLabel('Bodyweight (lb)').fill('247.2');
-  await page.getByRole('button', { name: 'Start' }).click();
-  await expect(page.getByTestId('tile-pick')).toBeVisible();
-}
+import { onboard, localDay, seedBackup, tooSmall, pageWidth, openFeedback } from './helpers';
 
 /** Onboard, then import one finished Upper A so the chest press has history (working sets, not calibration). */
 async function onboardWithHistory(page: Page) {
@@ -20,57 +12,22 @@ async function onboardWithHistory(page: Page) {
     targetWeight: 100, targetReps: 11, weight: 100, reps: 11, painFlag: false, setKind: 'working', ts: iso(now - 4 * 86_400_000),
     ...(idx === 2 ? { rir: 1 } : {}),
   }));
-  const backup = {
-    schemaVersion: 1, exportedAt: iso(now), appVersion: 'e2e',
-    stores: {
-      settings: [{
-        id: 'settings', goalWeightLb: 220, startWeightLb: 247.2, daysPerWeek: 5, poolUnit: 'yd', poolLength: 25, weightUnit: 'lb', distanceUnit: 'mi',
-        programStart: localDay(new Date(now - 28 * 86_400_000)), onboardedAt: iso(now - 29 * 86_400_000), backupAt: null, updatedAt: iso(now + 60_000),
-      }],
-      sessions: [{
-        id: sid, date: iso(now - 4 * 86_400_000), type: 'lift', variant: 'upper-a', blocks: [], hard: false, hardCardio: false, rpe: null,
-        durationMin: 50, notes: '', endedAt: iso(now - 4 * 86_400_000 + 3_000_000),
-      }],
-      sets,
-    },
-  };
-  await page.getByRole('link', { name: 'Settings' }).click();
-  await page.locator('input[type=file]').setInputFiles({ name: 'seed.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
-  await expect(page.getByRole('status').filter({ hasText: 'Imported' })).toBeVisible();
-}
-
-/**
- * Every visible button, link, select and text input is at least 56 x 56 px. A checkbox is judged by its label
- * (the whole row is the hit area); the visually hidden file input by the label button drawn around it.
- */
-async function tooSmall(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const out: string[] = [];
-    for (const el of Array.from(document.querySelectorAll<HTMLElement>('button, a[href], input, select'))) {
-      const isFile = el instanceof HTMLInputElement && el.type === 'file';
-      const isCheck = el instanceof HTMLInputElement && el.type === 'checkbox';
-      const target = isFile || isCheck ? el.closest('label') : el;
-      if (!target) {
-        out.push(`${el.tagName} without a label`);
-        continue;
-      }
-      const cs = getComputedStyle(target);
-      const r = target.getBoundingClientRect();
-      if (cs.display === 'none' || cs.visibility === 'hidden' || r.width === 0 || r.height === 0) continue;
-      const name = `${el.tagName.toLowerCase()} "${(target.getAttribute('aria-label') ?? target.textContent ?? '').trim().slice(0, 30)}"`;
-      if (r.height < 55.5) out.push(`${name} is ${Math.round(r.height)}px tall`);
-      if (r.width < 55.5) out.push(`${name} is ${Math.round(r.width)}px wide`);
-    }
-    return out;
+  await seedBackup(page, {
+    settings: [{
+      id: 'settings', goalWeightLb: 220, startWeightLb: 247.2, daysPerWeek: 5, poolUnit: 'yd', poolLength: 25, weightUnit: 'lb', distanceUnit: 'mi',
+      programStart: localDay(new Date(now - 28 * 86_400_000)), onboardedAt: iso(now - 29 * 86_400_000), backupAt: null, updatedAt: iso(now + 60_000),
+    }],
+    sessions: [{
+      id: sid, date: iso(now - 4 * 86_400_000), type: 'lift', variant: 'upper-a', blocks: [], hard: false, hardCardio: false, rpe: null,
+      durationMin: 50, notes: '', endedAt: iso(now - 4 * 86_400_000 + 3_000_000),
+    }],
+    sets,
   });
 }
 
-/** The page never scrolls sideways: the document is no wider than the 390 px viewport. */
-const pageWidth = (page: Page) => page.evaluate(() => document.scrollingElement!.scrollWidth);
-
 const ROUTES = [
   '#/', '#/lift', '#/lift/volume', '#/lift/gym', '#/burn', '#/run', '#/swim', '#/swim/css',
-  '#/hybrid', '#/history', '#/weigh-in', '#/builder', '#/settings',
+  '#/hybrid', '#/progress', '#/history', '#/weigh-in', '#/builder', '#/settings',
 ];
 
 test('every tap target on the key screens is at least 56 x 56 px and no page scrolls sideways', async ({ page }) => {
@@ -83,7 +40,7 @@ test('every tap target on the key screens is at least 56 x 56 px and no page scr
   }
 });
 
-test('the Home settings control is a 56 x 56 icon button named Settings', async ({ page }) => {
+test('the Settings tab has a 56 x 56 minimum target', async ({ page }) => {
   await onboard(page);
   const box = await page.getByRole('link', { name: 'Settings' }).boundingBox();
   expect(box!.width).toBeGreaterThanOrEqual(55.5);
@@ -96,9 +53,9 @@ test('lift session: every control is 56 x 56 and each set row is exactly two lin
   await page.getByTestId('variant-upper-a').click();
   await page.getByTestId('start-lift').click();
   await expect(page.locator('.setrow').first()).toBeVisible();
-  // Log one set so the ⚠ and 💬 buttons are on screen as well.
+  // Log one set so the pain control is present.
   await page.getByTestId('set-done-chest-press-machine-0').click();
-  await expect(page.getByTestId('set-chest-press-machine-0').getByTestId('feedback-set')).toBeVisible();
+  await expect(page.getByTestId('set-chest-press-machine-0').getByRole('button', { name: 'pain' })).toBeVisible();
   expect(await tooSmall(page)).toEqual([]);
   expect(await pageWidth(page)).toBeLessThanOrEqual(390);
   const rows = await page.evaluate(() =>
@@ -242,21 +199,15 @@ test('an open sheet traps Tab inside the dialog, makes the page inert and locks 
   await expect(opener).toBeFocused();
 });
 
-test('Home tiles are left-aligned: title, chip and reason share one left edge', async ({ page }) => {
+test('the hero title, activity and reason share one left edge', async ({ page }) => {
   await onboardWithHistory(page);
   await page.goto('./#/');
-  await expect(page.getByTestId('tile-lift')).toBeVisible();
-  const edges = await page.evaluate(() =>
-    ['pick', 'lift', 'burn', 'run', 'swim', 'hybrid'].map((id) => {
-      const tile = document.querySelector(`[data-testid="tile-${id}"]`)!;
-      const lefts = Array.from(tile.querySelectorAll('strong, span, small')).map((n) => Math.round(n.getBoundingClientRect().left * 10) / 10);
-      return { id, lefts };
-    }),
+  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'workout');
+  const lefts = await page.getByTestId('hero').locator('h2, p').evaluateAll(
+    (nodes) => nodes.map((node) => node.getBoundingClientRect().left),
   );
-  for (const e of edges) {
-    expect(e.lefts.length, e.id).toBeGreaterThan(0);
-    for (const l of e.lefts) expect(Math.abs(l - e.lefts[0]!), `${e.id} left edges ${e.lefts}`).toBeLessThanOrEqual(1);
-  }
+  expect(lefts.length).toBeGreaterThan(1);
+  for (const left of lefts) expect(left).toBeCloseTo(lefts[0]!);
 });
 
 test('Feedback list reads as words, wraps long text, and never widens the page', async ({ page }) => {
@@ -264,11 +215,12 @@ test('Feedback list reads as words, wraps long text, and never widens the page',
   await page.goto('./#/lift');
   await page.getByTestId('variant-upper-a').click();
   await page.getByTestId('start-lift').click();
-  await page.getByTestId('feedback-exercise').first().click();
+  await openFeedback(page);
   await page.getByTestId('feedback-tag-too-easy').click();
   await page.getByLabel('Notes').fill('x'.repeat(240));
   await page.getByTestId('feedback-save').click();
   await page.goto('./#/settings');
+  await page.getByTestId('developer').locator('summary').click();
   const row = page.getByTestId('feedback-row').first();
   await expect(row).toBeVisible();
   const text = (await row.textContent()) ?? '';
@@ -283,7 +235,7 @@ test('sheets open as a bottom overlay, take focus, and close on Escape or the ba
   await page.goto('./#/lift');
   await page.getByTestId('variant-upper-a').click();
   await page.getByTestId('start-lift').click();
-  await page.getByTestId('feedback-workout').click();
+  await openFeedback(page);
   const dialog = page.getByRole('dialog', { name: 'Feedback' });
   await expect(dialog).toBeVisible();
   const box = await dialog.boundingBox();
@@ -292,7 +244,7 @@ test('sheets open as a bottom overlay, take focus, and close on Escape or the ba
   expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
-  await page.getByTestId('feedback-workout').click();
+  await openFeedback(page);
   await page.getByTestId('sheet-backdrop').click({ position: { x: 5, y: 5 } });
   await expect(dialog).toHaveCount(0);
 });

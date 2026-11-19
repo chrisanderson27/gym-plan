@@ -3,10 +3,10 @@ import { loadBodyLogs, saveBodyLog } from '../../data/body';
 import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
 import type { Settings } from '../../data/types';
-import { BODY_RATE_BAND_LB, BODY_RATE_MIN_SPAN_DAYS } from '../../engine/config';
+import { BODY_MAINTAIN_BAND_LB, BODY_RATE_BAND_LB, BODY_RATE_MIN_SPAN_DAYS } from '../../engine/config';
 import { etaToGoal, rateBand, round1, waistDue, weeklyRate, weightTrend } from '../../engine/body';
 import { localDate } from '../../engine/dates';
-import { FeedbackButton } from '../slots/FeedbackButton';
+import { MoreMenu } from '../MoreMenu';
 
 const BAND_TEXT = { gaining: 'gaining', below: 'below band', in: 'in band', above: 'above band' } as const;
 
@@ -22,8 +22,10 @@ export function BodyScreen({ settings }: { settings: Settings }) {
   const points = weightTrend(logs);
   const last = points.at(-1);
   const rate = weeklyRate(points, today);
+  const direction = settings.goalDirection ?? 'lose';
   const band = rateBand(rate);
-  const eta = last ? etaToGoal(last.trend, settings.goalWeightLb, rate, today) : null;
+  const noEta = { lose: 'not trending down', gain: 'not trending up', maintain: `outside ±${BODY_MAINTAIN_BAND_LB} lb` };
+  const eta = last ? etaToGoal(last.trend, settings.goalWeightLb, rate, today, direction) : null;
   const todayRow = logs.find((l) => l.date === today);
 
   const run = async (fn: () => Promise<void>) => {
@@ -42,6 +44,7 @@ export function BodyScreen({ settings }: { settings: Settings }) {
       <header class="bar">
         <h1>Weigh-in</h1>
         <a class="gear" href="#/">Home</a>
+        <MoreMenu feedback={{ kind: 'workout', context: {} }} />
       </header>
       <label>
         Weight (lb)
@@ -52,7 +55,7 @@ export function BodyScreen({ settings }: { settings: Settings }) {
       <label class="check">
         <input type="checkbox" data-testid="body-protein" checked={!!todayRow?.protein}
           onChange={() => run(() => saveBodyLog(db, today, { protein: !todayRow?.protein }))} />
-        <span>Protein ✓</span>
+        <span>Protein</span>
       </label>
       <label>
         Waist (in) {waistDue(logs, today) && <span class="badge" data-testid="body-waist-due">due</span>}
@@ -73,10 +76,10 @@ export function BodyScreen({ settings }: { settings: Settings }) {
           <p data-testid="body-rate">
             {rate === null || band === null
               ? `not enough data (need ${BODY_RATE_MIN_SPAN_DAYS} days)`
-              : `${rate < 0 ? '−' : '+'}${round1(Math.abs(rate))} lb/wk · ${BAND_TEXT[band]} (${BODY_RATE_BAND_LB[0]}–${BODY_RATE_BAND_LB[1]})`}
+              : `${rate < 0 ? '−' : '+'}${round1(Math.abs(rate))} lb/wk${direction === 'lose' ? ` · ${BAND_TEXT[band]} (${BODY_RATE_BAND_LB[0]}–${BODY_RATE_BAND_LB[1]})` : ''}`}
           </p>
           <p data-testid="body-eta">
-            {eta === 'reached' ? `Goal ${settings.goalWeightLb} reached` : eta === null ? 'not trending down' : `ETA ${settings.goalWeightLb} ≈ ${eta}`}
+            {eta === 'reached' ? `Goal ${settings.goalWeightLb} reached` : eta === null ? noEta[direction] : `ETA ${settings.goalWeightLb} ≈ ${eta}`}
           </p>
         </section>
       )}
@@ -85,7 +88,6 @@ export function BodyScreen({ settings }: { settings: Settings }) {
           <li key={p.date}><span>{p.date}</span><span>{p.weight} · trend {round1(p.trend)}</span></li>
         ))}
       </ul>
-      <FeedbackButton kind="workout" context={{}} />
     </main>
   );
 }

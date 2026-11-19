@@ -11,6 +11,12 @@
 ## Learned quirks
 <!-- e2e workers append here -->
 
+### Count taps with one listener per page load
+_Learned 2026-11-19 · costs: one recount of the 2-tap check_
+**You'll see:** a `document.addEventListener('click', …)` tap counter reads 6 after 2 taps, because `open` of a `#/` hash URL does not reload the SPA, so counters from earlier checks keep firing.
+**Do:** `reload` on `#/` before adding the counter (or guard it with a `window.__tapc` flag), then click `getByTestId('start')` and **Warm-up done**.
+**Where:** `#/` → `#/lift/session/<id>` 2-tap check.
+
 ### Recorder can freeze minutes into a run; kill only your own daemon and re-seed
 _Learned 2026-11-18 · costs: a killed session and a re-onboard + re-import_
 **You'll see:** `run.webm` stops growing a few minutes in (it stays at about 3 MB) while commands keep working. Later, `record stop` fails with os error 35, and every command (even `get url`) hangs.
@@ -86,7 +92,7 @@ _Learned 2026-11-17 · costs: one verification round_
 ### Drive cardio timers with Skip and read phase from data-role
 _Learned 2026-11-17 · costs: a source lookup per run; real-time Burn is 30–60 min_
 **You'll see:** Burn/Run timers run in real time; phase colour is only a background colour.
-**Do:** loop `find testid timer-skip click` until the text `Session complete` appears (~27 skips for a 30 min Burn). Read the phase from `[data-testid=timer]` `data-role` (warmup/cooldown blue, work red, rest green, transition grey). Confirm saved rows by reading IndexedDB `gym-plan` stores `sessions`, `runs`, `swims`, `tests` with `eval`.
+**Do:** Burn **Start** and Run **Start timer** open a "Ready" screen first (updated 2026-11-19); tap its **Start**, then loop `find testid timer-skip click` until the text `Session complete` appears (~27 skips for a 30 min Burn, ~13 for Run intervals). Run's Save stays disabled until an RPE is picked. Read the phase from `[data-testid=timer]` `data-role` (warmup/cooldown blue, work red, rest green, transition grey). Confirm saved rows by reading IndexedDB `gym-plan` stores `sessions`, `runs`, `swims`, `tests` with `eval`.
 **Where:** `#/burn`, `#/run` timer; `#/swim`.
 
 ### Stop the recording in its own command before finish/close

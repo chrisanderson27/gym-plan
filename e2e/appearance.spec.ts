@@ -1,18 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
-
-async function onboard(page: Page, bodyweight: string) {
-  await page.goto('./');
-  await page.getByLabel('Bodyweight (lb)').fill(bodyweight);
-  await page.getByRole('button', { name: 'Start' }).click();
-  await expect(page.getByTestId('tile-pick')).toBeVisible();
-}
+import { onboard } from './helpers';
 
 const canvas = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 const LIGHT = 'rgb(244, 244, 244)';
 const DARK = 'rgb(22, 22, 22)';
 
 test('appearance: light default, dark persists across reload, system follows OS', async ({ page }) => {
-  await onboard(page, '200');
+  await onboard(page, { bodyweight: '200' });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   expect(await canvas(page)).toBe(LIGHT);
 

@@ -13,7 +13,7 @@ import { nextVariant } from '../../engine/lift/rotation';
 import { humanize, modalityName, plural, runKindName } from '../labels';
 import { MineRow } from '../mine/MineRow';
 import { navigate } from '../router';
-import { FeedbackButton } from '../slots/FeedbackButton';
+import { MoreMenu } from '../MoreMenu';
 
 const VARIANTS: LiftVariant[] = ['upper-a', 'upper-b', 'lower-a', 'lower-b'];
 
@@ -47,6 +47,7 @@ export function HybridScreen({ initial }: { initial?: LiftVariant }) {
       <header class="bar">
         <h1>Hybrid</h1>
         <a class="gear" href="#/">Home</a>
+        <MoreMenu feedback={{ kind: 'workout', context: {} }} />
       </header>
       {data.open && <a class="resume" data-testid="hybrid-resume" href={'#/hybrid/session/' + data.open.id}>Resume hybrid →</a>}
       <div class="chips">
@@ -79,7 +80,6 @@ export function HybridScreen({ initial }: { initial?: LiftVariant }) {
       </ul>
       <button type="button" class="primary" data-testid="hybrid-start" disabled={busy} onClick={start}>Start</button>
       <MineRow types={['hybrid']} />
-      <FeedbackButton kind="workout" context={{}} />
     </main>
   );
 }

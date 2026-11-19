@@ -1,9 +1,16 @@
 import { localDate } from '../engine/dates';
+import { enabled, type Activity } from '../engine/plan/activities';
 import type { GymDb } from './db';
-import type { PoolUnit, Settings } from './types';
+import type { GoalDirection, PoolUnit, Settings } from './types';
 
-export const DEFAULT_GOAL_LB = 220;
 export const DEFAULT_POOL_LENGTH = 25;
+
+export function poolOf(settings?: Settings): { poolUnit: PoolUnit; poolLength: number } | null {
+  const { poolUnit, poolLength } = settings ?? {};
+  return poolUnit && poolLength && poolLength > 0 ? { poolUnit, poolLength } : null;
+}
+
+export const enabledActivities = (settings?: Settings) => enabled(settings?.activities);
 
 export const getSettings = (db: GymDb): Promise<Settings | undefined> => db.settings.get('settings');
 
@@ -18,8 +25,8 @@ export async function saveSettings(
 export interface OnboardingInput {
   bodyweightLb: number;
   goalWeightLb: number;
-  poolUnit: PoolUnit;
-  poolLength: number;
+  goalDirection: GoalDirection;
+  activities: Activity[];
 }
 
 export async function completeOnboarding(db: GymDb, input: OnboardingInput, now = new Date()): Promise<void> {
@@ -31,8 +38,8 @@ export async function completeOnboarding(db: GymDb, input: OnboardingInput, now 
       goalWeightLb: input.goalWeightLb,
       startWeightLb: input.bodyweightLb,
       daysPerWeek: 5,
-      poolUnit: input.poolUnit,
-      poolLength: input.poolLength,
+      goalDirection: input.goalDirection,
+      activities: input.activities,
       weightUnit: 'lb',
       distanceUnit: 'mi',
       programStart: today,

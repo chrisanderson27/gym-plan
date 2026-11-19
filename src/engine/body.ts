@@ -1,6 +1,6 @@
-import type { LocalDate } from '../data/types';
+import type { GoalDirection, LocalDate } from '../data/types';
 import {
-  BODY_EMA_ALPHA, BODY_RATE_BAND_LB, BODY_RATE_MIN_SPAN_DAYS, BODY_RATE_WINDOW_DAYS, WAIST_EVERY_DAYS,
+  BODY_EMA_ALPHA, BODY_MAINTAIN_BAND_LB, BODY_RATE_BAND_LB, BODY_RATE_MIN_SPAN_DAYS, BODY_RATE_WINDOW_DAYS, WAIST_EVERY_DAYS,
 } from './config';
 import { addDays, daysBetween } from './dates';
 
@@ -41,10 +41,15 @@ export function rateBand(rate: number | null): 'gaining' | 'below' | 'in' | 'abo
   return loss <= BODY_RATE_BAND_LB[1] ? 'in' : 'above';
 }
 
-export function etaToGoal(trend: number, goalLb: number, rate: number | null, today: LocalDate): LocalDate | 'reached' | null {
-  if (trend <= goalLb) return 'reached';
-  if (rate === null || rate >= 0) return null;
-  return addDays(today, Math.ceil((trend - goalLb) / (-rate / 7)));
+export function etaToGoal(
+  trend: number, goalLb: number, rate: number | null, today: LocalDate, direction: GoalDirection = 'lose',
+): LocalDate | 'reached' | null {
+  if (direction === 'maintain') return Math.abs(trend - goalLb) <= BODY_MAINTAIN_BAND_LB ? 'reached' : null;
+  const remaining = direction === 'gain' ? goalLb - trend : trend - goalLb;
+  if (remaining <= 0) return 'reached';
+  const progress = direction === 'gain' ? rate : rate === null ? null : -rate;
+  if (progress === null || progress <= 0) return null;
+  return addDays(today, Math.ceil(remaining / (progress / 7)));
 }
 
 export function waistDue(logs: { date: LocalDate; waistIn?: number }[], today: LocalDate): boolean {

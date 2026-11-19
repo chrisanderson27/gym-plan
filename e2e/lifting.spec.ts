@@ -1,16 +1,8 @@
-import { expect, test, type Page } from '@playwright/test';
-
-async function onboard(page: Page, bodyweight: string) {
-  await page.goto('./');
-  await page.getByLabel('Bodyweight (lb)').fill(bodyweight);
-  await page.getByRole('button', { name: 'Start' }).click();
-  await expect(page.getByTestId('tile-pick')).toBeVisible();
-}
-
-const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+import { expect, test } from '@playwright/test';
+import { onboard, localDay, seedBackup } from './helpers';
 
 test('Upper A at top of range with RIR ≤ 2 raises the next Upper A by one step', async ({ page }, testInfo) => {
-  await onboard(page, '247.2');
+  await onboard(page);
 
   const now = Date.now();
   const iso = (ms: number) => new Date(ms).toISOString();
@@ -24,26 +16,17 @@ test('Upper A at top of range with RIR ≤ 2 raises the next Upper A by one step
     targetWeight: 100, targetReps: 11, weight: 100, reps: 11, painFlag: false, setKind: 'working', ts: iso(now - 4 * 86_400_000),
     ...(idx === 2 ? { rir: 1 } : {}),
   }));
-  const backup = {
-    schemaVersion: 1,
-    exportedAt: iso(now),
-    appVersion: 'e2e',
-    stores: {
-      settings: [{
-        id: 'settings', goalWeightLb: 220, startWeightLb: 247.2, daysPerWeek: 5, poolUnit: 'yd', poolLength: 25, weightUnit: 'lb', distanceUnit: 'mi',
-        programStart, onboardedAt: iso(now - 29 * 86_400_000), backupAt: null, updatedAt: iso(now + 60_000),
-      }],
-      sessions: [{
-        id: sid, date: iso(now - 4 * 86_400_000), type: 'lift', variant: 'upper-a', blocks: [], hard: false, hardCardio: false, rpe: null,
-        durationMin: 50, notes: '', endedAt: iso(now - 4 * 86_400_000 + 3_000_000),
-      }],
-      sets,
-    },
-  };
-
-  await page.getByRole('link', { name: 'Settings' }).click();
-  await page.locator('input[type=file]').setInputFiles({ name: 'seed.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
-  await expect(page.getByRole('status').filter({ hasText: 'Imported' })).toBeVisible();
+  await seedBackup(page, {
+    settings: [{
+      id: 'settings', goalWeightLb: 220, startWeightLb: 247.2, daysPerWeek: 5, poolUnit: 'yd', poolLength: 25, weightUnit: 'lb', distanceUnit: 'mi',
+      programStart, onboardedAt: iso(now - 29 * 86_400_000), backupAt: null, updatedAt: iso(now + 60_000),
+    }],
+    sessions: [{
+      id: sid, date: iso(now - 4 * 86_400_000), type: 'lift', variant: 'upper-a', blocks: [], hard: false, hardCardio: false, rpe: null,
+      durationMin: 50, notes: '', endedAt: iso(now - 4 * 86_400_000 + 3_000_000),
+    }],
+    sets,
+  });
 
   await page.goto('./#/lift');
   await page.getByTestId('variant-upper-a').click();
@@ -58,8 +41,9 @@ test('Upper A at top of range with RIR ≤ 2 raises the next Upper A by one step
   for (const i of [0, 1, 2]) await page.getByTestId(`set-done-${ex}-${i}`).click();
   await page.getByTestId(`rir-${ex}-1`).click();
   await page.getByTestId('finish').click();
+  await expect(page.getByTestId('rpe-prompt')).toBeInViewport();
   await page.getByTestId('rpe-skip').click();
-  await expect(page.getByTestId('tile-lift')).toBeVisible();
+  await expect(page.getByTestId('hero')).toBeVisible();
 
   await page.goto('./#/lift');
   await page.getByTestId('variant-upper-a').click();

@@ -3,7 +3,7 @@ import { db } from '../../data/db';
 import { listHistory, type HistoryItem } from '../../data/history';
 import { HISTORY_PAGE } from '../../engine/config';
 import { dayOf } from '../cardio/format';
-import { FeedbackButton } from '../slots/FeedbackButton';
+import { MoreMenu } from '../MoreMenu';
 
 export function HistoryScreen() {
   const [rows, setRows] = useState<HistoryItem[] | null>(null);
@@ -25,6 +25,7 @@ export function HistoryScreen() {
       <header class="bar">
         <h1>History</h1>
         <a class="gear" href="#/">Home</a>
+        <MoreMenu feedback={{ kind: 'workout', context: {} }} />
       </header>
       {rows && rows.length === 0 && <p class="dim">No sessions yet.</p>}
       <ul class="rows">
@@ -37,7 +38,6 @@ export function HistoryScreen() {
         ))}
       </ul>
       {more && <button type="button" data-testid="history-more" onClick={() => setPage(page + 1)}>Load more</button>}
-      <FeedbackButton kind="workout" context={{}} />
     </main>
   );
 }

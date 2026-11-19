@@ -6,7 +6,7 @@ import { useLiveQuery } from '../../data/live';
 import { saveAsMine } from '../../data/templates';
 import { dayOf } from '../cardio/format';
 import { modalityName, runKindName, sessionTypeLabel } from '../labels';
-import { FeedbackButton } from '../slots/FeedbackButton';
+import { MoreMenu } from '../MoreMenu';
 
 export function HistoryDetailScreen({ id }: { id: string }) {
   const d = useLiveQuery(() => loadSessionDetail(db, id), [id]);
@@ -15,9 +15,11 @@ export function HistoryDetailScreen({ id }: { id: string }) {
   if (d === null) {
     return (
       <main class="screen">
-        <h1>Session not found</h1>
-        <a href="#/history">History</a>
-        <FeedbackButton kind="workout" context={{}} />
+        <header class="bar">
+          <h1>Session not found</h1>
+          <a href="#/history">History</a>
+          <MoreMenu feedback={{ kind: 'workout', context: {} }} />
+        </header>
       </main>
     );
   }
@@ -32,6 +34,7 @@ export function HistoryDetailScreen({ id }: { id: string }) {
       <header class="bar">
         <h1>{sessionTypeLabel(session.type)} · {dayOf(session.date)}</h1>
         <a class="gear" href="#/history">History</a>
+        <MoreMenu feedback={{ kind: 'workout', context: { sessionId: id } }} />
       </header>
       <p class="dim">{[
         minutes > 0 ? `${minutes} min` : null,
@@ -56,7 +59,6 @@ export function HistoryDetailScreen({ id }: { id: string }) {
         <button type="button" data-testid="save-mine" onClick={async () => { await saveAsMine(db, id); setSaved(true); }}>Save as mine</button>
       </div>
       {saved && <p role="status">Saved to Mine</p>}
-      <FeedbackButton kind="workout" context={{ sessionId: id }} />
     </main>
   );
 }

@@ -30,7 +30,7 @@ describe('saveBodyLog', () => {
   it('merges into the onboarding row', async () => {
     const db = open();
     const now = new Date('2026-11-12T09:00:00');
-    await completeOnboarding(db, { bodyweightLb: 250, goalWeightLb: 220, poolUnit: 'yd', poolLength: 25 }, now);
+    await completeOnboarding(db, { bodyweightLb: 250, goalWeightLb: 220, goalDirection: 'lose', activities: ['lift'] }, now);
     await saveBodyLog(db, '2026-11-12', { waistIn: 44 });
     expect(await db.bodyLogs.get('2026-11-12')).toEqual({ date: '2026-11-12', weightLb: 250, waistIn: 44, protein: false });
   });
