@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { CircuitBlock, RunRow, Session, SetRow } from '../../data/types';
 import { weeklyBudget } from './budget';
-import { input } from './plan-test-utils';
+import { concurrency } from './concurrency';
+import { input, session } from './plan-test-utils';
 import { weekRing } from './ring';
 import { toPlanSession } from './classify';
 
@@ -64,5 +65,17 @@ describe('toPlanSession', () => {
     const p = toPlanSession(open, [], undefined, ex);
     expect(p.finished).toBe(false);
     expect(p.end).toBe(open.date);
+  });
+  it('only a finished Burn uses a hard slot and triggers hard spacing', () => {
+    const recent = session(2);
+    const burn: Session = { ...base, type: 'burn', date: recent.start, hard: true, hardCardio: true };
+    const candidate = { id: 'burn', hard: true, hardCardio: true, hardRun: false, lower: false, longRun: false } as const;
+    const open = input([toPlanSession({ ...burn, endedAt: undefined }, [], undefined, ex)]);
+    const done = input([toPlanSession({ ...burn, endedAt: recent.end }, [], undefined, ex)]);
+
+    expect(weeklyBudget(open).lines.find((line) => line.id === 'hard')?.done).toBe(0);
+    expect(concurrency(candidate, open, weeklyBudget(open))).toEqual([]);
+    expect(weeklyBudget(done).lines.find((line) => line.id === 'hard')?.done).toBe(1);
+    expect(concurrency(candidate, done, weeklyBudget(done))).toMatchObject([{ status: 'blocked' }]);
   });
 });

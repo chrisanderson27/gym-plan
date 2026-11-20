@@ -1,30 +1,26 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { HOME_GYM } from '../../content';
 import { BURN_TEMPLATES } from '../../content/burn-templates';
 import { finishBurnSession } from '../../data/burn';
 import { db } from '../../data/db';
-import { discardLiftSession, loadLiftSnapshot, saveCircuitLog, setNotAtMyGym } from '../../data/lift';
+import { loadLiftSnapshot, saveCircuitLog, setNotAtMyGym } from '../../data/lift';
 import { useLiveQuery } from '../../data/live';
 import type { CircuitBlock, CircuitLog } from '../../data/types';
 import { blockBeeps, remainingSec } from '../../engine/block/clock';
 import { BURN_WARMUP_MIN, TIMER_TICK_MS } from '../../engine/config';
-import { zoneOf } from '../../engine/gym/availability';
 import { resumeIndex, sessionSteps, upNext, type Step } from '../../engine/lift/focus';
-import { sessionPRs, type PR } from '../../engine/pr';
+import { loggedBlockPR, type PR } from '../../engine/pr';
 import { beep } from '../../platform/audio';
-import { exerciseName, stationEquipmentLabel, zoneLabel } from '../labels';
+import { exerciseName, podLabel, stationEquipmentLabel } from '../labels';
 import { MoreMenu } from '../MoreMenu';
 import { navigate } from '../router';
-import { Sheet } from '../Sheet';
 import { BlockScreen } from '../session/BlockScreen';
 import { blockStateKey, restoreBlockState } from '../session/blockState';
 import { blockChangeItems } from '../session/changeItems';
+import { DiscardSheet } from '../session/DiscardSheet';
 import { FinishSheet } from '../session/FinishSheet';
 import { useNow, useWakeLock } from '../session/hooks';
 import { PrBanner } from '../session/PrBanner';
 import { fmtMSS } from './format';
-
-const placeOf = (block: CircuitBlock) => zoneLabel(zoneOf(HOME_GYM, block.podId));
 
 function resumedStep(steps: Step[], sessionId: string): number {
   const index = resumeIndex(steps, []);
@@ -46,8 +42,6 @@ export function BurnSessionScreen({ sessionId }: { sessionId: string }) {
   const [i, setI] = useState<number | null>(null);
   const [prompt, setPrompt] = useState<'finish' | 'discard' | null>(null);
   const [record, setRecord] = useState<{ pr: PR; block: CircuitBlock } | null>(null);
-  const [error, setError] = useState(false);
-  const discarding = useRef(false);
   const now = useNow(TIMER_TICK_MS);
   const started = session ? Date.parse(session.date) : now;
   const active = !!session && !session.endedAt;
@@ -82,35 +76,13 @@ export function BurnSessionScreen({ sessionId }: { sessionId: string }) {
   const advance = () => setI(index + 1);
   const actions = {
     onFinish: () => setPrompt('finish'),
-    onDiscard: () => { setError(false); setPrompt('discard'); },
+    onDiscard: () => setPrompt('discard'),
   };
   const feedback = { kind: 'workout' as const, context: { sessionId, templateId } };
   const leave = <a class="btn session-leave" href="#/" aria-label="Leave session">✕</a>;
-  const discard = async () => {
-    if (discarding.current) return;
-    discarding.current = true;
-    try {
-      await discardLiftSession(db, sessionId);
-      for (const b of session.blocks) {
-        if (b.kind !== 'circuit') continue;
-        try {
-          localStorage.removeItem(blockStateKey(sessionId, b.id));
-        } catch {
-          // The workout was discarded even if browser storage is unavailable.
-        }
-      }
-      navigate('/');
-    } catch {
-      setError(true);
-      discarding.current = false;
-    }
-  };
   const saveBlock = async (block: CircuitBlock, log: CircuitLog) => {
     await saveCircuitLog(db, sessionId, block.id, log);
-    const blocks = session.blocks.map((b) => b.id === block.id ? { ...block, log } : b);
-    const history = snapshot.history.filter((h) => h.session.id !== sessionId && h.session.endedAt && h.session.date <= session.date);
-    const pr = sessionPRs({ session: { ...session, blocks }, sets: [] }, history)
-      .find((entry) => entry.kind === 'block-work' && entry.blockId === block.id);
+    const pr = loggedBlockPR(session, { ...block, log }, snapshot.history);
     if (pr) setRecord({ pr, block });
     advance();
   };
@@ -136,7 +108,7 @@ export function BurnSessionScreen({ sessionId }: { sessionId: string }) {
             <BlockScreen key={block.id} sessionId={sessionId} block={block} names={exerciseName}
               equipmentName={(station) => stationEquipmentLabel(station, snapshot.equipment)}
               steps={(id) => (id ? snapshot.equipment.get(id)?.steps : undefined) ?? []}
-              place={placeOf(block)} headerLeft={leave} changeItems={blockChangeItems(actions)} feedback={feedback}
+              place={podLabel(block.podId)} headerLeft={leave} changeItems={blockChangeItems(actions)} feedback={feedback}
               onNotAtMyGym={(id) => setNotAtMyGym(db, id, true)} onSkip={advance} onSave={(log) => saveBlock(block, log)} />
           ) : (
             <section class="session-note">
@@ -157,7 +129,7 @@ export function BurnSessionScreen({ sessionId }: { sessionId: string }) {
               <h2>Up next</h2>
               <ul>{upcoming.map((s, j) => (
                 <li class="num" key={j}>
-                  {s.kind === 'circuit' ? `${s.block.label} · ${s.block.durationSec / 60} min · ${placeOf(s.block) ?? 'turf'}`
+                  {s.kind === 'circuit' ? `${s.block.label} · ${s.block.durationSec / 60} min · ${podLabel(s.block.podId) ?? 'turf'}`
                     : s.kind === 'note' ? s.block.label : null}
                 </li>
               ))}</ul>
@@ -176,16 +148,7 @@ export function BurnSessionScreen({ sessionId }: { sessionId: string }) {
         <FinishSheet sessionId={sessionId} finish={(rpe, at) => finishBurnSession(db, sessionId, rpe, at)}
           onClose={() => setPrompt(null)} onDone={() => navigate('/')} />
       )}
-      {prompt === 'discard' && (
-        <Sheet label="Discard this workout?" onClose={() => { if (!discarding.current) setPrompt(null); }}>
-          <h2>Discard this workout?</h2>
-          <div class="session-actions">
-            <button type="button" class="btn" data-testid="discard-confirm" onClick={discard}>Discard</button>
-            <button type="button" class="btn" onClick={() => { if (!discarding.current) setPrompt(null); }}>Keep</button>
-          </div>
-          {error && <p class="error" role="alert">Could not discard the workout. Try again.</p>}
-        </Sheet>
-      )}
+      {prompt === 'discard' && <DiscardSheet session={session} onClose={() => setPrompt(null)} />}
     </main>
   );
 }

@@ -1,9 +1,9 @@
 import type { Block, CircuitBlock, Equipment, ISODateTime, LiftBlock, StationUnit } from '../data/types';
 import { pickBackup, primaryPod, workingWeightsOf, type Choice } from './block/generate';
 import { prescribeBlock, slotKeyOf, type Draft } from './block/progression';
-import { groupOf, kitOf, NO_BLOCK_IDS, type BlockExerciseShape } from './block/rules';
+import { groupOf, kitOf, NO_BLOCK_IDS, PROFILES, type BlockExerciseShape } from './block/rules';
 import { blockContext, validateBlock } from './block/validate';
-import { BLOCK_TRANSITION_MIN, BURN_BUDGET_SLACK_MIN, BURN_COOLDOWN_MIN, BURN_WARMUP_MIN } from './config';
+import { BLOCK_LONG_MIN, BLOCK_SHORT_MIN, BLOCK_TRANSITION_MIN, BURN_BUDGET_SLACK_MIN, BURN_COOLDOWN_MIN, BURN_WARMUP_MIN } from './config';
 import { availableOn, defaultBurnPods, zoneOf } from './gym/availability';
 import type { GymItemShape, GymProfileShape } from './gym/types';
 import type { HistorySession } from './lift/types';
@@ -41,22 +41,8 @@ export function estimateBurnMinutes(blocks: readonly Block[]): number {
   return burnMinutes(blocks.flatMap((block) => block.kind === 'circuit' ? [block.durationSec / 60] : []));
 }
 
-export function generateBurn(input: BurnInput): BurnResult {
-  const { template, budgetMin, profile, exercises, bodyweightIds, notAtMyGym, history, equipment, weekIdx, resolveEquipmentId, makeId } = input;
-  const specs = [...template.blocks];
-  const overBudget = () => burnMinutes(specs.map((spec) => spec.minutes)) > budgetMin + BURN_BUDGET_SLACK_MIN;
-  while (overBudget() && specs.filter((spec) => spec.role !== 'finisher').length > 1) {
-    specs.splice(specs.map((spec) => spec.role !== 'finisher').lastIndexOf(true), 1);
-  }
-  while (overBudget()) {
-    const i = specs.map((spec) => spec.minutes).lastIndexOf(12);
-    if (i < 0) break;
-    specs[i] = { ...specs[i]!, minutes: 8 };
-  }
-
-  const pods = input.pods ?? defaultBurnPods(profile);
-  const zone = zoneOf(profile, pods[0] ?? '');
-  const floor = profile.zones.find((entry) => entry.id === zone)?.floor;
+function buildCircuits(input: BurnInput, specs: BurnBlockSpec[], pods: readonly string[], floor: number | undefined) {
+  const { template, profile, exercises, bodyweightIds, notAtMyGym, history, equipment, weekIdx, resolveEquipmentId } = input;
   const pool = floor === undefined ? [] : availableOn(profile, floor, { notAtMyGym, bodyweightIds }).flatMap((option): Choice[] => {
     const ex = exercises.get(option.exerciseId);
     return ex && pods.includes(option.podId) && !NO_BLOCK_IDS.includes(ex.id)
@@ -102,7 +88,7 @@ export function generateBurn(input: BurnInput): BurnResult {
         swaps.push({ from: exerciseId, to: choice.ex.id });
       }
     }
-    if (drafts.length < 3) {
+    if (drafts.length < PROFILES.burn.minGroups) {
       dropped.push(`block:${label}`);
       continue;
     }
@@ -115,12 +101,42 @@ export function generateBurn(input: BurnInput): BurnResult {
     if (validateBlock(block, ctx, 'burn').length) dropped.push(`block:${label}`);
     else circuits.push(block);
   }
+  return { circuits, swaps, dropped };
+}
+
+export function generateBurn(input: BurnInput): BurnResult {
+  const { template, budgetMin, profile, exercises, makeId } = input;
+  const specs = [...template.blocks];
+  const overBudget = () => burnMinutes(specs.map((spec) => spec.minutes)) > budgetMin + BURN_BUDGET_SLACK_MIN;
+  while (overBudget() && specs.filter((spec) => spec.role !== 'finisher').length > 1) {
+    specs.splice(specs.map((spec) => spec.role !== 'finisher').lastIndexOf(true), 1);
+  }
+  while (overBudget()) {
+    const i = specs.map((spec) => spec.minutes).lastIndexOf(BLOCK_LONG_MIN);
+    if (i < 0) break;
+    specs[i] = { ...specs[i]!, minutes: BLOCK_SHORT_MIN };
+  }
+
+  const pods = input.pods ?? defaultBurnPods(profile);
+  const floorByZone = new Map(profile.zones.map((zone) => [zone.id, zone.floor]));
+  const floors = pods.flatMap((pod) => {
+    const floor = floorByZone.get(zoneOf(profile, pod));
+    return floor === undefined ? [] : [floor];
+  });
+  const [preferred, ...fallbacks] = new Set(floors);
+  let plan = buildCircuits(input, specs, pods, preferred);
+  for (const floor of fallbacks) {
+    if (plan.circuits.length === specs.length) break;
+    const alternative = buildCircuits(input, specs, pods, floor);
+    if (alternative.circuits.length > plan.circuits.length) plan = alternative;
+  }
+  const { circuits, swaps, dropped } = plan;
 
   const firstCardio = circuits.flatMap((block) => block.stations).find(({ exerciseId }) => {
     const ex = exercises.get(exerciseId);
     return ex && kitOf(ex) === 'cardio';
   });
-  const machine = firstCardio?.itemId ? ctx.item(firstCardio.itemId)?.type : undefined;
+  const machine = firstCardio?.itemId ? profile.items.find((item) => item.id === firstCardio.itemId)?.type : undefined;
   const movement = firstCardio
     ? `Easy ${(machine ?? firstCardio.exerciseId).replaceAll('-', ' ')}`
     : 'Easy walking in place';

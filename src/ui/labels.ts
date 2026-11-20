@@ -3,6 +3,7 @@ import type { EquipmentTag, Muscle } from '../content';
 import type { CardioModality, CircuitStation, Equipment, RunKind } from '../data/types';
 import { round1 } from '../engine/body';
 import { CARDIO_MODALITY_LABELS } from '../engine/config';
+import { zoneOf } from '../engine/gym/availability';
 import type { PR } from '../engine/pr';
 
 /** Display helpers: ids stay in storage, they are mapped to names only when rendered. */
@@ -17,6 +18,8 @@ export function zoneLabel(zoneId: string): string | undefined {
   const zone = HOME_GYM.zones.find((entry) => entry.id === zoneId);
   return zone && (zone.label ?? floorLabel(zone.floor));
 }
+
+export const podLabel = (podId: string): string | undefined => zoneLabel(zoneOf(HOME_GYM, podId));
 
 export function stationEquipmentLabel(
   { equipmentId, exerciseId }: Pick<CircuitStation, 'equipmentId' | 'exerciseId'>,

@@ -107,6 +107,34 @@ describe('generateBurn', () => {
     for (const id of used) expect(itemIds(pods).has(id)).toBe(true);
   });
 
+  it.each([false, true])('keeps a fallback Burn on one floor (upstairs can serve it: %s)', (upstairsHasRow) => {
+    const zones = [2, 1].map((floor) => ({ id: `zone-${floor}`, floor, neighbours: [] }));
+    const items = zones.flatMap(({ id: zone, floor }) => {
+      const place = { floor, zone, count: 2, confidence: 'C' as const, verified: true };
+      return [
+        { ...place, id: `bells-${floor}`, type: 'dumbbell', exercises: ['goblet-squat', ...(floor === 1 || upstairsHasRow ? ['one-arm-db-row'] : [])] },
+        { ...place, id: `erg-${floor}`, type: 'rower', exercises: ['rower'] },
+      ];
+    });
+    const profile = {
+      id: 'home-gym' as const, zones, items,
+      pods: zones.map(({ id: zone, floor }) => ({ id: `pod-${floor}`, zone, items: [`bells-${floor}`, `erg-${floor}`] })),
+    };
+    const input = burnInputFrom(snapshot, tpl, 55, profile);
+    const result = generateBurn({
+      ...input, bodyweightIds: ['push-up'],
+      template: { id: tpl.id, blocks: ['rower', 'one-arm-db-row'].map((exerciseId, i) => ({
+        label: `Block ${i + 1}`, role: 'block', minutes: 8,
+        stations: [{ exerciseId: 'goblet-squat' }, { exerciseId }, { exerciseId: 'push-up' }],
+      })) },
+    });
+    const floor = upstairsHasRow ? 2 : 1;
+    expect(circuits(result)).toMatchObject([`erg-${floor}`, `bells-${floor}`].map((itemId) => ({
+      podId: `pod-${floor}`, stations: [{ itemId: `bells-${floor}` }, { itemId }, { exerciseId: 'push-up' }],
+    })));
+    expect(result.dropped).toEqual([]);
+  });
+
   it('produces warm-up, circuit and cool-down blocks with no intervals', () => {
     const { blocks } = generateBurn(burnInputFrom(snapshot, tpl, 55));
     expect(blocks[0]).toMatchObject({ kind: 'lift', warmup: true, role: 'warmup' });

@@ -117,10 +117,14 @@ export const BODY_WAIST_RANGE_IN = [15, 80] as const;
 export const HISTORY_PAGE = 50;
 
 // ---- PRD 3 P2 blocks ----
+export const BLOCK_LONG_MIN = 12;
+export const BLOCK_SHORT_MIN = 8;
 export const FINISHER_MIN = 4;
-export const LIFT_DAY_SHAPES = [[12, 8, 8, FINISHER_MIN], [12, 8, FINISHER_MIN], [8, 8, FINISHER_MIN],
-  [12, FINISHER_MIN], [8, FINISHER_MIN], [8]] as const;
-export const BLOCK_STATIONS = { 12: 4, 8: 3, [FINISHER_MIN]: 3 } as const;
+export const LIFT_DAY_SHAPES = [
+  [BLOCK_LONG_MIN, BLOCK_SHORT_MIN, BLOCK_SHORT_MIN, FINISHER_MIN], [BLOCK_LONG_MIN, BLOCK_SHORT_MIN, FINISHER_MIN],
+  [BLOCK_SHORT_MIN, BLOCK_SHORT_MIN, FINISHER_MIN], [BLOCK_LONG_MIN, FINISHER_MIN], [BLOCK_SHORT_MIN, FINISHER_MIN], [BLOCK_SHORT_MIN],
+] as const;
+export const BLOCK_STATIONS = { [BLOCK_LONG_MIN]: 4, [BLOCK_SHORT_MIN]: 3, [FINISHER_MIN]: 3 } as const;
 export const BLOCK_TRANSITION_MIN = 1;
 export const COOLDOWN_MIN = 5;
 export const MAIN_REST_SEC = 150;

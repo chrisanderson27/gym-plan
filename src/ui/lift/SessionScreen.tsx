@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
-import { HOME_GYM, LIFT_TEMPLATES, exerciseById } from '../../content';
+import { useEffect, useState } from 'preact/hooks';
+import { LIFT_TEMPLATES, exerciseById } from '../../content';
 import { db } from '../../data/db';
 import {
-  LIFT_EXERCISES, changeBlockEquipment, discardLiftSession, loadLiftSnapshot, prescribeExercise,
+  LIFT_EXERCISES, changeBlockEquipment, loadLiftSnapshot, prescribeExercise,
   saveCircuitLog, setNotAtMyGym, setPainFlag, swapBlockExercise, undoLastSet,
 } from '../../data/lift';
 import { useLiveQuery } from '../../data/live';
@@ -10,22 +10,20 @@ import type { CircuitBlock, CircuitLog, LiftBlock, RunBlock, SetRow } from '../.
 import { estimateLiftDayMinutes } from '../../engine/block/generate';
 import { REST_DEFAULT_SEC } from '../../engine/config';
 import { localDate } from '../../engine/dates';
-import { zoneOf } from '../../engine/gym/availability';
 import { isLiftDayCooldown, resumeIndex, sessionSteps, stepDone, upNext, type Step } from '../../engine/lift/focus';
 import { pickSubstitute } from '../../engine/lift/generator';
 import { isWorking } from '../../engine/lift/types';
-import { sessionPRs, setPRs, type PR } from '../../engine/pr';
+import { loggedBlockPR, setPRs, type PR } from '../../engine/pr';
 import { isRampInWeek, weekIndex } from '../../engine/week';
 import { MoreMenu } from '../MoreMenu';
-import { Sheet } from '../Sheet';
 import { fmtMSS } from '../cardio/format';
-import { exerciseName, modalityName, runKindName, stationEquipmentLabel, zoneLabel } from '../labels';
+import { exerciseName, modalityName, podLabel, runKindName, stationEquipmentLabel } from '../labels';
 import { navigate } from '../router';
 import { BlockScreen } from '../session/BlockScreen';
+import { DiscardSheet } from '../session/DiscardSheet';
 import { FinishSheet } from '../session/FinishSheet';
 import { PrBanner } from '../session/PrBanner';
 import { RestTimer } from '../session/RestTimer';
-import { blockStateKey } from '../session/blockState';
 import { blockChangeItems, exerciseChangeItems } from '../session/changeItems';
 import { PoseView } from '../slots/PoseView';
 import { useNow, useWakeLock } from '../session/hooks';
@@ -36,8 +34,6 @@ import { SwapSheet } from './SwapSheet';
 
 type ChangeSheet = { kind: 'swap' | 'equip'; block: LiftBlock } | null;
 type Rest = { startedAtMs: number; restSec: number };
-
-const blockPlace = (block: CircuitBlock) => zoneLabel(zoneOf(HOME_GYM, block.podId));
 
 function cardioDescription(block: RunBlock) {
   const minutes = Math.round(block.repeats * block.segments.reduce((n, s) => n + (s.sec ?? 0), 0) / 60);
@@ -51,7 +47,7 @@ function stepDescription(step: Step) {
       const reps = b.repMin === b.repMax ? b.repMin : `${b.repMin}–${b.repMax}`;
       return `${exerciseName(b.exerciseId)} · ${b.sets} × ${reps}`;
     }).join(' / ');
-    case 'circuit': return [step.block.label ?? 'Block', `${step.block.durationSec / 60} min`, blockPlace(step.block)].filter(Boolean).join(' · ');
+    case 'circuit': return [step.block.label ?? 'Block', `${step.block.durationSec / 60} min`, podLabel(step.block.podId)].filter(Boolean).join(' · ');
     case 'cardio': return cardioDescription(step.block);
   }
 }
@@ -75,7 +71,6 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
   const [rest, setRest] = useState<Rest | null>(null);
   const [record, setRecord] = useState<{ pr: PR; name: string; key: string } | null>(null);
   const [error, setError] = useState('');
-  const discarding = useRef(false);
   const now = useNow(1000);
   useWakeLock(!!data?.session && !data.session.endedAt);
   const steps = sessionSteps(data?.session?.blocks ?? []);
@@ -139,26 +134,6 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
     const substitute = pickSubstitute(block.exerciseId, LIFT_EXERCISES, overrides, { exclude: planned });
     if (substitute) await swapTo(block, substitute);
   });
-  const discard = async () => {
-    if (discarding.current) return;
-    discarding.current = true;
-    try {
-      await discardLiftSession(db, sessionId);
-      for (const b of session.blocks) {
-        if (b.kind !== 'circuit') continue;
-        try {
-          localStorage.removeItem(blockStateKey(sessionId, b.id));
-        } catch {
-          // Discarding the workout does not depend on localStorage.
-        }
-      }
-      navigate('/');
-    } catch {
-      setError('Could not discard the workout. Try again.');
-      discarding.current = false;
-    }
-  };
-
   const logged = (block: LiftBlock, row: SetRow) => {
     setI(index);
     setRest({ startedAtMs: Date.parse(row.ts!), restSec: block.restSec ?? REST_DEFAULT_SEC });
@@ -167,9 +142,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
   };
   const saveBlock = async (block: CircuitBlock, log: CircuitLog) => {
     await saveCircuitLog(db, sessionId, block.id, log);
-    const blocks = session.blocks.map((b) => b.id === block.id ? { ...block, log } : b);
-    const pr = sessionPRs({ session: { ...session, blocks }, sets }, history)
-      .find((p) => p.kind === 'block-work' && p.blockId === block.id);
+    const pr = loggedBlockPR(session, { ...block, log }, snapshot.history);
     if (pr) setRecord({ pr, name: block.label ?? 'Block', key: block.id });
     advance();
   };
@@ -276,7 +249,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
             <BlockScreen key={blockStep.id} sessionId={sessionId} block={blockStep} names={exerciseName}
               equipmentName={(station) => stationEquipmentLabel(station, snapshot.equipment)}
               steps={(id) => (id ? snapshot.equipment.get(id)?.steps : undefined) ?? []}
-              place={blockPlace(blockStep)} headerLeft={leave}
+              place={podLabel(blockStep.podId)} headerLeft={leave}
               changeItems={blockChangeItems(workoutActions)} feedback={{ kind: 'workout', context: { sessionId } }}
               onNotAtMyGym={(exerciseId) => setNotAtMyGym(db, exerciseId, true)}
               onSkip={advance} onSave={(log) => saveBlock(blockStep, log)} />
@@ -317,16 +290,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
           })} onClose={() => setSheet(null)} />
       )}
       {prompt === 'finish' && <FinishSheet sessionId={sessionId} onClose={() => setPrompt(null)} onDone={() => navigate('/')} />}
-      {prompt === 'discard' && (
-        <Sheet label="Discard this workout?" onClose={() => { if (!discarding.current) setPrompt(null); }}>
-          <h2>Discard this workout?</h2>
-          <div class="session-actions">
-            <button type="button" class="btn" data-testid="discard-confirm" onClick={discard}>Discard</button>
-            <button type="button" class="btn" onClick={() => { if (!discarding.current) setPrompt(null); }}>Keep</button>
-          </div>
-          {error && <p class="error" role="alert">{error}</p>}
-        </Sheet>
-      )}
+      {prompt === 'discard' && <DiscardSheet session={session} onClose={() => setPrompt(null)} />}
     </main>
   );
 }

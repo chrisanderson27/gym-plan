@@ -15,7 +15,9 @@ export function toPlanSession(
   const lowerSets = working.filter((s) => exById.get(s.exerciseId)?.primary.some((m) => (LOWER_MUSCLES as readonly string[]).includes(m))).length;
   const lower = !!session.variant?.startsWith('lower') || lowerSets >= LOWER_SESSION_MIN_SETS;
   const modality = run?.modality ?? 'run';
-  // Burn is hard but not a hard *run*; the 48 h spacing rule catches it.
+  const finished = !!session.endedAt;
+  // Only completed Burns use the hard budget and spacing, even though Start records the classification.
+  const countsAsHard = session.type !== 'burn' || finished;
   const hardRun = !!run && (modality === 'run' || modality === 'treadmill') && (run.kind === 'intervals' || (run.rpe ?? 0) >= HARD_RPE);
   return {
     id: session.id,
@@ -23,8 +25,8 @@ export function toPlanSession(
     end: session.endedAt ?? session.date,
     day: localDate(new Date(session.date)),
     type: session.type,
-    hard: session.hard,
-    hardCardio: session.hardCardio,
+    hard: countsAsHard && session.hard,
+    hardCardio: countsAsHard && session.hardCardio,
     ...(session.variant ? { variant: session.variant } : {}),
     lower,
     heavyLegs: lower && !session.flags?.deload,
@@ -32,6 +34,6 @@ export function toPlanSession(
       || (session.type !== 'burn' && session.blocks.some((b) => b.kind === 'circuit' && isLoadedCircuit(b))),
     ...(run ? { runKind: run.kind } : {}),
     hardRun,
-    finished: !!session.endedAt,
+    finished,
   };
 }

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import type { CircuitBlock, SetRow } from '../data/types';
 import type { HistorySession } from './lift/types';
-import { comparableBlock, sessionPRs, setPRs } from './pr';
+import { comparableBlock, loggedBlockPR, sessionPRs, setPRs } from './pr';
 
 const set = (weight = 45, reps = 8, fields: Partial<SetRow> = {}): SetRow => ({
   id: 'x', sessionId: 's', exerciseId: 'goblet-squat', equipmentId: 'bells', idx: 0,
@@ -52,6 +52,19 @@ it('compares work only for the same actual station set regardless of order', () 
   ]);
   expect(sessionPRs(current, [current, prior])).toEqual([{ kind: 'block-work', blockId: 'b', total: 15, prev: 12 }]);
   expect(sessionPRs(current, [session('none', [], [block('different', 2, ['dead-bug'])])])).toEqual([]);
+});
+
+it('judges a just-logged block against finished sessions up to the current start', () => {
+  const current = session('current', [], [block('just-logged', 4)]).session;
+  const finished = session('prior', [], [block('prior', 3)]);
+  finished.session.endedAt = '2026-11-19T12:30:00Z';
+  const future = session('future', [], [block('future', 20)]);
+  future.session.date = '2026-11-20T12:00:00Z';
+  future.session.endedAt = future.session.date;
+  const open = session('open', [], [block('open', 20)]);
+
+  expect(loggedBlockPR(current, block('just-logged', 5), [finished, future, open]))
+    .toEqual({ kind: 'block-work', blockId: 'just-logged', total: 15, prev: 9 });
 });
 
 it('excludes swapped or unlogged circuits on either side of a comparison', () => {

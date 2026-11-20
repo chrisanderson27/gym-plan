@@ -1,4 +1,4 @@
-import type { Block, SetRow } from '../data/types';
+import type { Block, CircuitBlock, Session, SetRow } from '../data/types';
 import { circuitWork } from './block/work';
 import { isWorking, type HistorySession } from './lift/types';
 
@@ -36,6 +36,12 @@ export function comparableBlock(block: Block) {
   if (!work) return null;
   const exerciseIds = new Set(work.perStation.map((station) => station.exerciseId));
   return { key: JSON.stringify([...exerciseIds].sort()), total: work.total };
+}
+
+export function loggedBlockPR(session: Session, block: CircuitBlock, history: HistorySession[]) {
+  const prior = history.filter((h) => h.session.endedAt && h.session.date <= session.date);
+  return sessionPRs({ session: { ...session, blocks: [block] }, sets: [] }, prior)
+    .find((record) => record.kind === 'block-work');
 }
 
 export function sessionPRs(s: HistorySession, history: HistorySession[]): PR[] {

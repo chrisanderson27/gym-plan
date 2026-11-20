@@ -1,4 +1,17 @@
+import type { Block } from '../../data/types';
+
 export const blockStateKey = (sessionId: string, blockId: string) => `block:${sessionId}:${blockId}`;
+
+export function clearBlockStates({ id, blocks }: { id: string; blocks: readonly Pick<Block, 'id' | 'kind'>[] }) {
+  for (const block of blocks) {
+    if (block.kind !== 'circuit') continue;
+    try {
+      localStorage.removeItem(blockStateKey(id, block.id));
+    } catch {
+      // Browser storage cleanup is best effort after the workout has been discarded.
+    }
+  }
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
