@@ -1,10 +1,12 @@
 import { EXERCISES, HOME_GYM, LIFT_TEMPLATES, defaultEquipmentFor, exerciseById, type EquipmentTag, type Exercise, type GymProfile } from '../content';
 import { generateLiftDay, type LiftDayInput } from '../engine/block/generate';
+import { seedFrom } from '../engine/block/rng';
+import { localDate } from '../engine/dates';
 import type { BlockExerciseShape } from '../engine/block/rules';
 import type { LiftSnapshot } from '../engine/lift/types';
 import type { GymDb } from './db';
-import { loadLiftSnapshot, resolveEquipmentId, toLiftExercise } from './lift';
-import type { LiftVariant } from './types';
+import { findOpenLiftSession, loadLiftSnapshot, resolveEquipmentId, toLiftExercise, writeLiftSession } from './lift';
+import type { LiftVariant, LocalDate } from './types';
 
 export function toBlockExercise(e: Exercise): BlockExerciseShape {
   return {
@@ -55,4 +57,23 @@ export function liftDayInputFrom(
 export async function planLiftDay(db: GymDb, variant: LiftVariant, budgetMin: number, seed: number, now = new Date()) {
   const snapshot = await loadLiftSnapshot(db, now);
   return generateLiftDay(liftDayInputFrom(snapshot, variant, budgetMin, seed));
+}
+
+export function liftDaySeed(day: LocalDate, variant: LiftVariant, budgetMin: number): number {
+  return seedFrom(`${day}|${variant}|${budgetMin}`);
+}
+
+export function planTodayLift(db: GymDb, variant: LiftVariant, budgetMin: number, now = new Date()) {
+  return planLiftDay(db, variant, budgetMin, liftDaySeed(localDate(now), variant, budgetMin), now);
+}
+
+export function startOrResumePlannedLift(db: GymDb, variant: LiftVariant, budgetMin: number, now = new Date()): Promise<string> {
+  return db.transaction('rw', [db.sessions, db.settings, db.sets, db.equipment, db.exerciseOverrides], async () => {
+    const open = await findOpenLiftSession(db, now);
+    if (open) return open.id;
+    const plan = await planTodayLift(db, variant, budgetMin, now);
+    return writeLiftSession(db, {
+      type: 'lift', blocks: plan.blocks, variant, calibration: plan.main.mode === 'calibrate', deload: plan.deload,
+    }, now);
+  });
 }

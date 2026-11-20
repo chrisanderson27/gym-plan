@@ -4,7 +4,7 @@ import { generateLiftDay, type LiftDayPlan } from '../engine/block/generate';
 import { blockContext, validateBlock, validateLiftDay } from '../engine/block/validate';
 import { availableOn } from '../engine/gym/availability';
 import type { LiftSnapshot } from '../engine/lift/types';
-import { BLOCK_EXERCISES, BODYWEIGHT_IDS, liftDayInputFrom, planLiftDay } from './liftday';
+import { BLOCK_EXERCISES, BODYWEIGHT_IDS, liftDayInputFrom, planLiftDay, planTodayLift, startOrResumePlannedLift } from './liftday';
 import { openTestDb } from './test-utils';
 import type { CircuitBlock, LiftVariant, Session } from './types';
 import { validateRows } from './validate';
@@ -79,6 +79,41 @@ it('loads the snapshot and plans without writing a session', async () => {
     expect(plan.floor).toBe(2);
     expect(circuits(plan).length).toBeGreaterThan(0);
     expect(await db.sessions.count()).toBe(0);
+  } finally {
+    await db.delete();
+  }
+});
+
+it('seeds Today deterministically and starts the exact previewed lift and circuits', async () => {
+  const db = openTestDb();
+  try {
+    const now = new Date(snapshot.now);
+    const preview = await planTodayLift(db, 'upper-a', 60, now);
+    expect((await planTodayLift(db, 'upper-a', 60, now)).blocks).toEqual(preview.blocks);
+    const id = await startOrResumePlannedLift(db, 'upper-a', 60, now);
+    const stored = (await db.sessions.get(id))!;
+    expect(stored.blocks.filter((b) => b.kind === 'circuit')).toEqual(circuits(preview));
+    expect(circuits(preview).length).toBeGreaterThan(0);
+    const comparable = (blocks: Session['blocks']) => blocks.map((b) =>
+      b.kind === 'lift' ? { ...b, equipmentId: undefined } : b,
+    );
+    // Starting can replace a seed machine with a per-exercise equipment instance.
+    expect(comparable(stored.blocks)).toEqual(comparable(preview.blocks));
+  } finally {
+    await db.delete();
+  }
+});
+
+it('resumes the same lift across midnight and serializes simultaneous Today starts', async () => {
+  const db = openTestDb();
+  try {
+    const lastNight = new Date(2026, 10, 18, 23);
+    const now = new Date(2026, 10, 19, 1);
+    const start = () => startOrResumePlannedLift(db, 'upper-a', 60, lastNight);
+    const [id, duplicate] = await Promise.all([start(), start()]);
+    expect(duplicate).toBe(id);
+    expect(await startOrResumePlannedLift(db, 'lower-a', 45, now)).toBe(id);
+    expect(await db.sessions.count()).toBe(1);
   } finally {
     await db.delete();
   }

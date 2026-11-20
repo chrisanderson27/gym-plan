@@ -74,7 +74,12 @@ export interface Exercise {
 }
 
 export type GymConfidence = 'C' | 'L' | 'G';
-export interface GymZone { id: string; floor: number; neighbours: string[] }
+export interface GymZone {
+  id: string;
+  floor: number;
+  label?: 'turf' | 'free weights' | 'cardio deck' | 'rack room';
+  neighbours: string[];
+}
 export interface GymItem {
   id: string;
   floor: number;

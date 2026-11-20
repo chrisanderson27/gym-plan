@@ -32,17 +32,19 @@ test('Upper A at top of range with RIR ≤ 2 raises the next Upper A by one step
   await page.getByTestId('variant-upper-a').click();
   await page.getByTestId('start-lift').click();
 
+  await page.getByTestId('warmup-done').click();
   const ex = 'chest-press-machine';
-  await expect(page.getByTestId(`set-weight-${ex}-0`)).toHaveText('100');
-  await expect(page.getByTestId(`set-reps-${ex}-0`)).toHaveText('12');
-  // AC2: three working sets, not the weeks 1–2 ramp-in two.
-  await expect(page.getByTestId(`set-${ex}-2`)).toBeVisible();
-
-  for (const i of [0, 1, 2]) await page.getByTestId(`set-done-${ex}-${i}`).click();
+  await expect(page.getByTestId(`set-weight-${ex}-0`)).toHaveText('100 lb');
+  await expect(page.getByTestId(`set-reps-${ex}-0`)).toHaveText('12 reps');
+  for (let i = 0; i < 3; i++) {
+    await expect(page.getByTestId(`set-weight-${ex}-${i}`)).toBeVisible();
+    await page.getByTestId('set-done').click();
+  }
   await page.getByTestId(`rir-${ex}-1`).click();
-  await page.getByTestId('finish').click();
-  await expect(page.getByTestId('rpe-prompt')).toBeInViewport();
-  await page.getByTestId('rpe-skip').click();
+  await page.getByTestId('more').click();
+  await page.getByTestId('more-finish-now').click();
+  await expect(page.getByRole('dialog', { name: 'How was it?' })).toBeInViewport();
+  await page.getByTestId('finish-right').click();
   await expect(page.getByTestId('hero')).toBeVisible();
 
   await page.goto('./#/lift');

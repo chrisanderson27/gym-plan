@@ -77,9 +77,11 @@ test('hybrid: lift then cardio is one session, with feedback', async ({ page }, 
   await page.goto('./#/progress');
   await page.getByTestId('progress-link-hybrid').click();
   await page.getByTestId('hybrid-variant-upper-a').click();
+  const plannedLifts = await page.locator('ul.plan').first().locator('li').count();
+  const cardioPlan = await page.getByTestId('hybrid-cardio').innerText();
   await page.getByTestId('hybrid-start').click();
   await expect(page).toHaveURL(/\/hybrid\/session\//);
-  await expect(page.getByTestId('hybrid-next')).toBeVisible();
+  const cardioUrl = page.url().replace('/hybrid/session/', '/hybrid/cardio/');
 
   // Gap g5: the P5 feedback button is live inside the hybrid session.
   await openFeedback(page);
@@ -87,11 +89,27 @@ test('hybrid: lift then cardio is one session, with feedback', async ({ page }, 
   await page.getByTestId('feedback-save').click();
   await expect(page.getByRole('status').filter({ hasText: 'Feedback saved' }).first()).toBeVisible();
 
+  await page.getByTestId('warmup-done').click();
   const ex = 'chest-press-machine';
-  for (const i of [0, 1, 2]) await page.getByTestId(`set-done-${ex}-${i}`).click();
+  for (const i of [0, 1, 2]) {
+    await expect(page.getByTestId(`set-weight-${ex}-${i}`)).toBeVisible();
+    await page.getByTestId('set-done').click();
+  }
   await page.getByTestId(`rir-${ex}-1`).click();
+  await page.getByTestId('step-next').click();
+  for (let i = 1; i < plannedLifts; i++) {
+    // Only chest press has seeded history. The other planned lifts use the calibration ladder.
+    const log = page.getByTestId(/^cal-log-/);
+    const exerciseId = (await log.getAttribute('data-testid'))!.slice('cal-log-'.length);
+    await log.click();
+    await page.getByTestId(`cal-3-${exerciseId}`).click();
+    await expect(page.getByTestId(`cal-result-${exerciseId}`)).toBeVisible();
+    await page.getByTestId('step-next').click();
+  }
+  const cardioHandoff = cardioPlan.replace(/^Then (.+) (\d+ min)/, '$1 · $2');
+  await expect(page.getByTestId('hybrid-next')).toHaveText(cardioHandoff);
   await page.getByTestId('finish').click();
-  await expect(page).toHaveURL(/\/hybrid\/cardio\//);
+  await expect(page).toHaveURL(cardioUrl);
   await expect(page.getByTestId('more')).toBeVisible();
   await page.getByTestId('hybrid-log-direct').click();
   await page.getByTestId('run-duration').fill('20');

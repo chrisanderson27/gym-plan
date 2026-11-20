@@ -7,6 +7,7 @@ export const HOME_GYM: GymProfile = {
     {
       "id": "zone-3570876461410cdb",
       "floor": 2,
+      "label": "turf",
       "neighbours": [
         "zone-f4a671abc31bd257",
         "zone-ec3a92fa9ebf49da"
@@ -31,6 +32,7 @@ export const HOME_GYM: GymProfile = {
     {
       "id": "zone-4f84047201f53e94",
       "floor": 2,
+      "label": "cardio deck",
       "neighbours": [
         "zone-f4a671abc31bd257",
         "zone-c64b0e68bed77255"
@@ -51,6 +53,7 @@ export const HOME_GYM: GymProfile = {
     {
       "id": "zone-ec3a92fa9ebf49da",
       "floor": 1,
+      "label": "rack room",
       "neighbours": [
         "zone-614cd96975e79a55",
         "zone-a2c17b7018d6581c"
@@ -77,6 +80,7 @@ export const HOME_GYM: GymProfile = {
     {
       "id": "zone-57c2db280f51ea64",
       "floor": 1,
+      "label": "free weights",
       "neighbours": [
         "zone-614cd96975e79a55",
         "zone-aef8e259ca3b04c9"

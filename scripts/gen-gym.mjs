@@ -107,6 +107,19 @@ export const EXERCISE_ALIASES = Object.freeze(Object.fromEntries([
 const isSlug = (value) => typeof value === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 const positiveInt = (value) => Number.isInteger(value) && value > 0;
 
+const PUBLIC_ZONE_LABELS = {
+  turf: /\bturf\b/,
+  'free weights': /\b(?:free weights|dumbbells?)\b/,
+  'cardio deck': /\bcardio\b/,
+  'rack room': /\brack room\b/,
+};
+
+function publicZoneLabel(id, name) {
+  const words = [id, name].filter((value) => typeof value === 'string')
+    .join(' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+  return Object.entries(PUBLIC_ZONE_LABELS).find(([, pattern]) => pattern.test(words))?.[0];
+}
+
 const PUBLIC_TYPES = new Set([
   'adjustable-bench', 'air-bike', 'bar-storage-specialty', 'battle-rope', 'bike', 'bumper-plate-tree', 'bumper-plates',
   'cable', 'curved-manual-treadmill', 'dual-adjustable-pulley', 'dumbbell-set-round-urethane', 'dumbbells',
@@ -163,12 +176,13 @@ export function buildProfile(doc) {
   const pendingIds = catalogRows(pending, 'pending', 'item', idKey);
   const catalogIds = new Map([...pendingIds, ...itemIds]);
   const podIds = catalogRows(doc.pods, 'pods', 'pod', idKey);
-  const zones = doc.zones.map(({ id, floor, neighbours }) => {
+  const zones = doc.zones.map(({ id, name, floor, neighbours }) => {
     if (!positiveInt(floor) || !Array.isArray(neighbours) || !neighbours.every(isSlug)) {
       throw new Error('Malformed zone floor or neighbours');
     }
     if (!neighbours.every((zone) => zoneIds.has(zone))) throw new Error(`Unknown neighbour in zone ${id}`);
-    return { id: zoneIds.get(id), floor, neighbours: neighbours.map((zone) => zoneIds.get(zone)) };
+    const label = publicZoneLabel(id, name);
+    return { id: zoneIds.get(id), floor, ...(label && { label }), neighbours: neighbours.map((zone) => zoneIds.get(zone)) };
   });
   function itemOf({ id, floor, zone, type, count, confidence, exercises, verified_on_site }, isPending) {
     if (!isSlug(type) || !positiveInt(floor) || !positiveInt(count) || !['C', 'L', 'G'].includes(confidence)) {

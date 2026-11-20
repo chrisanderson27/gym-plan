@@ -135,3 +135,10 @@ export const STATION_TARGETS = {
   m: { erg: { normal: 250, short: 150 }, carry: { normal: 20, short: 20 } },
   sec: { normal: 30, short: 20 },
 } as const;
+
+// ---- PRD 3 P3 session ----
+export const REST_DEFAULT_SEC = 90;
+export const REST_STEP_SEC = 15;
+export const FINISH_RPE = { easy: 5, right: 7, hard: 9 } as const;
+export const BLOCK_BEEP_AT_SEC = [60, 30, 3, 2, 1] as const;
+export const PR_BANNER_MS = 2500;

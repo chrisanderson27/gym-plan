@@ -23,4 +23,11 @@ describe('feedback context snapshot (PRD §5)', () => {
     expect(card).not.toContain('<MoreMenu');
     expect(session).toMatch(/<MoreMenu feedback=\{\{ kind: 'workout', context: \{ sessionId \}/);
   });
+
+  it('uses the circuit runner as the only menu host on a block step', () => {
+    const session = readFileSync(join(__dirname, 'lift/SessionScreen.tsx'), 'utf8');
+    const block = readFileSync(join(__dirname, 'session/BlockScreen.tsx'), 'utf8');
+    expect(session).toMatch(/!blockStep && \([\s\S]*?<MoreMenu/);
+    expect(block.match(/<MoreMenu\b/g)).toHaveLength(1);
+  });
 });

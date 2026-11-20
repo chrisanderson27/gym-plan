@@ -10,20 +10,23 @@ import {
   ensureEquipmentInstance,
   finishLiftSession,
   findOpenLiftSession,
+  findStaleOpenLifts,
+  discardLiftSession,
+  saveCircuitLog,
+  undoLastSet,
   loadLiftSnapshot,
   logSet,
   resolveEquipmentId,
   setLastSetRir,
   setNotAtMyGym,
   startLiftSession,
-  startOrResumePlannedLift,
   toggleWorkingSet,
   updateEquipmentSteps,
   updateSetValues,
 } from './lift';
 import { newId } from './ids';
 import { openTestDb } from './test-utils';
-import type { LiftBlock, SetRow } from './types';
+import type { CircuitBlock, CircuitLog, LiftBlock, Session, SetRow } from './types';
 import { painSwapOffer } from '../engine/lift/pain';
 import { summarizeLiftSession } from '../engine/lift/session';
 
@@ -49,26 +52,95 @@ const setRow = (sessionId: string, exerciseId: string, equipmentId: string, idx:
 });
 
 describe('lift data layer', () => {
-  it('reuses the open planned lift on repeated or concurrent Today starts', async () => {
+  const session = (id: string, date: Date, type: Session['type'] = 'lift'): Session => ({
+    id, date: date.toISOString(), type, blocks: [], hard: false, hardCardio: false, rpe: null, durationMin: 0, notes: '',
+  });
+  const ago = (hours: number) => new Date(NOW.getTime() - hours * 3_600_000);
+
+  it('uses one inclusive 12-hour boundary and finds stale lifts newest first', async () => {
     const db = open();
-    await seedSettings(db);
-    const start = () => startOrResumePlannedLift(db, 'upper-a', 60, NOW);
-    const [first, second] = await Promise.all([start(), start()]);
-    expect(second).toBe(first);
-    expect(await startOrResumePlannedLift(db, 'lower-a', 60, NOW)).toBe(first);
-    expect(await db.sessions.toArray()).toMatchObject([{ id: first, type: 'lift', variant: 'upper-a' }]);
+    await db.sessions.bulkPut([
+      session('boundary', ago(12), 'custom'), session('recent-hybrid', ago(3), 'hybrid'),
+      session('old', ago(48)), session('stale-hybrid', ago(24), 'hybrid'), session('stale-run', ago(18), 'run'),
+      { ...session('finished', ago(16)), endedAt: ago(15).toISOString() },
+    ]);
+    expect((await findOpenLiftSession(db, NOW))?.id).toBe('boundary');
+    expect((await findOpenLiftSession(db, NOW, ['hybrid']))?.id).toBe('recent-hybrid');
+    expect((await findStaleOpenLifts(db, NOW)).map((s) => s.id)).toEqual(['stale-hybrid', 'old']);
+    expect((await findStaleOpenLifts(db, NOW, ['lift'])).map((s) => s.id)).toEqual(['old']);
   });
 
-  it('starts a new lift when the open lift began before local midnight', async () => {
+  it('finishes an old lift at its last set, or at its start when it has no timestamped sets', async () => {
     const db = open();
-    await seedSettings(db);
-    const yesterday = new Date(2026, 2, 9, 23);
-    const today = new Date(2026, 2, 10, 1);
-    const previous = await startOrResumePlannedLift(db, 'upper-a', 60, yesterday);
-    const current = await startOrResumePlannedLift(db, 'lower-a', 60, today);
-    expect(current).not.toBe(previous);
-    expect(await db.sessions.get(current)).toMatchObject({ variant: 'lower-a', date: today.toISOString() });
-    expect((await db.sessions.get(previous))?.endedAt).toBeUndefined();
+    await db.sessions.bulkPut([session('old', ago(48)), session('empty', ago(36))]);
+    const last = new Date(ago(48).getTime() + 35 * 60_000).toISOString();
+    await db.sets.bulkPut([
+      setRow('old', 'ex', 'eq', 0, { ts: last }),
+      setRow('old', 'ex', 'eq', 1, { ts: ago(48).toISOString() }),
+      setRow('empty', 'ex', 'eq', 0, { ts: undefined }),
+    ]);
+    await finishLiftSession(db, 'old', 7, NOW);
+    await finishLiftSession(db, 'empty', 5, NOW);
+    expect(await db.sessions.get('old')).toMatchObject({ endedAt: last, durationMin: 35, rpe: 7 });
+    expect(await db.sessions.get('empty')).toMatchObject({ endedAt: ago(36).toISOString(), durationMin: 0 });
+  });
+
+  it('discards an unfinished lift and only its sets', async () => {
+    const db = open();
+    await db.sessions.bulkPut([session('old', ago(48)), session('other', ago(4))]);
+    await db.sets.bulkPut([setRow('old', 'ex', 'eq', 0), setRow('other', 'ex', 'eq', 0)]);
+    await discardLiftSession(db, 'old');
+    expect(await db.sessions.get('old')).toBeUndefined();
+    expect((await db.sets.toArray()).map((s) => s.sessionId)).toEqual(['other']);
+  });
+
+  it('refuses to discard a finished lift and leaves its sets intact', async () => {
+    const db = open();
+    await db.sessions.put({ ...session('finished', ago(48)), endedAt: ago(47).toISOString() });
+    await db.sets.put(setRow('finished', 'ex', 'eq', 0));
+    await expect(discardLiftSession(db, 'finished')).rejects.toThrow('finished workout');
+    expect(await db.sessions.get('finished')).toBeDefined();
+    expect(await db.sets.count()).toBe(1);
+  });
+
+  it('saves a circuit log on only its matching block', async () => {
+    const db = open();
+    const block: CircuitBlock = {
+      id: 'work', kind: 'circuit', role: 'block', durationSec: 720, targetRounds: 6, podId: 'pod',
+      stations: [{ exerciseId: 'plank', target: { unit: 'sec', amount: 30 } }],
+    };
+    const log: CircuitLog = {
+      completedRounds: 2, actualDurationSec: 300, lastRoundRir: 1,
+      partialReps: { stationIndex: 0, count: 12 }, stations: [{ exerciseId: 'plank' }],
+    };
+    const other = { ...block, id: 'other' };
+    await db.sessions.put({ ...session('open', ago(1)), blocks: [block, other] });
+    await saveCircuitLog(db, 'open', 'work', log);
+    await saveCircuitLog(db, 'open', 'missing', log);
+    expect((await db.sessions.get('open'))?.blocks).toEqual([{ ...block, log }, other]);
+  });
+
+  it('undoes the highest working index for only that exercise and equipment', async () => {
+    const db = open();
+    await db.sets.bulkPut([
+      setRow('open', 'ex', 'eq', 0, { id: 'first' }), setRow('open', 'ex', 'eq', 1, { id: 'last' }),
+      setRow('open', 'ex', 'eq', 2, { id: 'warm', setKind: 'warmup' }), setRow('open', 'ex', 'other', 3, { id: 'other' }),
+    ]);
+    await undoLastSet(db, 'open', 'ex', 'eq');
+    expect((await db.sets.toArray()).map((s) => s.id)).toEqual(['first', 'other', 'warm']);
+  });
+
+  it('logs the next set idempotently and refuses writes after discard', async () => {
+    const db = open();
+    await db.sessions.put(session('open', NOW));
+    const options = { logOnly: true } as const;
+    const row = setRow('open', 'ex', 'eq', 0);
+    expect(await toggleWorkingSet(db, row, options)).toBe('logged');
+    expect(await toggleWorkingSet(db, { ...row, id: 'duplicate' }, options)).toBe('unchanged');
+    expect(await db.sets.toArray()).toEqual([row]);
+    await discardLiftSession(db, 'open');
+    expect(await toggleWorkingSet(db, row, options)).toBe('unchanged');
+    expect(await db.sets.count()).toBe(0);
   });
 
   it('start → log → rir → finish records flags, hard and endedAt', async () => {

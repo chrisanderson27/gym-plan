@@ -1,31 +1,63 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { LIFT_TEMPLATES } from '../../content';
+import { HOME_GYM, LIFT_TEMPLATES, exerciseById } from '../../content';
 import { db } from '../../data/db';
-import { useLiveQuery } from '../../data/live';
 import {
-  LIFT_EXERCISES,
-  changeBlockEquipment,
-  finishLiftSession,
-  loadLiftSnapshot,
-  prescribeExercise,
-  setNotAtMyGym,
-  swapBlockExercise,
+  LIFT_EXERCISES, changeBlockEquipment, discardLiftSession, loadLiftSnapshot, prescribeExercise,
+  saveCircuitLog, setNotAtMyGym, setPainFlag, swapBlockExercise, undoLastSet,
 } from '../../data/lift';
-import type { LiftBlock } from '../../data/types';
+import { useLiveQuery } from '../../data/live';
+import type { CircuitBlock, CircuitLog, LiftBlock, RunBlock, SetRow } from '../../data/types';
+import { BLOCK_TRANSITION_MIN, COOLDOWN_MIN, MIN_PER_SET, REST_DEFAULT_SEC, WARMUP_MIN } from '../../engine/config';
 import { localDate } from '../../engine/dates';
+import { zoneOf } from '../../engine/gym/availability';
+import { resumeIndex, sessionSteps, stepDone, upNext, type Step } from '../../engine/lift/focus';
 import { pickSubstitute } from '../../engine/lift/generator';
+import { sessionPRs, setPRs, type PR } from '../../engine/pr';
 import { isRampInWeek, weekIndex } from '../../engine/week';
 import { MoreMenu } from '../MoreMenu';
-import { modalityName, runKindName } from '../labels';
+import { Sheet } from '../Sheet';
+import { fmtMSS } from '../cardio/format';
+import { exerciseName, modalityName, runKindName, stationEquipmentLabel, zoneLabel } from '../labels';
 import { navigate } from '../router';
+import { BlockScreen } from '../session/BlockScreen';
+import { FinishSheet } from '../session/FinishSheet';
+import { PrBanner } from '../session/PrBanner';
+import { RestTimer } from '../session/RestTimer';
+import { blockChangeItems, exerciseChangeItems } from '../session/changeItems';
+import { PoseView } from '../slots/PoseView';
+import { useNow, useWakeLock } from '../session/hooks';
 import { CalibrationCard } from './CalibrationCard';
 import { EquipmentSheet } from './EquipmentSheet';
-import { ExerciseCard } from './ExerciseCard';
+import { FocusLift } from './FocusLift';
 import { SwapSheet } from './SwapSheet';
 
-type Sheet = { kind: 'swap' | 'equip'; block: LiftBlock } | null;
+type ChangeSheet = { kind: 'swap' | 'equip'; block: LiftBlock } | null;
+type Rest = { startedAtMs: number; restSec: number };
+
+const blockPlace = (block: CircuitBlock) => zoneLabel(zoneOf(HOME_GYM, block.podId));
+
+function cardioDescription(block: RunBlock) {
+  const minutes = Math.round(block.repeats * block.segments.reduce((n, s) => n + (s.sec ?? 0), 0) / 60);
+  return `${modalityName(block.modality)} · ${minutes} min (${runKindName(block.runKind)})`;
+}
+
+function stepDescription(step: Step) {
+  switch (step.kind) {
+    case 'note': return step.block.label ?? (step.role === 'warmup' ? 'Warm-up' : 'Cool-down');
+    case 'lift': return step.blocks.map((b) => {
+      const reps = b.repMin === b.repMax ? b.repMin : `${b.repMin}–${b.repMax}`;
+      return `${exerciseName(b.exerciseId)} · ${b.sets} × ${reps}`;
+    }).join(' / ');
+    case 'circuit': return [step.block.label ?? 'Block', `${step.block.durationSec / 60} min`, blockPlace(step.block)].filter(Boolean).join(' · ');
+    case 'cardio': return cardioDescription(step.block);
+  }
+}
 
 export function SessionScreen({ sessionId }: { sessionId: string }) {
+  return <SessionRunner key={sessionId} sessionId={sessionId} />;
+}
+
+function SessionRunner({ sessionId }: { sessionId: string }) {
   const data = useLiveQuery(async () => {
     const session = await db.sessions.get(sessionId);
     const sets = await db.sets.where('sessionId').equals(sessionId).toArray();
@@ -34,166 +66,267 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
     // Progression reads history only: the session being logged must not feed its own prescription.
     return { session, sets, templateName: template?.name, snapshot: { ...full, history: full.history.filter((h) => h.session.id !== sessionId) } };
   }, [sessionId]);
-  const [sheet, setSheet] = useState<Sheet>(null);
-  const [rpePrompt, setRpePrompt] = useState(false);
-  const rpeRef = useRef<HTMLDivElement>(null);
+  const [sheet, setSheet] = useState<ChangeSheet>(null);
+  const [prompt, setPrompt] = useState<'finish' | 'discard' | null>(null);
+  const [i, setI] = useState<number | null>(null);
+  const [rest, setRest] = useState<Rest | null>(null);
+  const [record, setRecord] = useState<{ pr: PR; name: string; key: string } | null>(null);
+  const [error, setError] = useState('');
+  const discarding = useRef(false);
+  const now = useNow(1000);
+  useWakeLock(!!data?.session && !data.session.endedAt);
+  const steps = sessionSteps(data?.session?.blocks ?? []);
+  const index = i ?? resumeIndex(steps, data?.sets ?? []);
+
+  // Freeze the initial resume position before local writes can change how far the saved workout appears.
   useEffect(() => {
-    if (rpePrompt) rpeRef.current?.scrollIntoView({ block: 'end' });
-  }, [rpePrompt]);
-  const [fatigue, setFatigue] = useState(false);
+    if (data?.session && i === null) setI(index);
+  }, [data, i, index]);
 
   if (!data) return <main class="screen"><h1>Session</h1></main>;
   const { session, sets, snapshot, templateName } = data;
   if (!session) {
-    return (
-      <main class="screen">
-        <h1>Session not found</h1>
-        <a href="#/lift">Back to Lift</a>
-      </main>
-    );
+    return <main class="screen"><h1>Session not found</h1><a class="btn" href="#/lift">Back to Lift</a></main>;
   }
 
+  const step = steps[index];
+  const finished = !!session.endedAt;
+  const isHybrid = session.type === 'hybrid';
+  const liftName = session.variant ? LIFT_TEMPLATES[session.variant].name : (templateName ?? 'Lift');
+  const name = isHybrid ? `Hybrid · ${liftName}` : liftName;
+  const started = Date.parse(session.date);
+  const elapsed = Math.max(0, Math.floor((now - started) / 1000));
   const weekIdx = weekIndex(localDate(new Date(session.date)), snapshot.programStart);
   const flags = { deload: !!session.flags?.deload, rampIn: isRampInWeek(weekIdx) };
-  const lifts = session.blocks.filter((b): b is LiftBlock => b.kind === 'lift');
-  const planned = new Set(lifts.map((b) => b.exerciseId));
-  const liftName = session.variant ? `${LIFT_TEMPLATES[session.variant].name} · ${LIFT_TEMPLATES[session.variant].focus}` : (templateName ?? 'Lift');
-  const isHybrid = session.type === 'hybrid';
-  const name = isHybrid ? `Hybrid · ${liftName}` : liftName;
-  const cardio = session.blocks.find((b) => b.kind === 'run');
-  const cardioLine = cardio?.kind === 'run'
-    ? `${modalityName(cardio.modality)} ${Math.round((cardio.repeats * cardio.segments.reduce((n, s) => n + (s.sec ?? 0), 0)) / 60)} min (${runKindName(cardio.runKind)})`
-    : '';
-  const working = lifts.filter((b) => !b.warmup);
-  // Consecutive blocks sharing a supersetGroup render together.
-  const groups: LiftBlock[][] = [];
-  for (const b of working) {
-    const last = groups.at(-1);
-    if (last && b.supersetGroup && last[0]!.supersetGroup === b.supersetGroup) last.push(b);
-    else groups.push([b]);
-  }
-  const elapsed = Math.max(0, Math.round(((session.endedAt ? new Date(session.endedAt).getTime() : Date.now()) - new Date(session.date).getTime()) / 60_000));
+  const planned = new Set(session.blocks.flatMap((b) => b.kind === 'lift' && !b.warmup ? [b.exerciseId] : []));
+  const history = snapshot.history.filter((h) => h.session.endedAt && h.session.date <= session.date);
+  const rowsFor = (block: LiftBlock) => sets.filter((row) => row.exerciseId === block.exerciseId && row.equipmentId === (block.equipmentId ?? ''));
+  const done = (block: LiftBlock) => stepDone({ kind: 'lift', blocks: [block] }, sets);
+  const activeBlock = step?.kind === 'lift' ? step.blocks.find((b) => !done(b)) ?? step.blocks.at(-1) : undefined;
+  const last = activeBlock && rowsFor(activeBlock)
+    .filter((row) => row.setKind === undefined || row.setKind === 'working').sort((a, b) => a.idx - b.idx).at(-1);
 
-  const swapTo = async (block: LiftBlock, newId: string) => {
-    await swapBlockExercise(db, sessionId, block.id, newId);
-    setSheet(null);
+  const advance = () => {
+    setRest(null);
+    setI(index + 1);
   };
-  const notAtMyGym = async (block: LiftBlock) => {
+  const cardio = () => navigate('/hybrid/cardio/' + sessionId);
+  const finish = () => { setError(''); setPrompt('finish'); };
+  const onAdvance = index >= steps.length - 1 ? (isHybrid ? cardio : finish) : advance;
+  const advanceLabel = index >= steps.length - 1 ? (isHybrid ? 'Start cardio' : 'Finish') : 'Next';
+  const workoutActions = {
+    onFinish: finish,
+    onDiscard: () => { setError(''); setPrompt('discard'); },
+  };
+  const act = async (write: () => Promise<void>) => {
+    setError('');
+    try {
+      await write();
+    } catch {
+      setError('Could not update the workout. Try again.');
+    }
+  };
+  const swapTo = (block: LiftBlock, id: string) => act(async () => {
+    await swapBlockExercise(db, sessionId, block.id, id);
+    setSheet(null);
+  });
+  const notAtMyGym = (block: LiftBlock) => act(async () => {
     await setNotAtMyGym(db, block.exerciseId, true);
     const overrides = new Map(snapshot.overrides).set(block.exerciseId, { exerciseId: block.exerciseId, notAtMyGym: true });
-    const sub = pickSubstitute(block.exerciseId, LIFT_EXERCISES, overrides, { exclude: planned });
-    if (sub) await swapTo(block, sub);
-  };
-  const chooseEquipment = async (block: LiftBlock, eqId: string) => {
-    await changeBlockEquipment(db, sessionId, block.id, eqId);
-    setSheet(null);
-  };
-
-  const finish = async (rpe: number | null) => {
-    await finishLiftSession(db, sessionId, rpe);
-    const done = await db.sessions.get(sessionId);
-    if (done?.flags?.fatigue) {
-      setRpePrompt(false);
-      setFatigue(true);
-    } else {
+    const substitute = pickSubstitute(block.exerciseId, LIFT_EXERCISES, overrides, { exclude: planned });
+    if (substitute) await swapTo(block, substitute);
+  });
+  const discard = async () => {
+    if (discarding.current) return;
+    discarding.current = true;
+    try {
+      await discardLiftSession(db, sessionId);
+      for (const b of session.blocks) {
+        if (b.kind !== 'circuit') continue;
+        try {
+          localStorage.removeItem(`block:${sessionId}:${b.id}`);
+        } catch {
+          // Discarding the workout does not depend on localStorage.
+        }
+      }
       navigate('/');
+    } catch {
+      setError('Could not discard the workout. Try again.');
+      discarding.current = false;
     }
   };
 
-  const warm = lifts.find((b) => b.warmup);
-  const cardFor = (block: LiftBlock) => {
-    const mine = sets.filter((s) => s.exerciseId === block.exerciseId && s.equipmentId === (block.equipmentId ?? ''));
+  const logged = (block: LiftBlock, row: SetRow) => {
+    setI(index);
+    setRest({ startedAtMs: Date.parse(row.ts!), restSec: block.restSec ?? REST_DEFAULT_SEC });
+    const [pr] = setPRs(row, history, sessionId);
+    if (pr) setRecord({ pr, name: exerciseName(row.exerciseId), key: row.id });
+  };
+  const saveBlock = async (block: CircuitBlock, log: CircuitLog) => {
+    await saveCircuitLog(db, sessionId, block.id, log);
+    const blocks = session.blocks.map((b) => b.id === block.id ? { ...block, log } : b);
+    const pr = sessionPRs({ session: { ...session, blocks }, sets }, history)
+      .find((p) => p.kind === 'block-work' && p.blockId === block.id);
+    if (pr) setRecord({ pr, name: block.label ?? 'Block', key: block.id });
+    advance();
+  };
+
+  const cards = step?.kind === 'lift' ? step.blocks.map((block) => {
+    const mine = rowsFor(block);
     const presc = block.equipmentId ? prescribeExercise(snapshot, block.exerciseId, block.equipmentId, flags, block) : null;
-    const calibrating = mine.some((s) => s.setKind === 'calibration') || presc?.mode === 'calibrate';
+    return {
+      block, mine, calibrating: mine.some((row) => row.setKind === 'calibration') || presc?.mode === 'calibrate',
+    };
+  }) : [];
+  const candidate = cards.find(({ block, calibrating }) => !calibrating && !done(block));
+  const calibrationAdvance = cards.filter(({ calibrating }) => calibrating).at(-1);
+  const cardFor = ({ block, mine, calibrating }: (typeof cards)[number]) => {
     const props = {
-      session,
-      block,
-      sets: mine,
-      snapshot,
-      flags,
+      session, block, sets: mine, snapshot, flags,
       onSwap: () => setSheet({ kind: 'swap', block }),
       onEquipment: () => setSheet({ kind: 'equip', block }),
       onNotAtMyGym: () => notAtMyGym(block),
       onSwapTo: (id: string) => swapTo(block, id),
     };
-    return calibrating ? <CalibrationCard key={`${block.id}|${block.equipmentId}`} {...props} /> : <ExerciseCard key={`${block.id}|${block.equipmentId}`} {...props} />;
+    const key = `${block.id}|${block.exerciseId}|${block.equipmentId}`;
+    return calibrating
+      ? <CalibrationCard key={key} {...props} advance={!candidate && calibrationAdvance?.block === block ? { label: advanceLabel, onClick: onAdvance } : undefined} />
+      : <FocusLift key={key} {...props} primary={candidate?.block === block} onLogged={(row) => logged(block, row)} />;
   };
 
+  const count = Math.min(index + 1, steps.length);
+  const next = upNext(steps, index);
+  const blockStep = !finished && step?.kind === 'circuit' ? step.block : null;
+  const leave = <a class="btn session-leave" href="#/" aria-label="Leave session">✕</a>;
+  const progress = !finished && steps.length > 0 && (
+    <p class="session-progress num">
+      <span>Step {count} of {steps.length}</span>
+      <span class="step-dots" aria-hidden="true">{steps.map((_, j) => <i key={j} class={j < count ? 'current' : ''} />)}</span>
+    </p>
+  );
+  const estimate = session.blocks.some((b) => b.label?.startsWith('Cool-down')) ? Math.round(
+    WARMUP_MIN + COOLDOWN_MIN + session.blocks.reduce((minutes, b) => {
+      if (b.kind === 'circuit') return minutes + b.durationSec / 60 + BLOCK_TRANSITION_MIN;
+      if (b.kind === 'lift' && !b.warmup) return minutes + b.sets * MIN_PER_SET[LIFT_EXERCISES.get(b.exerciseId)?.repClass ?? 'other'];
+      return minutes;
+    }, 0),
+  ) : null;
+
   return (
-    <main class="screen">
-      <header class="bar">
-        <h1>{name}</h1>
-        <MoreMenu feedback={{ kind: 'workout', context: { sessionId } }} />
-      </header>
-      <p class="dim">{session.endedAt ? 'Finished' : 'In progress'} · {elapsed} min</p>
-
-      {fatigue && (
-        <p class="warn" data-testid="fatigue-banner">
-          Several exercises fell short. Take it easy next time — a deload may be coming. <a href="#/">Home</a>
-        </p>
+    <main class="screen lift-session">
+      {!blockStep && (
+        <header class="session-bar">
+          {leave}
+          <div class="session-heading"><h1>{name}</h1>{progress}</div>
+          {!finished && <span class="session-elapsed num" aria-label="Elapsed time">{fmtMSS(elapsed)}</span>}
+          <MoreMenu feedback={{ kind: 'workout', context: { sessionId } }} items={finished ? [] : exerciseChangeItems({
+            ...workoutActions,
+            onSwap: activeBlock && (() => setSheet({ kind: 'swap', block: activeBlock })),
+            onEquipment: activeBlock && (() => setSheet({ kind: 'equip', block: activeBlock })),
+            onNotAtMyGym: activeBlock && (() => notAtMyGym(activeBlock)),
+            onUndo: activeBlock && last && (() => act(async () => {
+              await undoLastSet(db, sessionId, activeBlock.exerciseId, activeBlock.equipmentId ?? '');
+              setRest(null);
+            })),
+            onPain: last && (() => act(() => setPainFlag(db, last.id, !last.painFlag))),
+          })} />
+        </header>
       )}
-
-      {warm && (
-        <section class="card" data-testid="warmup">
-          <h2>{warm.label}</h2>
-          <p class="dim">{warm.notes}</p>
-          <label class="check">
-            <input type="checkbox" data-testid="warmup-done" onChange={(event) => {
-              if (event.currentTarget.checked) {
-                const firstSet = event.currentTarget.closest('main')?.querySelector('.setrow, [data-testid^="cal-log-"]');
-                firstSet?.scrollIntoView({ block: 'center' });
-              }
-            }} />
-            <span>Warm-up done</span>
-          </label>
+      {finished ? (
+        <section>
+          <h2>Finished</h2>
+          <ul class="plan">
+            {steps.map((s, j) => (
+              <li key={j} class="session-summary-step">
+                <span>{stepDescription(s)}</span>
+                {s.kind === 'circuit' && s.block.log && <span class="num">{s.block.log.completedRounds} rounds</span>}
+                {s.kind === 'lift' && s.blocks.map((block) => {
+                  const loggedSets = rowsFor(block).filter((row) => row.setKind !== 'warmup').sort((a, b) => a.idx - b.idx);
+                  return loggedSets.length > 0 && (
+                    <small key={block.id} class="num dim">
+                      {s.blocks.length > 1 && `${exerciseName(block.exerciseId)}: `}
+                      {loggedSets.map(({ weight, reps }) => `${weight} lb × ${reps}`).join(' · ')}
+                    </small>
+                  );
+                })}
+              </li>
+            ))}
+          </ul>
         </section>
-      )}
-
-      {isHybrid && cardioLine && <p class="dim" data-testid="hybrid-next">Then: {cardioLine}</p>}
-
-      {groups.map((g) =>
-        g.length > 1 ? (
-          <section key={g[0]!.id} class="superset" data-testid={`superset-${g[0]!.supersetGroup}`}>
-            <h2>Superset — alternate sets</h2>
-            {g.map(cardFor)}
-          </section>
-        ) : (
-          cardFor(g[0]!)
-        ),
+      ) : (
+        <>
+          {record && <PrBanner key={record.key} pr={record.pr} name={record.name} />}
+          {step?.kind === 'note' && (
+            <section class="session-note" data-testid={step.role}>
+              <h2>{stepDescription(step)}</h2>
+              {step.role === 'warmup' && estimate !== null && <p class="num dim" data-testid="plan-min">{estimate} min total</p>}
+              <p>{step.block.notes}</p>
+              <button type="button" class="primary" data-testid={step.role === 'warmup' ? 'warmup-done' : 'step-next'}
+                onClick={step.role === 'warmup' ? advance : onAdvance}>{step.role === 'warmup' ? 'Start' : advanceLabel}</button>
+            </section>
+          )}
+          {step?.kind === 'lift' && (
+            <section class={cards.length > 1 ? 'superset session-superset' : undefined}
+              data-testid={cards.length > 1 ? `superset-${cards[0]!.block.supersetGroup}` : undefined}>
+              {cards.length > 1 && <h2>Superset · alternate sets</h2>}
+              {cards.map(cardFor)}
+              {!candidate && !calibrationAdvance && <button type="button" class="primary" data-testid="step-next" onClick={onAdvance}>{advanceLabel}</button>}
+            </section>
+          )}
+          {blockStep && (
+            <BlockScreen key={blockStep.id} sessionId={sessionId} block={blockStep} names={exerciseName}
+              equipmentName={(station) => stationEquipmentLabel(station, snapshot.equipment)}
+              steps={(id) => (id ? snapshot.equipment.get(id)?.steps : undefined) ?? []}
+              place={blockPlace(blockStep)} headerLeft={leave}
+              changeItems={blockChangeItems(workoutActions)} feedback={{ kind: 'workout', context: { sessionId } }}
+              onNotAtMyGym={(exerciseId) => setNotAtMyGym(db, exerciseId, true)}
+              onSkip={advance} onSave={(log) => saveBlock(blockStep, log)} />
+          )}
+          {step?.kind === 'cardio' && (
+            <section>
+              <h2>Cardio</h2>
+              <p data-testid="hybrid-next">{cardioDescription(step.block)}</p>
+              <button type="button" class="primary" data-testid="finish" onClick={cardio}>Start cardio</button>
+            </section>
+          )}
+          {!step && <button type="button" class="primary" data-testid="step-next" onClick={onAdvance}>{advanceLabel}</button>}
+          {rest && <RestTimer key={rest.startedAtMs} {...rest} onAdjust={(delta) => {
+            setRest((cur) => cur && { ...cur, restSec: Math.max(0, cur.restSec + delta) });
+          }} onSkip={() => setRest(null)} onEnd={() => setRest(null)} />}
+          {next.length > 0 && (
+            <section class="session-next" data-testid="up-next">
+              <h2>Up next</h2>
+              <ul>{next.map((s, j) => <li key={j} class="num">{stepDescription(s)}</li>)}</ul>
+            </section>
+          )}
+          {cards.length === 1 && candidate && (
+            <PoseView exerciseId={candidate.block.exerciseId} poseId={exerciseById.get(candidate.block.exerciseId)?.poseId} />
+          )}
+          {error && !prompt && <p class="error" role="alert">{error}</p>}
+        </>
       )}
 
       {sheet?.kind === 'swap' && (
-        <SwapSheet
-          exerciseId={sheet.block.exerciseId}
-          overrides={snapshot.overrides}
-          exclude={planned}
-          onPick={(id) => swapTo(sheet.block, id)}
-          onClose={() => setSheet(null)}
-        />
+        <SwapSheet exerciseId={sheet.block.exerciseId} overrides={snapshot.overrides} exclude={planned}
+          onPick={(id) => swapTo(sheet.block, id)} onClose={() => setSheet(null)} />
       )}
       {sheet?.kind === 'equip' && (
-        <EquipmentSheet
-          exerciseId={sheet.block.exerciseId}
-          currentId={sheet.block.equipmentId ?? ''}
-          equipment={snapshot.equipment}
-          onChoose={(id) => chooseEquipment(sheet.block, id)}
-          onClose={() => setSheet(null)}
-        />
+        <EquipmentSheet exerciseId={sheet.block.exerciseId} currentId={sheet.block.equipmentId ?? ''} equipment={snapshot.equipment}
+          onChoose={(id) => act(async () => {
+            await changeBlockEquipment(db, sessionId, sheet.block.id, id);
+            setSheet(null);
+          })} onClose={() => setSheet(null)} />
       )}
-
-      {!session.endedAt && !rpePrompt && (
-        <button type="button" class="primary" data-testid="finish" onClick={() => (isHybrid ? navigate('/hybrid/cardio/' + sessionId) : setRpePrompt(true))}>Finish</button>
-      )}
-      {rpePrompt && (
-        <div ref={rpeRef} class="sheet" data-testid="rpe-prompt">
-          <p>How hard was the session overall? (optional)</p>
-          <div class="chips">
-            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-              <button key={n} type="button" class="chip" data-testid={`rpe-${n}`} onClick={() => finish(n)}>{n}</button>
-            ))}
+      {prompt === 'finish' && <FinishSheet sessionId={sessionId} onClose={() => setPrompt(null)} onDone={() => navigate('/')} />}
+      {prompt === 'discard' && (
+        <Sheet label="Discard this workout?" onClose={() => { if (!discarding.current) setPrompt(null); }}>
+          <h2>Discard this workout?</h2>
+          <div class="session-actions">
+            <button type="button" class="btn" data-testid="discard-confirm" onClick={discard}>Discard</button>
+            <button type="button" class="btn" onClick={() => { if (!discarding.current) setPrompt(null); }}>Keep</button>
           </div>
-          <button type="button" data-testid="rpe-skip" onClick={() => finish(null)}>Skip</button>
-        </div>
+          {error && <p class="error" role="alert">{error}</p>}
+        </Sheet>
       )}
     </main>
   );

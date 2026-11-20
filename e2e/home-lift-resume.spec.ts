@@ -55,7 +55,7 @@ test('Today shows the open lift variant and resumes that session', async ({ page
   await expect(page).toHaveURL(/#\/lift\/session\/today-lift$/);
 });
 
-test('an unfinished lift from last night is not resumed from Today', async ({ page }) => {
+test('Today resumes an unfinished lift that started before midnight', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-11-18T23:30:00-05:00'));
   await onboard(page, { activities: ['lift'] });
   await seedBackup(page, { sessions: [lift('last-night', new Date('2026-11-18T23:00:00-05:00'), 'lower-b')] });
@@ -65,7 +65,21 @@ test('an unfinished lift from last night is not resumed from Today', async ({ pa
 
   await page.clock.setFixedTime(now);
   await resume.click();
-  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'workout');
-  await page.getByRole('link', { name: 'Start', exact: true }).click();
-  await expect(page).toHaveURL(/#\/lift\/session\/(?!last-night$)[^/]+$/);
+  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'resume');
+  await resume.click();
+  await expect(page).toHaveURL(/#\/lift\/session\/last-night$/);
+});
+
+test('an old unfinished lift can be discarded from Today', async ({ page }) => {
+  await page.clock.setFixedTime(now);
+  await onboard(page, { activities: ['lift'] });
+  await seedBackup(page, { sessions: [lift('old-lift', new Date('2026-11-17T00:45:00-05:00'), 'lower-b')] });
+  await page.getByRole('link', { name: 'Today' }).click();
+  await page.getByTestId('stale-lift').click();
+  await expect(page).toHaveURL(/#\/lift\/session\/old-lift$/);
+  await page.getByTestId('more').click();
+  await page.getByTestId('more-discard').click();
+  await page.getByTestId('discard-confirm').click();
+  await expect(page.getByTestId('hero')).toBeVisible();
+  await expect(page.getByTestId('stale-lift')).toHaveCount(0);
 });

@@ -11,7 +11,7 @@ import { isRampInWeek, weekIndex } from '../engine/week';
 import type { HistorySession, LiftExercise, LiftSnapshot, Prescription } from '../engine/lift/types';
 import type { GymDb } from './db';
 import { newId } from './ids';
-import type { Block, Equipment, ExerciseOverride, LiftBlock, LiftVariant, Session, SessionType, SetRow } from './types';
+import type { Block, CircuitLog, Equipment, ExerciseOverride, LiftBlock, LiftVariant, Session, SessionType, SetRow } from './types';
 
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
@@ -193,15 +193,6 @@ export function startLiftSession(db: GymDb, plan: LiftPlan, now = new Date()): P
   );
 }
 
-export function startOrResumePlannedLift(db: GymDb, variant: LiftVariant, budgetMin: number, now = new Date()): Promise<string> {
-  return db.transaction('rw', [db.sessions, db.settings, db.sets, db.equipment, db.exerciseOverrides], async () => {
-    const open = await findOpenTodayLift(db, now);
-    if (open) return open.id;
-    const snapshot = await loadLiftSnapshot(db, now);
-    return startLiftSession(db, buildLiftPlan(snapshot, variant, budgetMin), now);
-  });
-}
-
 /** Primary muscles of a variant's lead exercises, used for readiness. */
 export function variantMuscles(v: LiftVariant): string[] {
   const muscles = LIFT_TEMPLATES[v].slots.flatMap((s) => LIFT_EXERCISES.get(s.candidates[0]!)?.primary ?? []);
@@ -220,12 +211,19 @@ export async function unlogSet(db: GymDb, id: string): Promise<void> {
  * (possibly stale) live-query snapshot, so a tap before the snapshot refreshes cannot write a duplicate row
  * for the same idx or untick a set that is not there.
  */
-export async function toggleWorkingSet(db: GymDb, row: SetRow): Promise<'logged' | 'unlogged'> {
-  return db.transaction('rw', db.sets, async () => {
+export async function toggleWorkingSet(db: GymDb, row: SetRow): Promise<'logged' | 'unlogged'>;
+export async function toggleWorkingSet(db: GymDb, row: SetRow, options: { logOnly: true }): Promise<'logged' | 'unlogged' | 'unchanged'>;
+export async function toggleWorkingSet(db: GymDb, row: SetRow, options?: { logOnly: true }): Promise<'logged' | 'unlogged' | 'unchanged'> {
+  return db.transaction('rw', [db.sessions, db.sets], async () => {
+    if (options?.logOnly) {
+      const session = await db.sessions.get(row.sessionId);
+      if (!session || session.endedAt) return 'unchanged';
+    }
     const existing = (await db.sets.where('sessionId').equals(row.sessionId).toArray()).filter(
       (s) => s.exerciseId === row.exerciseId && s.equipmentId === row.equipmentId && s.idx === row.idx && (s.setKind === undefined || s.setKind === 'working'),
     );
     if (existing.length > 0) {
+      if (options?.logOnly) return 'unchanged';
       await db.sets.bulkDelete(existing.map((s) => s.id));
       return 'unlogged' as const;
     }
@@ -258,38 +256,72 @@ export async function setPainFlag(db: GymDb, setId: string, flag: boolean): Prom
   await db.sets.update(setId, { painFlag: flag });
 }
 
+async function lastActivityAt(db: GymDb, session: Session): Promise<string> {
+  const sets = await db.sets.where('sessionId').equals(session.id).toArray();
+  return sets.reduce((latest, row) => row.ts && Date.parse(row.ts) > Date.parse(latest) ? row.ts : latest, session.date);
+}
+
 export async function finishLiftSession(db: GymDb, sessionId: string, rpe: number | null, now = new Date()): Promise<void> {
-  const session = await db.sessions.get(sessionId);
-  if (!session) throw new Error(`No such session: ${sessionId}`);
-  const sets = await db.sets.where('sessionId').equals(sessionId).toArray();
-  const blocks = session.blocks.filter((b): b is LiftBlock => b.kind === 'lift');
-  const { fatigue } = summarizeLiftSession(blocks, sets);
-  const { hard, hardCardio } = classifyHard({ type: 'lift', rpe, runKinds: [] });
-  const flags = { ...session.flags };
-  if (fatigue) flags.fatigue = true;
-  else delete flags.fatigue;
-  await db.sessions.update(sessionId, {
-    rpe,
-    hard,
-    hardCardio,
-    flags,
-    endedAt: now.toISOString(),
-    durationMin: Math.round((now.getTime() - new Date(session.date).getTime()) / 60_000),
+  await db.transaction('rw', db.sessions, db.sets, async () => {
+    const session = await db.sessions.get(sessionId);
+    if (!session) throw new Error(`No such session: ${sessionId}`);
+    if (session.endedAt) return;
+    const sets = await db.sets.where('sessionId').equals(sessionId).toArray();
+    const blocks = session.blocks.filter((b): b is LiftBlock => b.kind === 'lift');
+    const { fatigue } = summarizeLiftSession(blocks, sets);
+    const { hard, hardCardio } = classifyHard({ type: 'lift', rpe, runKinds: [] });
+    const flags = { ...session.flags };
+    if (fatigue) flags.fatigue = true;
+    else delete flags.fatigue;
+    const start = Date.parse(session.date);
+    const endedAt = now.getTime() - start > RESUME_WINDOW_HOURS * HOUR
+      ? await lastActivityAt(db, session)
+      : now.toISOString();
+    await db.sessions.update(sessionId, {
+      rpe, hard, hardCardio, flags, endedAt,
+      durationMin: Math.round((Date.parse(endedAt) - start) / 60_000),
+    });
   });
 }
 
+const resumeSince = (now: Date) => new Date(now.getTime() - RESUME_WINDOW_HOURS * HOUR).toISOString();
+
 export async function findOpenLiftSession(db: GymDb, now = new Date(), types: SessionType[] = ['lift', 'custom']): Promise<Session | undefined> {
-  const since = new Date(now.getTime() - RESUME_WINDOW_HOURS * HOUR).toISOString();
-  const rows = await db.sessions.where('date').aboveOrEqual(since).toArray();
-  return rows.filter((s) => types.includes(s.type) && !s.endedAt).sort((a, b) => b.date.localeCompare(a.date))[0];
+  return db.sessions.where('date').between(resumeSince(now), now.toISOString(), true, true).reverse()
+    .filter((s) => types.includes(s.type) && !s.endedAt).first();
 }
 
-export async function findOpenTodayLift(db: GymDb, now: Date): Promise<Session | undefined> {
-  const today = localDate(now);
-  const rows = await db.sessions.where('type').equals('lift')
-    .filter((s) => !s.endedAt && localDate(new Date(s.date)) === today)
-    .toArray();
-  return rows.sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0];
+export async function findStaleOpenLifts(db: GymDb, now = new Date(), types: SessionType[] = ['lift', 'custom', 'hybrid']): Promise<Session[]> {
+  return db.sessions.where('date').below(resumeSince(now)).reverse()
+    .filter((s) => types.includes(s.type) && !s.endedAt).toArray();
+}
+
+export async function discardLiftSession(db: GymDb, sessionId: string): Promise<void> {
+  await db.transaction('rw', db.sessions, db.sets, async () => {
+    const session = await db.sessions.get(sessionId);
+    if (session?.endedAt) throw new Error('Cannot discard a finished workout');
+    await db.sets.where('sessionId').equals(sessionId).delete();
+    await db.sessions.delete(sessionId);
+  });
+}
+
+export async function saveCircuitLog(db: GymDb, sessionId: string, blockId: string, log: CircuitLog): Promise<void> {
+  await db.transaction('rw', db.sessions, async () => {
+    const session = await db.sessions.get(sessionId);
+    if (!session || session.endedAt || !session.blocks.some((b) => b.id === blockId && b.kind === 'circuit')) return;
+    const blocks = session.blocks.map((b) => b.id === blockId && b.kind === 'circuit' ? { ...b, log } : b);
+    await db.sessions.update(sessionId, { blocks });
+  });
+}
+
+export async function undoLastSet(db: GymDb, sessionId: string, exerciseId: string, equipmentId: string): Promise<void> {
+  await db.transaction('rw', db.sets, async () => {
+    const rows = await db.sets.where('sessionId').equals(sessionId).filter((s) => (
+      s.exerciseId === exerciseId && s.equipmentId === equipmentId && (s.setKind === undefined || s.setKind === 'working')
+    )).sortBy('idx');
+    const last = rows.at(-1);
+    if (last) await db.sets.delete(last.id);
+  });
 }
 
 async function upsertOverride(db: GymDb, exerciseId: string, patch: Partial<ExerciseOverride>): Promise<void> {

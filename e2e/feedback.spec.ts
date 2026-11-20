@@ -29,10 +29,11 @@ test('workout feedback from More, cardio entry points, JSONL export, and the pos
   await page.getByTestId('variant-upper-a').click();
   await page.getByTestId('start-lift').click();
 
+  await page.getByTestId('warmup-done').click();
   const ex = 'chest-press-machine';
   await expect(page.getByTestId(`pose-${ex}`)).toBeVisible();
 
-  await page.getByTestId(`set-done-${ex}-0`).click();
+  await page.getByTestId('set-done').click();
   const sessionId = page.url().split('/').pop()!;
   await openFeedback(page);
   await expect(page.getByRole('dialog')).toHaveCount(1);
@@ -77,6 +78,9 @@ test('workout feedback from More, cardio entry points, JSONL export, and the pos
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(`./#/lift/session/${sessionId}`);
   await page.reload();
+  await page.getByTestId('warmup-done').click();
+
+  await page.getByTestId(`set-weight-${ex}-1`).waitFor();
   await expect(page.getByTestId(`pose-${ex}`)).toHaveAttribute('data-static', 'true');
   testInfo.annotations.push({ type: 'covered', description: 'AC1 AC2 AC3' });
 });

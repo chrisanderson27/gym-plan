@@ -14,6 +14,11 @@ const pick = (id: Candidate['id'], tile: Candidate['tile']): Candidate => ({
 });
 
 describe('Today hero duration', () => {
+  it('shows the rounded lift-day estimate and floor', () => {
+    expect(heroFor(pick('lift-upper', 'lift'), null, now, { estMin: 51.5, floor: 2 }))
+      .toMatchObject({ duration: 52, place: 'upstairs' });
+  });
+
   it('uses the capped run plan for the ranked Run kind', () => {
     const cardio: CardioSnapshot = {
       ...snapshot,

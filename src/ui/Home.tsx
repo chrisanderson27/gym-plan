@@ -1,7 +1,8 @@
 import { useRef, useState } from 'preact/hooks';
 import { loadCardioSnapshot } from '../data/cardio';
 import { db } from '../data/db';
-import { findOpenTodayLift, startOrResumePlannedLift } from '../data/lift';
+import { findOpenLiftSession, findStaleOpenLifts } from '../data/lift';
+import { planTodayLift, startOrResumePlannedLift } from '../data/liftday';
 import { useLiveQuery } from '../data/live';
 import { loadPlanInput, loadRingInput } from '../data/plan';
 import type { Settings } from '../data/types';
@@ -21,26 +22,33 @@ import { navigate } from './router';
 
 const dateLabel = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 
+const staleDateLabel = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
 export function Home({ settings }: { settings: Settings }) {
   const starting = useRef(false);
   const [startError, setStartError] = useState(false);
   const [day, setDay] = useState(() => localDate(new Date()));
   const home = useLiveQuery(async () => {
     const now = new Date();
-    const [plan, input, open] = await Promise.all([loadPlanInput(db, now), loadRingInput(db, now), findOpenTodayLift(db, now)]);
+    const [plan, input, open, stale] = await Promise.all([
+      loadPlanInput(db, now), loadRingInput(db, now), findOpenLiftSession(db, now), findStaleOpenLifts(db, now),
+    ]);
     const ranked = rankToday(plan);
     const { pick } = ranked;
     if (open) {
       const title = open.variant ? variantName(open.variant) : 'Lift';
-      return { ranked, input, open, hero: { activity: 'lift' as const, duration: null, title } };
+      return { ranked, input, open, stale, hero: { activity: 'lift' as const, duration: null, place: undefined, title } };
     }
-    if (input.done || pick.id === 'rest') return { ranked, input, open, hero: null };
+    if (input.done || pick.id === 'rest') return { ranked, input, open, stale, hero: null };
     const cardio = pick.tile === 'run' || pick.tile === 'swim' ? await loadCardioSnapshot(db, now) : null;
-    return { ranked, input, open, hero: heroFor(pick, cardio, now) };
+    const liftDay = pick.route.startsWith('#/lift/start/') && pick.variant
+      ? await planTodayLift(db, pick.variant, DEFAULT_LIFT_BUDGET_MIN, now)
+      : undefined;
+    return { ranked, input, open, stale, hero: heroFor(pick, cardio, now, liftDay) };
   }, [day]);
   if (!home) return <main class="screen today-screen" aria-busy="true"><h1>Today</h1><div class="hero loading-hero" /></main>;
 
-  const { ranked: { pick, reason, budget }, input: { sessions, programStart, today, activities, done }, open, hero } = home;
+  const { ranked: { pick, reason, budget }, input: { sessions, programStart, today, activities, done }, open, stale: [stale], hero } = home;
   const range = programWeekRange(today, programStart);
   const ring = weekRing(sessions, range, activities);
   const { count, freezeAvailable } = streak(sessions, programStart, today, activities);
@@ -61,6 +69,11 @@ export function Home({ settings }: { settings: Settings }) {
           progress={`${ring.done}/${ring.target}`} />
       ) : <HeroCard state="rest" />}
       <p class="streak num" data-testid="streak"><FlameIcon /> {count}-week streak</p>
+      {!open && stale && (
+        <a class="btn stale-lift" data-testid="stale-lift" href={`#/lift/session/${stale.id}`}>
+          Unfinished lift from {staleDateLabel.format(new Date(stale.date)).replace(',', '')}
+        </a>
+      )}
       <SomethingElse activities={activities} quiet={!!done} />
       <BackupBanner settings={settings} />
       {workout && (

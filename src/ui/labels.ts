@@ -1,6 +1,6 @@
-import { LIFT_TEMPLATES, exerciseById } from '../content';
+import { HOME_GYM, LIFT_TEMPLATES, defaultEquipmentFor, exerciseById } from '../content';
 import type { EquipmentTag, Muscle } from '../content';
-import type { CardioModality, RunKind } from '../data/types';
+import type { CardioModality, CircuitStation, Equipment, RunKind } from '../data/types';
 import { CARDIO_MODALITY_LABELS } from '../engine/config';
 
 /** Display helpers: ids stay in storage, they are mapped to names only when rendered. */
@@ -8,6 +8,25 @@ import { CARDIO_MODALITY_LABELS } from '../engine/config';
 const VARIANT_RE = /\b(?:upper|lower)-[ab]\b/g;
 
 export const variantName = (v: string): string => (v in LIFT_TEMPLATES ? LIFT_TEMPLATES[v as keyof typeof LIFT_TEMPLATES].name : v);
+
+export const floorLabel = (floor: number): string => floor === 2 ? 'upstairs' : floor === 1 ? 'downstairs' : `Floor ${floor}`;
+
+export function zoneLabel(zoneId: string): string | undefined {
+  const zone = HOME_GYM.zones.find((entry) => entry.id === zoneId);
+  return zone && (zone.label ?? floorLabel(zone.floor));
+}
+
+export function stationEquipmentLabel(
+  { equipmentId, exerciseId }: Pick<CircuitStation, 'equipmentId' | 'exerciseId'>,
+  equipment: ReadonlyMap<string, Equipment>,
+): string | undefined {
+  const selected = equipmentId ? equipment.get(equipmentId) : undefined;
+  // The engine uses one built-in seed for generic cardio equipment.
+  if (selected?.builtin && equipmentId === defaultEquipmentFor('cardio-machine') && exerciseId !== equipmentId) {
+    return undefined;
+  }
+  return selected?.name;
+}
 
 export const exerciseName = (id: string): string => exerciseById.get(id)?.name ?? id;
 

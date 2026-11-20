@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { EXERCISES, LIFT_TEMPLATES, SEED_EQUIPMENT } from '../content';
+import { EXERCISES, HOME_GYM, LIFT_TEMPLATES, SEED_EQUIPMENT } from '../content';
 import { FEEDBACK_TAGS } from '../data/types';
 import { HYBRID_LEG_MODALITIES, TRACKED_MUSCLES } from '../engine/config';
 import {
   EQUIPMENT_TAG_LABELS, MODALITY_LABELS, MUSCLE_LABELS, RUN_KIND_LABELS,
   durationLabel, equipmentTagName, humanize, modalityName, muscleName, plural, runKindName, screenName, sessionTypeLabel, tagLabel, exerciseName, variantName,
+  floorLabel, stationEquipmentLabel, zoneLabel,
 } from './labels';
 
 /** A label is "raw" when it is the id itself or still starts lower-case (a slug), e.g. "side-delts", "db". */
@@ -63,4 +64,25 @@ describe('display labels', () => {
   it('falls back to the id for an unknown exercise', () => {
     expect(exerciseName('no-such-exercise')).toBe('no-such-exercise');
   });
+});
+
+it('formats lift-day floors and block zones', () => {
+  expect([2, 1, 3].map(floorLabel)).toEqual(['upstairs', 'downstairs', 'Floor 3']);
+  const turf = HOME_GYM.zones.find((zone) => zone.label === 'turf');
+  const unlabelled = HOME_GYM.zones.find((zone) => zone.label === undefined);
+  expect(turf).toBeDefined();
+  expect(unlabelled).toBeDefined();
+  expect(zoneLabel(turf!.id)).toBe('turf');
+  expect(zoneLabel(unlabelled!.id)).toBe(floorLabel(unlabelled!.floor));
+  expect(zoneLabel('zone-0000000000000000')).toBeUndefined();
+});
+
+it('omits the generic treadmill label on rower and ski stations', () => {
+  const equipment = new Map(SEED_EQUIPMENT.map((row) => [row.id, row]));
+  for (const exerciseId of ['rower', 'ski-erg']) {
+    expect(stationEquipmentLabel({ equipmentId: 'treadmill', exerciseId }, equipment)).toBeUndefined();
+  }
+  expect(stationEquipmentLabel({ equipmentId: 'treadmill', exerciseId: 'treadmill' }, equipment)).toBe('Treadmill');
+  expect(stationEquipmentLabel({ equipmentId: 'rower', exerciseId: 'rower' }, equipment)).toBe('Rower');
+  expect(stationEquipmentLabel({ equipmentId: 'dumbbells', exerciseId: 'db-bench' }, equipment)).toBe('Dumbbells');
 });

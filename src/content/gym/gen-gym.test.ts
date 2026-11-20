@@ -17,7 +17,9 @@ describe('gym catalog generator', () => {
   it('emits only allowlisted fields and renders deterministically', () => {
     const { profile } = buildProfile(fixture());
     expect(keys(profile)).toEqual(['id', 'items', 'pods', 'zones']);
-    for (const zone of profile.zones) expect(keys(zone)).toEqual(['floor', 'id', 'neighbours']);
+    for (const zone of profile.zones) {
+      expect(keys(zone)).toEqual(zone.label ? ['floor', 'id', 'label', 'neighbours'] : ['floor', 'id', 'neighbours']);
+    }
     for (const pod of profile.pods) expect(keys(pod)).toEqual(['id', 'items', 'zone']);
     for (const item of profile.items) {
       const allowed = ['confidence', 'count', 'exercises', 'floor', 'id', 'type', 'verified', 'zone'];
@@ -27,6 +29,21 @@ describe('gym catalog generator', () => {
     const rendered = renderModule(profile);
     expect(rendered).toBe(renderModule(buildProfile(fixture()).profile));
     expect(rendered).not.toMatch(/Fixture|Acme|Fake|fixture-photo|2026-01-01|count_claims|weight_range_lb|walk_note/);
+  });
+
+  it('publishes only neutral zone labels and omits labels for unfamiliar zones', () => {
+    const doc = fixture();
+    doc.zones[0].name = 'Private Marker Turf Annex';
+    doc.zones[1].name = 'Private Marker Free Weights';
+    doc.zones[2].name = 'Private Marker Cardio Deck';
+    doc.zones[3].name = 'Private Marker Exclusive Studio';
+    doc.zones[3].zone_name = 'Private Marker Exclusive Studio';
+    const { profile } = buildProfile(doc);
+    expect(profile.zones.map((zone) => zone.label)).toEqual(['turf', 'free weights', 'cardio deck', undefined]);
+    expect(renderModule(profile)).not.toContain('Private Marker');
+
+    doc.zones[3].name = 'Rack Room';
+    expect(buildProfile(doc).profile.zones[3]?.label).toBe('rack room');
   });
 
   it('keeps private slugs and free-form types out while preserving references', () => {

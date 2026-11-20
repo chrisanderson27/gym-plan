@@ -184,7 +184,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page).toHaveURL(/#\/lift\/session\//);
     await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
     await page.getByTestId('warmup-done').click();
-    await expect(page.locator('.setrow, [data-testid^="cal-log-"]').first()).toBeInViewport();
+    await expect(page.locator('[data-testid="set-done"], [data-testid^="cal-log-"]').first()).toBeInViewport();
     await expect(page.locator('body')).toHaveAttribute('data-taps', '2');
   });
 }

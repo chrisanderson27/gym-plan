@@ -3,6 +3,7 @@ import { SWIM_WORKOUTS } from '../../content/swim-workouts';
 import type { CardioSnapshot } from '../../data/cardio';
 import { newId } from '../../data/ids';
 import { DEFAULT_POOL_LENGTH, poolOf } from '../../data/settings';
+import type { LiftDayPlan } from '../../engine/block/generate';
 import { BURN_DEFAULT_MIN, DEFAULT_LIFT_BUDGET_MIN, HYBRID_CARDIO_MIN, HYBRID_LIFT_MIN, SWIM_ESTIMATE_YD_SEC_PER_100, SWIM_YD_TO_M_PACE } from '../../engine/config';
 import { localDate } from '../../engine/dates';
 import type { Candidate } from '../../engine/plan/types';
@@ -10,7 +11,7 @@ import { generateRun } from '../../engine/run/generator';
 import { latestCss } from '../../engine/swim/css';
 import { generateSwim, nextSwimWorkout } from '../../engine/swim/generator';
 import { weekIndex } from '../../engine/week';
-import { humanize, sessionTypeLabel } from '../labels';
+import { floorLabel, humanize, sessionTypeLabel } from '../labels';
 import { CheckIcon } from '../icons';
 
 function cardioMinutes(pick: Candidate, cardio: CardioSnapshot, now: Date): number {
@@ -44,13 +45,13 @@ function cardioMinutes(pick: Candidate, cardio: CardioSnapshot, now: Date): numb
   return Math.max(1, Math.round(seconds / 60));
 }
 
-export function heroFor(pick: Candidate, cardio: CardioSnapshot | null, now: Date) {
+export function heroFor(pick: Candidate, cardio: CardioSnapshot | null, now: Date, liftDay?: Pick<LiftDayPlan, 'estMin' | 'floor'>) {
   const activity = pick.tile;
-  const duration = activity === 'lift' ? DEFAULT_LIFT_BUDGET_MIN : activity === 'burn' ? BURN_DEFAULT_MIN
+  const duration = activity === 'lift' ? (liftDay ? Math.round(liftDay.estMin) : DEFAULT_LIFT_BUDGET_MIN) : activity === 'burn' ? BURN_DEFAULT_MIN
     : activity === 'hybrid' ? HYBRID_LIFT_MIN + HYBRID_CARDIO_MIN
     : cardio && (activity === 'run' || activity === 'swim') ? cardioMinutes(pick, cardio, now)
     : null;
-  return { activity, duration, title: pick.title };
+  return { activity, duration, title: pick.title, place: activity === 'lift' && liftDay ? floorLabel(liftDay.floor) : undefined };
 }
 
 type HeroProps =
@@ -80,13 +81,13 @@ export function HeroCard(props: HeroProps) {
       </section>
     );
   }
-  const { activity, title, duration } = props;
+  const { activity, title, duration, place } = props;
   return (
     <section class="hero hero-workout" data-testid="hero" data-activity={activity}>
       <div data-testid="hero-state" data-state={props.state}>
         <p class="hero-activity">{sessionTypeLabel(activity)}</p>
         <h2>{title}</h2>
-        {duration !== null && <p class="num">{activity === 'swim' && '≈ '}{duration} min</p>}
+        {duration !== null && <p class="num">{activity === 'swim' && '≈ '}{duration} min{place && ` · ${place}`}</p>}
         <p class="hero-reason">{humanize(props.reason)}</p>
       </div>
     </section>

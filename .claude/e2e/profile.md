@@ -154,3 +154,9 @@ _Learned 2026-11-18 · costs: none if known; otherwise a whole calibration sessi
 **You'll see:** a fresh profile has no lift history, so every exercise shows a calibration card and progression cannot be tested.
 **Do:** after onboarding, upload a backup JSON (shape in `e2e/lifting.spec.ts`) via `Import backup`; set `settings.updatedAt` ahead of now so it wins the merge and `programStart` = today − 28 d (week 5). Wait for status `Imported sessions: …`.
 **Where:** `#/settings`.
+
+### Use `#/lift/start/<variant>` for lift + blocks; spy Wake Lock with an init script
+_Learned 2026-11-19 · costs: one source lookup and a misread "no blocks" session_
+**You'll see:** the bare `#/lift` picker Start builds straight sets only (no circuit blocks), and Wake Lock calls leave no visible trace.
+**Do:** to get a "lift + blocks" session, use Today's Start or open `#/lift/start/<variant>` (for example `lower-b`). An open lift within 12 h is resumed instead. A stale one (>12 h) is not "open", so it is shown only on Today as "Unfinished lift from …". For Wake Lock, launch with `--init-script <file>` that wraps `navigator.wakeLock.request` and pushes `acquired`/`released` into `window.__wl`, then `eval "JSON.stringify(window.__wl)"`. Call the journey wrapper by its absolute path, not through a shell variable; each expansion triggers a permission prompt.
+**Where:** `#/`, `#/lift`, `#/lift/session/<id>`.

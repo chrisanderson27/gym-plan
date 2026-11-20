@@ -10,10 +10,10 @@ import { painSwapOffer } from '../../engine/lift/pain';
 import { calibrationLanding, calibrationStart } from '../../engine/lift/progression';
 import { stepBy } from '../../engine/lift/steps';
 import { PoseView } from '../slots/PoseView';
-import type { CardProps } from './ExerciseCard';
+import type { CardProps } from './FocusLift';
 import { Stepper } from './Stepper';
 
-export function CalibrationCard(p: CardProps) {
+export function CalibrationCard(p: CardProps & { advance?: { label: string; onClick: () => void } }) {
   const { block, snapshot, session } = p;
   const ex = exerciseById.get(block.exerciseId);
   const eq = block.equipmentId ? snapshot.equipment.get(block.equipmentId) : undefined;
@@ -114,6 +114,7 @@ export function CalibrationCard(p: CardProps) {
           <button type="button" onClick={() => p.onSwapTo(sub)}>Swap</button>
         </p>
       )}
+      {stopped && p.advance && <button type="button" class="primary" data-testid="step-next" onClick={p.advance.onClick}>{p.advance.label}</button>}
       <div class="actions">
         <button type="button" onClick={p.onSwap}>Swap</button>
         <button type="button" onClick={p.onNotAtMyGym}>Not at my gym</button>
