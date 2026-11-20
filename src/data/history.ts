@@ -1,8 +1,8 @@
+import Dexie, { RangeSet, type ObservabilitySet } from 'dexie';
 import { LIFT_TEMPLATES } from '../content';
-import { circuitWork } from '../engine/block/work';
 import { CARDIO_MODALITY_LABELS, HISTORY_PAGE } from '../engine/config';
 import { isWorking, type HistorySession } from '../engine/lift/types';
-import { sessionPRs, type PR } from '../engine/pr';
+import { comparableBlock, sessionPRs, type PR } from '../engine/pr';
 import type { GymDb } from './db';
 import type { RunRow, Session, SetRow, SwimRow } from './types';
 
@@ -49,40 +49,93 @@ function groupSets(rows: SetRow[]): Map<string, SetRow[]> {
   return groups;
 }
 
-function circuitExercises(session: Session): string[] {
-  return session.blocks.flatMap((block) => {
-    if (block.kind !== 'circuit' || !block.log || block.log.stations.some((station) => station.swappedFromExerciseId)) return [];
-    return circuitWork(block)?.perStation.map(({ exerciseId }) => exerciseId) ?? [];
+function circuitKeys(session: Session): string[] {
+  return session.blocks.map(comparableBlock).flatMap((block) => block ? [block.key] : []);
+}
+
+type CircuitCandidate = { session: Session; keys: string[] };
+type CircuitIndex = { rows: Map<string, CircuitCandidate | null>; revision: number };
+const circuitIndexes = new WeakMap<GymDb, CircuitIndex>();
+
+function circuitIndex(db: GymDb): CircuitIndex {
+  const existing = circuitIndexes.get(db);
+  if (existing) return existing;
+  const index: CircuitIndex = { rows: new Map(), revision: 0 };
+  const invalidate = (parts: ObservabilitySet) => {
+    const changes = parts[`idb://${db.name}/sessions/`];
+    if (!changes?.d) return;
+    index.revision++;
+    for (const { from, to } of RangeSet(changes)) {
+      if (typeof from === 'string' && from === to) index.rows.delete(from);
+      else index.rows.clear();
+    }
+  };
+  Dexie.on.storagemutated.subscribe(invalidate);
+  const close = () => {
+    Dexie.on.storagemutated.unsubscribe(invalidate);
+    db.on.close.unsubscribe(close);
+    circuitIndexes.delete(db);
+  };
+  db.on.close.subscribe(close);
+  circuitIndexes.set(db, index);
+  return index;
+}
+
+async function priorCircuitSessions(db: GymDb, ids: string[], keys: Set<string>, index?: CircuitIndex): Promise<Session[]> {
+  // A primary-key count keeps live queries subscribed to circuit edits even on cache hits.
+  const revision = index?.revision;
+  const candidates = ids.map((id) => index?.rows.get(id));
+  const missing = ids.filter((_, i) => candidates[i] === undefined);
+  const [rows] = await Promise.all([db.sessions.bulkGet(missing), db.sessions.count()]);
+  const loaded = rows.map((session) => {
+    if (!session) return null;
+    const keys = circuitKeys(session);
+    return keys.length ? { session, keys } : null;
   });
+  if (index && index.revision === revision) missing.forEach((id, i) => index.rows.set(id, loaded[i]!));
+  return [...candidates, ...loaded].flatMap((row) => row?.keys.some((key) => keys.has(key)) ? [row.session] : []);
+}
+
+async function priorWorkingSets(db: GymDb, ids: string[], pairs: [string, string][]): Promise<SetRow[]> {
+  // The set timestamp is optional and may differ from the owning session's date.
+  // Intersect index keys before reading set rows so both constraints apply to every read.
+  const [dated, matching] = await Promise.all([
+    db.sets.where('sessionId').anyOf(ids).primaryKeys(),
+    db.sets.where('[exerciseId+equipmentId]').anyOf(pairs).primaryKeys(),
+  ]);
+  const datedKeys = new Set(dated);
+  return (await db.sets.bulkGet(matching.filter((id) => datedKeys.has(id))))
+    .filter((set): set is SetRow => !!set && isWorking(set));
 }
 
 async function priorPRs(db: GymDb, entries: HistorySession[], newestDate: string): Promise<PR[][]> {
   const entryIds = new Set(entries.map(({ session }) => session.id));
   const pairs = new Map<string, [string, string]>();
-  const circuitIds = new Set<string>();
+  const keys = new Set<string>();
   for (const { session, sets } of entries) {
     for (const { exerciseId, equipmentId } of sets.filter(isWorking)) {
       const pair: [string, string] = [exerciseId, equipmentId];
       pairs.set(JSON.stringify(pair), pair);
     }
-    for (const id of circuitExercises(session)) circuitIds.add(id);
+    for (const key of circuitKeys(session)) keys.add(key);
   }
+  if (!pairs.size && !keys.size) return entries.map(() => []);
 
-  const [sets, circuits] = await Promise.all([
-    pairs.size ? db.sets.where('[exerciseId+equipmentId]').anyOf([...pairs.values()])
-      .filter((set) => !entryIds.has(set.sessionId) && isWorking(set)).toArray() : [],
-    // Circuits have no index of their own. Only scan when the page contains a comparable circuit.
-    circuitIds.size ? db.sessions.where('date').below(newestDate)
-      .filter((session) => !entryIds.has(session.id) && circuitExercises(session).some((id) => circuitIds.has(id)))
-      .toArray() : [],
-  ]);
-  const setsBy = groupSets(sets);
-  const circuitSessionIds = new Set(circuits.map(({ id }) => id));
-  const setSessions = await db.sessions.bulkGet([...setsBy.keys()].filter((id) => !circuitSessionIds.has(id)));
-  const prior = [...entries];
-  for (const session of [...circuits, ...setSessions]) {
-    if (session && session.date < newestDate) prior.push({ session, sets: setsBy.get(session.id) ?? [] });
-  }
+  // A caller's transaction can contain uncommitted edits. Keep those reads out of the shared index.
+  const index = keys.size && !Dexie.currentTransaction ? circuitIndex(db) : undefined;
+  const prior = await db.transaction('r', db.sessions, db.sets, async () => {
+    const ids = (await db.sessions.where('date').below(newestDate).primaryKeys()).filter((id) => !entryIds.has(id));
+    if (!ids.length) return entries;
+    const [sets, circuits] = await Promise.all([
+      pairs.size ? priorWorkingSets(db, ids, [...pairs.values()]) : [],
+      keys.size ? priorCircuitSessions(db, ids, keys, index) : [],
+    ]);
+    const setsBy = groupSets(sets);
+    const circuitSessionIds = new Set(circuits.map(({ id }) => id));
+    const setSessions = await db.sessions.bulkGet([...setsBy.keys()].filter((id) => !circuitSessionIds.has(id)));
+    return [...entries, ...[...circuits, ...setSessions].flatMap((session) =>
+      session ? [{ session, sets: setsBy.get(session.id) ?? [] }] : [])];
+  });
   return entries.map((entry) => sessionPRs(entry, prior.filter(({ session }) => session.date < entry.session.date)));
 }
 

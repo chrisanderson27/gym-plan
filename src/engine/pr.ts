@@ -1,4 +1,4 @@
-import type { CircuitBlock, SetRow } from '../data/types';
+import type { Block, SetRow } from '../data/types';
 import { circuitWork } from './block/work';
 import { isWorking, type HistorySession } from './lift/types';
 
@@ -30,9 +30,10 @@ export function setPRs(set: SetRow, history: HistorySession[], sessionId: string
   return records;
 }
 
-function comparableBlock(block: CircuitBlock) {
+export function comparableBlock(block: Block) {
+  if (block.kind !== 'circuit' || !block.log || block.log.stations.some((station) => station.swappedFromExerciseId)) return null;
   const work = circuitWork(block);
-  if (!work || block.log!.stations.some((station) => station.swappedFromExerciseId)) return null;
+  if (!work) return null;
   const exerciseIds = new Set(work.perStation.map((station) => station.exerciseId));
   return { key: JSON.stringify([...exerciseIds].sort()), total: work.total };
 }
@@ -54,7 +55,6 @@ export function sessionPRs(s: HistorySession, history: HistorySession[]): PR[] {
   const bestCircuitWork = new Map<string, number>();
   for (const { session } of prior) {
     for (const block of session.blocks) {
-      if (block.kind !== 'circuit') continue;
       const comparison = comparableBlock(block);
       if (comparison) {
         const { key, total } = comparison;
@@ -64,7 +64,6 @@ export function sessionPRs(s: HistorySession, history: HistorySession[]): PR[] {
   }
   const records: PR[] = [...best.values()];
   for (const block of s.session.blocks) {
-    if (block.kind !== 'circuit') continue;
     const comparison = comparableBlock(block);
     if (!comparison) continue;
     const prev = bestCircuitWork.get(comparison.key);

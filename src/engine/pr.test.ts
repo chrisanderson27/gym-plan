@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import type { CircuitBlock, SetRow } from '../data/types';
 import type { HistorySession } from './lift/types';
-import { sessionPRs, setPRs } from './pr';
+import { comparableBlock, sessionPRs, setPRs } from './pr';
 
 const set = (weight = 45, reps = 8, fields: Partial<SetRow> = {}): SetRow => ({
   id: 'x', sessionId: 's', exerciseId: 'goblet-squat', equipmentId: 'bells', idx: 0,
@@ -61,4 +61,15 @@ it('excludes swapped or unlogged circuits on either side of a comparison', () =>
   const current = session('s', [], [block('b', 5)]);
   expect(sessionPRs(session('s', [], [swapped, unlogged]), [current])).toEqual([]);
   expect(sessionPRs(current, [session('prior', [], [swapped, unlogged])])).toEqual([]);
+});
+
+it('keys comparable circuits by deduplicated actual station ids, including a legacy backup', () => {
+  const backup = block('backup', 3, ['rower', 'plank', 'air-bike']);
+  backup.stations[0]!.backup = { exerciseId: 'air-bike', target: { unit: 'cal', amount: 12 } };
+  backup.log!.stations[0]!.exerciseId = 'air-bike';
+  const prior = block('prior', 2, ['plank', 'air-bike']);
+  expect(comparableBlock(backup)?.key).toBe(comparableBlock(prior)?.key);
+  expect(sessionPRs(session('s', [], [backup]), [session('prior', [], [prior])])).toEqual([
+    { kind: 'block-work', blockId: 'backup', total: 9, prev: 4 },
+  ]);
 });

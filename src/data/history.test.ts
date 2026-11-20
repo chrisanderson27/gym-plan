@@ -1,6 +1,8 @@
+import { liveQuery } from 'dexie';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { sessionPRs } from '../engine/pr';
 import type { GymDb } from './db';
-import { cardNumbers, listHistory, loadSessionDetail, loadSessionPRs } from './history';
+import { cardNumbers, listHistory, loadSessionDetail, loadSessionPRs, type HistoryItem } from './history';
 import { session, topSets } from './p4-test-utils';
 import { openTestDb } from './test-utils';
 import type { CircuitBlock, RunRow, SwimRow } from './types';
@@ -67,25 +69,35 @@ describe('history', () => {
   });
   it('only reads sets and sessions relevant to the current page and its PRs', async () => {
     const db = open();
+    const current = session('current', 2);
+    const prior = session('prior', 3);
+    const currentSets = topSets(current.id, 2).map((s) => ({ ...s, weight: 110 }));
+    const priorSets = topSets(prior.id, 1).map((s, i) => i ? { ...s, weight: 110, reps: 10 } : { ...s, ts: undefined });
     const unrelated = Array.from({ length: 20 }, (_, i) => session(`other-${i}`, i + 4));
-    await db.sessions.bulkPut([session('current', 1), session('prior', 2), ...unrelated]);
+    const unrelatedSets = unrelated.map((s, i) => topSets(s.id, i + 4).map((set) => ({ ...set, equipmentId: 'other' })));
+    await db.sessions.bulkPut([session('future', 1), current, session('tie', 2), prior, ...unrelated]);
     await db.sets.bulkPut([
-      ...topSets('current', 1).map((s) => ({ ...s, weight: 110 })),
-      ...topSets('prior', 2),
-      ...unrelated.flatMap((s, i) => topSets(s.id, i + 4).map((set) => ({ ...set, equipmentId: 'other' }))),
+      ...topSets('future', 9), ...topSets('tie', 8), ...topSets('orphan', 7),
+      ...currentSets, ...priorSets, ...unrelatedSets.flat(),
     ]);
     const readSession = vi.fn((row: { id: string }) => row);
     const readSet = vi.fn((row: { sessionId: string }) => row);
     db.sessions.hook('reading', readSession);
     db.sets.hook('reading', readSet);
 
-    const [item] = await listHistory(db, 0, 1);
+    const [item] = await listHistory(db, 2, 1);
 
-    expect(item!.prs).toMatchObject([{ kind: 'weight-at-reps', weight: 110, prev: 100 }]);
-    expect(readSession.mock.calls.map(([row]) => row.id).sort()).toEqual(['current', 'prior']);
+    expect(item!.session.id).toBe('current');
+    const legacy = sessionPRs({ session: current, sets: currentSets }, [
+      { session: prior, sets: priorSets }, ...unrelated.map((s, i) => ({ session: s, sets: unrelatedSets[i]! })),
+    ]);
+    expect(item!.prs).toEqual(legacy);
+    expect(item!.prs.map(({ kind }) => kind)).toEqual(['weight-at-reps', 'reps-at-weight']);
+    expect(readSession.mock.calls.map(([row]) => row?.id).sort()).toEqual(['current', 'prior']);
     expect(readSet.mock.calls.map(([row]) => row.sessionId).sort()).toEqual([
       'current', 'current', 'current', 'prior', 'prior', 'prior',
     ]);
+    expect(await loadSessionPRs(db, current.id)).toEqual(legacy);
   });
   it('finds prior matching circuits across session types without reading their sets', async () => {
     const db = open();
@@ -94,20 +106,66 @@ describe('history', () => {
       stations: [{ exerciseId, target: { unit: 'cal', amount: 10 } }],
       log: { completedRounds, actualDurationSec: 480, stations: [{ exerciseId }] },
     });
-    await db.sessions.bulkPut([
+    const mixed = circuit(9);
+    mixed.stations.push({ exerciseId: 'plank', target: { unit: 'sec', amount: 30 } });
+    mixed.log!.stations.push({ exerciseId: 'plank' });
+    const swapped = circuit(8);
+    swapped.log!.stations[0]!.swappedFromExerciseId = 'air-bike';
+    const sessions = [
       session('current', 2, { blocks: [circuit(3)] }),
       session('prior', 3, { type: 'burn', blocks: [circuit(2)] }),
       session('future', 1, { blocks: [circuit(4)] }),
-      session('other', 4, { blocks: [circuit(4, 'air-bike')] }),
-    ]);
-    await db.sets.bulkPut(topSets('prior', 3));
+      session('same-date', 2, { blocks: [circuit(5)] }),
+      session('other', 4, { type: 'run', blocks: [circuit(4, 'air-bike'), mixed, swapped] }),
+      ...Array.from({ length: 20 }, (_, i) => session(`no-circuit-${i}`, i + 5)),
+    ];
+    const history = sessions.map((s) => ({ session: s, sets: s.id === 'prior' ? topSets(s.id, 3) : [] }));
+    const legacy = (id: string) => {
+      const entry = history.find((row) => row.session.id === id)!;
+      return sessionPRs(entry, history.filter(({ session: s }) => s.date < entry.session.date));
+    };
+    await db.sessions.bulkPut(sessions);
+    await db.sets.bulkPut(history[1]!.sets);
     const readSet = vi.fn((row: { sessionId: string }) => row);
     db.sets.hook('reading', readSet);
 
-    const [item] = await listHistory(db, 1, 1);
-    expect(item!.prs).toEqual([{ kind: 'block-work', blockId: 'circuit', total: 3, prev: 2 }]);
-    expect(await loadSessionPRs(db, 'current')).toEqual(item!.prs);
+    const items = await listHistory(db, 0, 3);
+    expect(items.map(({ prs, session: s }) => [s.id, prs])).toEqual(items.map(({ session: s }) => [s.id, legacy(s.id)]));
+    const item = items.find(({ session: s }) => s.id === 'current')!;
+    expect(item.prs).toEqual([{ kind: 'block-work', blockId: 'circuit', total: 3, prev: 2 }]);
+    const readSession = vi.fn((row: { id: string }) => row);
+    db.sessions.hook('reading', readSession);
+    readSet.mockClear();
+    expect(await loadSessionPRs(db, 'current')).toEqual(legacy('current'));
+    expect(readSession.mock.calls.map(([row]) => row.id).sort()).toEqual(['current']);
     expect(readSet).not.toHaveBeenCalled();
+
+    await db.sessions.update('other', { blocks: [circuit(4)] });
+    readSession.mockClear();
+    expect(await loadSessionPRs(db, 'current')).toEqual([]);
+    expect(readSession.mock.calls.map(([row]) => row.id).sort()).toEqual(['current', 'other']);
+    await db.sessions.delete('other');
+    expect(await loadSessionPRs(db, 'current')).toEqual(legacy('current'));
+  });
+  it('updates live badges when an older session gains a comparable circuit', async () => {
+    const db = open();
+    const circuit: CircuitBlock = {
+      id: 'circuit', kind: 'circuit', role: 'block', podId: 'turf', durationSec: 480, targetRounds: 5,
+      stations: [{ exerciseId: 'rower', target: { unit: 'cal', amount: 10 } }],
+      log: { completedRounds: 3, actualDurationSec: 480, stations: [{ exerciseId: 'rower' }] },
+    };
+    await db.sessions.bulkPut([session('current', 1, { blocks: [circuit] }), session('older', 2)]);
+    const results = vi.fn<(items: HistoryItem[]) => void>();
+    const subscription = liveQuery(() => listHistory(db, 0, 1)).subscribe(results);
+    try {
+      await vi.waitFor(() => expect(results.mock.lastCall?.[0][0]?.prs).toEqual([]));
+      await db.sessions.update('older', { blocks: [{ ...circuit, log: { ...circuit.log!, completedRounds: 2 } }] });
+      await vi.waitFor(() => expect(results.mock.lastCall?.[0][0]?.prs).toEqual([
+        { kind: 'block-work', blockId: 'circuit', total: 3, prev: 2 },
+      ]));
+    } finally {
+      subscription.unsubscribe();
+    }
   });
   it('shows minutes, working sets and circuit rounds before cardio distance', () => {
     const circuit: CircuitBlock = {
