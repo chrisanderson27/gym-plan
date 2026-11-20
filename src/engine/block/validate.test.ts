@@ -2,7 +2,7 @@ import { expect, expectTypeOf, it } from 'vitest';
 import type { MovementGroup } from '../../content/types';
 import type { CircuitBlock, CircuitStation, LiftBlock } from '../../data/types';
 import type { GymItemShape } from '../gym/types';
-import { BLOCK_GROUP, groupOf, type BlockExerciseShape } from './rules';
+import { BLOCK_GROUP, countsAsCardio, groupOf, type BlockExerciseShape } from './rules';
 import { validateBlock, validateLiftDay, type BlockContext } from './validate';
 
 const ex = (id: string, group: BlockExerciseShape['group'], ...equipment: string[]): BlockExerciseShape => ({
@@ -14,6 +14,7 @@ const exercises = new Map([
   ex('core', 'carry-core', 'bodyweight'), ex('pull', 'horizontal-pull', 'cable'),
   ex('fixed-push', 'horizontal-push', 'machine'), ex('rower', 'conditioning', 'cardio-machine'),
   ex('bike', 'conditioning', 'cardio-machine'), ex('back-squat', 'squat', 'barbell'),
+  ex('machine-pull', 'horizontal-pull', 'cardio-machine'),
   ex('burpee', 'conditioning', 'bodyweight'), ex('wall-ball', 'conditioning', 'med-ball'),
 ].map((e) => [e.id, e]));
 const item = (id: string, fields: Partial<GymItemShape> = {}): GymItemShape => ({
@@ -64,6 +65,17 @@ it('accepts two fixed and two cardio stations for Burn only', () => {
 
 it('counts portable and bodyweight conditioning toward the cardio limit', () => {
   const mix = block(station('burpee'), station('push'), station('wall-ball'), station('squat'));
+  expect(validateBlock(mix, ctx, 'lift')).toEqual(['cardio>max']);
+  expect(validateBlock(mix, ctx, 'burn')).toEqual([]);
+});
+
+it('counts either cardio group or cardio kit and ignores unclassified stations', () => {
+  expect(countsAsCardio('cardio', 'portable')).toBe(true);
+  expect(countsAsCardio('pull', 'cardio')).toBe(true);
+  expect(countsAsCardio('cardio', 'cardio')).toBe(true);
+  expect(countsAsCardio('pull', 'fixed')).toBe(false);
+  expect(countsAsCardio(undefined, undefined)).toBe(false);
+  const mix = block(station('machine-pull'), station('burpee'), station('push'));
   expect(validateBlock(mix, ctx, 'lift')).toEqual(['cardio>max']);
   expect(validateBlock(mix, ctx, 'burn')).toEqual([]);
 });

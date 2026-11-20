@@ -9,9 +9,11 @@ const check = (terms?: string) => {
   return spawnSync(process.execPath, ['scripts/check-gym-privacy.mjs'], { cwd, env, encoding: 'utf8' });
 };
 
-it('passes with no private terms configured', () => {
-  const result = check();
+it.each([undefined, ' \n\t '])('reports SKIPPED when private terms are %j', (terms) => {
+  const result = check(terms);
   expect(result.status, result.stderr).toBe(0);
+  expect(result.stderr).toContain('SKIPPED');
+  expect(result.stderr).toContain('GYM_FORBIDDEN_TERMS');
 });
 
 it('finds no configured forbidden terms in tracked files', () => {
@@ -32,4 +34,5 @@ ${term}
 it('treats configured terms as literal strings', () => {
   const result = check('gym' + '.plan/');
   expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).toContain('Gym privacy check passed');
 });

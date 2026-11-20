@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +9,8 @@ import { parse } from 'yaml';
 import { buildProfile, renderModule } from '../../../scripts/gen-gym.mjs';
 
 const fixturePath = fileURLToPath(new URL('../../../scripts/fixtures/gym-fixture.yaml', import.meta.url));
-const fixture = () => parse(readFileSync(fixturePath, 'utf8'));
+const fixtureKey = 'ab'.repeat(32);
+const fixture = () => ({ ...parse(readFileSync(fixturePath, 'utf8')), idKey: fixtureKey });
 const keys = (value: object) => Object.keys(value).sort();
 
 describe('gym catalog generator', () => {
@@ -48,12 +50,47 @@ describe('gym catalog generator', () => {
       .toBe(profile.items[0]?.id);
   });
 
+  it('keys public ids so a private slug alone cannot reproduce them', () => {
+    const doc = fixture();
+    const { profile } = buildProfile(doc);
+    const other = buildProfile({ ...doc, idKey: 'cd'.repeat(32) }).profile;
+    expect(renderModule(profile)).not.toContain(fixtureKey);
+    for (const [rows, source, rekeyed, prefix] of [
+      [profile.zones, doc.zones, other.zones, 'zone'],
+      [profile.items, doc.items, other.items, 'item'],
+      [profile.pods, doc.pods, other.pods, 'pod'],
+    ] as const) {
+      const guess = createHash('sha256').update(source[0].id).digest('hex').slice(0, 16);
+      expect(rows[0]?.id).not.toBe(`${prefix}-${guess}`);
+      expect(rows[0]?.id).not.toBe(rekeyed[0]?.id);
+    }
+  });
+
+  it('publishes a neutral elliptical type with its exercise', () => {
+    const doc = fixture();
+    doc.items[0].type = 'elliptical';
+    doc.items[0].exercises = ['elliptical'];
+    expect(buildProfile(doc).profile.items[0]).toMatchObject({ type: 'elliptical', exercises: ['elliptical'] });
+  });
+
   it('writes a module at the requested CLI output path', () => {
     const dir = mkdtempSync(join(tmpdir(), 'gym-profile-'));
     try {
       const script = fileURLToPath(new URL('../../../scripts/gen-gym.mjs', import.meta.url));
       const out = join(dir, 'home-gym.ts');
-      const run = spawnSync(process.execPath, [script, fixturePath, '--out', out], { encoding: 'utf8' });
+      const key = join(dir, 'id-key');
+      const args = [script, fixturePath, '--id-key-file', key, '--out', out];
+      const missing = spawnSync(process.execPath, args, { encoding: 'utf8' });
+      expect(missing.status).toBe(1);
+      expect(missing.stderr).toContain('Could not read private ID key file');
+      expect(existsSync(out)).toBe(false);
+      writeFileSync(key, 'too-short');
+      const invalid = spawnSync(process.execPath, args, { encoding: 'utf8' });
+      expect(invalid.status).toBe(1);
+      expect(invalid.stderr).toContain('Expected a private ID key');
+      expect(existsSync(out)).toBe(false);
+      writeFileSync(key, `${fixtureKey}\n`);
+      const run = spawnSync(process.execPath, args, { encoding: 'utf8' });
       expect(run.status, run.stderr).toBe(0);
       expect(run.stdout.trim()).toBe('wrote 13 items, 3 pods, 4 zones');
       expect(run.stderr.trim()).toBe('unmapped exercise: "imaginary lift" (item upper-turf-row)');

@@ -34,3 +34,7 @@ export function kitOf(ex: BlockExerciseShape): 'fixed' | 'cardio' | 'portable' {
   if (ex.equipment.includes('cardio-machine')) return 'cardio';
   return ex.equipment.some((tag) => FIXED_TAGS.includes(tag)) ? 'fixed' : 'portable';
 }
+
+export function countsAsCardio(group: BlockGroup | undefined, kit: ReturnType<typeof kitOf> | undefined): boolean {
+  return group === 'cardio' || kit === 'cardio';
+}

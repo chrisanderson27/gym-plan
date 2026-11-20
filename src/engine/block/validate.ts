@@ -1,7 +1,7 @@
 import type { Block, CircuitBlock, CircuitStation } from '../../data/types';
 import { anchorOk, zoneOf } from '../gym/availability';
 import type { GymItemShape, GymProfileShape } from '../gym/types';
-import { groupOf, kitOf, NO_BLOCK_IDS, PROFILES, type BlockExerciseShape } from './rules';
+import { countsAsCardio, groupOf, kitOf, NO_BLOCK_IDS, PROFILES, type BlockExerciseShape } from './rules';
 
 export interface BlockContext {
   exercise(id: string): BlockExerciseShape | undefined;
@@ -53,7 +53,7 @@ export function validateBlock(block: CircuitBlock, ctx: BlockContext, profile: k
     return ex && kitOf(ex);
   });
   if (kits.filter((kit) => kit === 'fixed').length > rules.fixedMax) violations.add('fixed>max');
-  if (groups.filter((group, i) => group === 'cardio' || kits[i] === 'cardio').length > rules.cardioMax) {
+  if (groups.filter((group, i) => countsAsCardio(group, kits[i])).length > rules.cardioMax) {
     violations.add('cardio>max');
   }
 

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -110,7 +110,7 @@ const positiveInt = (value) => Number.isInteger(value) && value > 0;
 const PUBLIC_TYPES = new Set([
   'adjustable-bench', 'air-bike', 'bar-storage-specialty', 'battle-rope', 'bike', 'bumper-plate-tree', 'bumper-plates',
   'cable', 'curved-manual-treadmill', 'dual-adjustable-pulley', 'dumbbell-set-round-urethane', 'dumbbells',
-  'elliptical-or-ascent-trainer', 'exercise-bike', 'fixed-barbell-rack', 'flat-bench', 'foam-roller-rack',
+  'elliptical', 'exercise-bike', 'fixed-barbell-rack', 'flat-bench', 'foam-roller-rack',
   'functional-rig-dual-adjustable-pulley', 'heavy-bag', 'kettlebell-set', 'kettlebells', 'landmine',
   'lifting-platform', 'machine', 'medicine-ball-set', 'medicine-balls', 'motorised-treadmill',
   'multi-station-cable-tower', 'olympic-bench-mixed', 'olympic-flat-bench', 'open-rubber-floor',
@@ -137,27 +137,32 @@ function publicType(type) {
   return 'unknown';
 }
 
-// Derive IDs from the private key, so reordering catalog rows keeps published references stable.
-function catalogRows(rows, key, prefix) {
+// Key the IDs so only the private catalog workflow can reproduce them from slugs.
+function catalogRows(rows, key, prefix, idKey) {
   if (!Array.isArray(rows)) throw new Error(`Expected ${key} to be an array`);
   const ids = new Map();
   for (const row of rows) {
     if (typeof row !== 'object' || row === null || !isSlug(row.id)) throw new Error(`Malformed ${key} row`);
     if (ids.has(row.id)) throw new Error(`Duplicate ${key} id`);
-    ids.set(row.id, `${prefix}-${createHash('sha256').update(row.id).digest('hex').slice(0, 16)}`);
+    const hash = createHmac('sha256', idKey).update(`${prefix}:${row.id}`).digest('hex').slice(0, 16);
+    ids.set(row.id, `${prefix}-${hash}`);
   }
   return ids;
 }
 
 export function buildProfile(doc) {
   if (doc?.gym_id !== 'home-gym') throw new Error('Expected gym_id home-gym');
+  if (typeof doc.idKey !== 'string' || !/^[a-f0-9]{64}$/i.test(doc.idKey)) {
+    throw new Error('Expected a private ID key with 64 hex characters');
+  }
+  const idKey = Buffer.from(doc.idKey, 'hex');
   const pending = doc.pending === undefined ? [] : doc.pending;
   const unmapped = [];
-  const zoneIds = catalogRows(doc.zones, 'zones', 'zone');
-  const itemIds = catalogRows(doc.items, 'items', 'item');
-  const pendingIds = catalogRows(pending, 'pending', 'item');
+  const zoneIds = catalogRows(doc.zones, 'zones', 'zone', idKey);
+  const itemIds = catalogRows(doc.items, 'items', 'item', idKey);
+  const pendingIds = catalogRows(pending, 'pending', 'item', idKey);
   const catalogIds = new Map([...pendingIds, ...itemIds]);
-  const podIds = catalogRows(doc.pods, 'pods', 'pod');
+  const podIds = catalogRows(doc.pods, 'pods', 'pod', idKey);
   const zones = doc.zones.map(({ id, floor, neighbours }) => {
     if (!positiveInt(floor) || !Array.isArray(neighbours) || !neighbours.every(isSlug)) {
       throw new Error('Malformed zone floor or neighbours');
@@ -209,9 +214,10 @@ export function renderModule(profile) {
 }
 
 function main() {
-  const [catalog, flag, output, ...extra] = process.argv.slice(2);
-  if (!catalog || (flag !== undefined && (flag !== '--out' || !output)) || extra.length) {
-    throw new Error('Usage: gen-gym.mjs <catalog.yaml> [--out <home-gym.ts>]');
+  const [catalog, keyFlag, keyFile, outFlag, output, ...extra] = process.argv.slice(2);
+  if (!catalog || keyFlag !== '--id-key-file' || !keyFile
+    || (outFlag !== undefined && (outFlag !== '--out' || !output)) || extra.length) {
+    throw new Error('Usage: gen-gym.mjs <catalog.yaml> --id-key-file <key> [--out <home-gym.ts>]');
   }
   let doc;
   try {
@@ -219,7 +225,13 @@ function main() {
   } catch {
     throw new Error('Could not read or parse catalog');
   }
-  const { profile, unmapped } = buildProfile(doc);
+  let idKey;
+  try {
+    idKey = readFileSync(keyFile, 'utf8').trim();
+  } catch {
+    throw new Error('Could not read private ID key file');
+  }
+  const { profile, unmapped } = buildProfile({ ...doc, idKey });
   const out = output ?? 'src/content/gym/home-gym.ts';
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, renderModule(profile));

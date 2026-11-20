@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import { parse } from 'yaml';
 import { buildProfile } from '../../../scripts/gen-gym.mjs';
-import { SEED_EQUIPMENT } from '../../content';
+import { defaultEquipmentFor, HOME_GYM, SEED_EQUIPMENT } from '../../content';
 import { liftDayInputFrom } from '../../data/liftday';
 import type { CircuitBlock, LiftBlock, LiftVariant, SetRow } from '../../data/types';
 import { FINISHER_MIN, LIFT_DAY_MAIN_SETS } from '../config';
@@ -11,7 +11,10 @@ import { generateLiftDay, type LiftDayPlan } from './generate';
 import { groupOf } from './rules';
 import { blockContext, validateBlock, validateLiftDay } from './validate';
 
-const fixture = buildProfile(parse(readFileSync(new URL('../../../scripts/fixtures/gym-fixture.yaml', import.meta.url), 'utf8'))).profile;
+const fixture = buildProfile({
+  ...parse(readFileSync(new URL('../../../scripts/fixtures/gym-fixture.yaml', import.meta.url), 'utf8')),
+  idKey: 'ab'.repeat(32),
+}).profile;
 const turfPod = fixture.pods[0]!;
 const turfItem = (exerciseId: string) => fixture.items.find((item) => turfPod.items.includes(item.id) && item.exercises.includes(exerciseId))!.id;
 const variants: LiftVariant[] = ['upper-a', 'upper-b', 'lower-a', 'lower-b'];
@@ -73,6 +76,13 @@ it('passes the plan week to equipment resolution and merges caller and snapshot 
     : block.kind === 'circuit' ? block.stations.map((station) => station.exerciseId) : []);
   expect(exercises).not.toContain('air-bike');
   expect(exercises).not.toContain('rower');
+});
+
+it('preserves elliptical equipment resolution for the neutral catalog type', () => {
+  const item = HOME_GYM.items.find(({ type }) => type === 'elliptical');
+  expect(item).toMatchObject({ exercises: expect.arrayContaining(['elliptical']) });
+  const input = liftDayInputFrom(snapshot, 'upper-a', 60, 6);
+  expect(input.resolveEquipmentId('elliptical', item, 5)).toBe(defaultEquipmentFor('cardio-machine'));
 });
 
 it('uses a no-equipment warm-up and cool-down when the floor has no allowed cardio machine', () => {

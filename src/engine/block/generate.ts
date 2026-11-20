@@ -13,7 +13,7 @@ import { isWorking, type LiftSnapshot, type Prescription } from '../lift/types';
 import { isRampInWeek, weekIndex } from '../week';
 import { prescribeBlock, type Draft } from './progression';
 import { mulberry32, shuffle } from './rng';
-import { FINISHER_INTENSITY_IDS, groupOf, kitOf, NO_BLOCK_IDS, PROFILES, type BlockExerciseShape } from './rules';
+import { countsAsCardio, FINISHER_INTENSITY_IDS, groupOf, kitOf, NO_BLOCK_IDS, PROFILES, type BlockExerciseShape } from './rules';
 import { blockContext, validateBlock, type BlockContext } from './validate';
 
 export interface LiftDayInput {
@@ -56,7 +56,7 @@ function chooseStations(
   let cardio = 0;
   let intense = false;
   for (const choice of shuffle(pool, rand)) {
-    const isCardio = choice.group === 'cardio' || choice.kit === 'cardio';
+    const isCardio = countsAsCardio(choice.group, choice.kit);
     if (picked.some((entry) => entry.ex.id === choice.ex.id) || picked.at(-1)?.group === choice.group) continue;
     if (choice.kit === 'fixed' && fixed >= PROFILES.lift.fixedMax) continue;
     if (isCardio && cardio >= PROFILES.lift.cardioMax) continue;

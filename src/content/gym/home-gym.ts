@@ -5,97 +5,97 @@ export const HOME_GYM: GymProfile = {
   "id": "home-gym",
   "zones": [
     {
-      "id": "zone-8f23cebc9dcfe741",
+      "id": "zone-3570876461410cdb",
       "floor": 2,
       "neighbours": [
-        "zone-6caef59366b86712",
-        "zone-2f2326ae8b52ce7a"
+        "zone-f4a671abc31bd257",
+        "zone-ec3a92fa9ebf49da"
       ]
     },
     {
-      "id": "zone-6caef59366b86712",
+      "id": "zone-f4a671abc31bd257",
       "floor": 2,
       "neighbours": [
-        "zone-8f23cebc9dcfe741",
-        "zone-635789530b80fafb",
-        "zone-e0e8968f61f63d5a"
+        "zone-3570876461410cdb",
+        "zone-37fd7aeaef9f0340",
+        "zone-4f84047201f53e94"
       ]
     },
     {
-      "id": "zone-635789530b80fafb",
+      "id": "zone-37fd7aeaef9f0340",
       "floor": 2,
       "neighbours": [
-        "zone-6caef59366b86712"
+        "zone-f4a671abc31bd257"
       ]
     },
     {
-      "id": "zone-e0e8968f61f63d5a",
+      "id": "zone-4f84047201f53e94",
       "floor": 2,
       "neighbours": [
-        "zone-6caef59366b86712",
-        "zone-feace2f985b8b6f1"
+        "zone-f4a671abc31bd257",
+        "zone-c64b0e68bed77255"
       ]
     },
     {
-      "id": "zone-feace2f985b8b6f1",
+      "id": "zone-c64b0e68bed77255",
       "floor": 2,
       "neighbours": [
-        "zone-e0e8968f61f63d5a"
+        "zone-4f84047201f53e94"
       ]
     },
     {
-      "id": "zone-0dc93fc01ed59ebb",
+      "id": "zone-07479831d31b6e1b",
       "floor": 2,
       "neighbours": []
     },
     {
-      "id": "zone-2f2326ae8b52ce7a",
+      "id": "zone-ec3a92fa9ebf49da",
       "floor": 1,
       "neighbours": [
-        "zone-77a42ea41e315e3d",
-        "zone-f6b76aa606d0a797"
+        "zone-614cd96975e79a55",
+        "zone-a2c17b7018d6581c"
       ]
     },
     {
-      "id": "zone-77a42ea41e315e3d",
+      "id": "zone-614cd96975e79a55",
       "floor": 1,
       "neighbours": [
-        "zone-2f2326ae8b52ce7a",
-        "zone-f6b76aa606d0a797",
-        "zone-9b5e928f7753e045"
+        "zone-ec3a92fa9ebf49da",
+        "zone-a2c17b7018d6581c",
+        "zone-57c2db280f51ea64"
       ]
     },
     {
-      "id": "zone-f6b76aa606d0a797",
+      "id": "zone-a2c17b7018d6581c",
       "floor": 1,
       "neighbours": [
-        "zone-2f2326ae8b52ce7a",
-        "zone-77a42ea41e315e3d",
-        "zone-2572ca27a0ab8fd0"
+        "zone-ec3a92fa9ebf49da",
+        "zone-614cd96975e79a55",
+        "zone-aef8e259ca3b04c9"
       ]
     },
     {
-      "id": "zone-9b5e928f7753e045",
+      "id": "zone-57c2db280f51ea64",
       "floor": 1,
       "neighbours": [
-        "zone-77a42ea41e315e3d",
-        "zone-2572ca27a0ab8fd0"
+        "zone-614cd96975e79a55",
+        "zone-aef8e259ca3b04c9"
       ]
     },
     {
-      "id": "zone-2572ca27a0ab8fd0",
+      "id": "zone-aef8e259ca3b04c9",
       "floor": 1,
       "neighbours": [
-        "zone-f6b76aa606d0a797",
-        "zone-9b5e928f7753e045"
+        "zone-a2c17b7018d6581c",
+        "zone-57c2db280f51ea64"
       ]
     }
   ],
   "items": [
     {
-      "id": "item-edee6dbbee1088b0",
+      "id": "item-b9dc2026d0a972fd",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "turf-sprint-lanes",
       "count": 1,
       "confidence": "C",
@@ -107,9 +107,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-211ac9a6ebeb7a81",
+      "id": "item-36341feb60c101b6",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "functional-rig-dual-adjustable-pulley",
       "count": 2,
       "confidence": "C",
@@ -128,9 +128,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-d75af64e000c4355",
+      "id": "item-70405c58da813d50",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "squat-rack",
       "count": 2,
       "confidence": "C",
@@ -142,9 +142,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-5cf82e7bb9a408fb",
+      "id": "item-999a0321ffbc1a8c",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "suspension-trainer",
       "count": 2,
       "confidence": "C",
@@ -154,9 +154,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-99381d445b908a68",
+      "id": "item-7c517830db4863b3",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "kettlebell-set",
       "count": 2,
       "confidence": "C",
@@ -171,9 +171,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-d4a9fb3e2a3f7d98",
+      "id": "item-00a8344c325dd859",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "medicine-ball-set",
       "count": 2,
       "confidence": "C",
@@ -184,9 +184,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-56e57840bbfb11b5",
+      "id": "item-a58b55f19dae4873",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "sandbag-set",
       "count": 8,
       "confidence": "C",
@@ -199,9 +199,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-1e51813e80df36d3",
+      "id": "item-0e7a06b541b256fc",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "soft-training-tyre",
       "count": 3,
       "confidence": "C",
@@ -209,9 +209,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-64541a942d0cfc93",
+      "id": "item-fc4cf0cc6186e23a",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "heavy-bag",
       "count": 2,
       "confidence": "C",
@@ -219,9 +219,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-e071eb6af7d165f3",
+      "id": "item-716861eab2674389",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "push-sled",
       "count": 2,
       "confidence": "C",
@@ -231,9 +231,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-4a79d77d4238e741",
+      "id": "item-468495f55185acb9",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "battle-rope",
       "count": 1,
       "confidence": "C",
@@ -243,9 +243,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-7272c3a4d7fedcba",
+      "id": "item-4f77046063da5d28",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "plyo-box-soft",
       "count": 2,
       "confidence": "C",
@@ -257,9 +257,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-de712781d809005a",
+      "id": "item-aee12111f30f7d4d",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "landmine",
       "count": 1,
       "confidence": "G",
@@ -269,9 +269,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-a1f7a7e5872d07c3",
+      "id": "item-06a8d89d5da2a9ec",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "ski-erg",
       "count": 2,
       "confidence": "L",
@@ -281,9 +281,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-5ef97cdf5175696e",
+      "id": "item-05466237ee327d55",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "rowing-ergometer",
       "count": 2,
       "confidence": "C",
@@ -293,9 +293,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-6d9a1f11e859553b",
+      "id": "item-3023b592a226809e",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "curved-manual-treadmill",
       "count": 2,
       "confidence": "C",
@@ -305,9 +305,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-f54dc37e341237db",
+      "id": "item-f99df11637eba1b6",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "air-bike",
       "count": 1,
       "confidence": "C",
@@ -317,9 +317,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-7ea04d53fc869f13",
+      "id": "item-212b6556ef840875",
       "floor": 2,
-      "zone": "zone-8f23cebc9dcfe741",
+      "zone": "zone-3570876461410cdb",
       "type": "bumper-plate-tree",
       "count": 1,
       "confidence": "C",
@@ -327,9 +327,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-c949c9543cca5fcd",
+      "id": "item-fc4ee31fe9a6899e",
       "floor": 2,
-      "zone": "zone-6caef59366b86712",
+      "zone": "zone-f4a671abc31bd257",
       "type": "dumbbell-set-round-urethane",
       "count": 2,
       "confidence": "C",
@@ -347,9 +347,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-dcfc0440b61886a0",
+      "id": "item-7ebc460c8563e56b",
       "floor": 2,
-      "zone": "zone-6caef59366b86712",
+      "zone": "zone-f4a671abc31bd257",
       "type": "olympic-flat-bench",
       "count": 2,
       "confidence": "C",
@@ -359,9 +359,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-55dbf94c54611e70",
+      "id": "item-3a4bfa1b136a4f87",
       "floor": 2,
-      "zone": "zone-6caef59366b86712",
+      "zone": "zone-f4a671abc31bd257",
       "type": "adjustable-bench",
       "count": 2,
       "confidence": "C",
@@ -374,9 +374,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-cf72ac14a1eb4db8",
+      "id": "item-f98ad3813545338f",
       "floor": 2,
-      "zone": "zone-6caef59366b86712",
+      "zone": "zone-f4a671abc31bd257",
       "type": "flat-bench",
       "count": 2,
       "confidence": "L",
@@ -388,9 +388,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-158f3e6453473ab7",
+      "id": "item-f24c851328b708e5",
       "floor": 2,
-      "zone": "zone-6caef59366b86712",
+      "zone": "zone-f4a671abc31bd257",
       "type": "plate-loaded-hip-thrust",
       "count": 1,
       "confidence": "L",
@@ -400,9 +400,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-d445b4ccbc45dade",
+      "id": "item-cdfeccc88713d031",
       "floor": 2,
-      "zone": "zone-6caef59366b86712",
+      "zone": "zone-f4a671abc31bd257",
       "type": "unidentified-strap-loaded-standing-unit",
       "count": 1,
       "confidence": "G",
@@ -410,9 +410,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-b87f3f0bea5090cb",
+      "id": "item-21ff8394deac1236",
       "floor": 2,
-      "zone": "zone-6caef59366b86712",
+      "zone": "zone-f4a671abc31bd257",
       "type": "unidentified-dual-pad-unit",
       "count": 2,
       "confidence": "G",
@@ -420,9 +420,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-0aef3516109b3a64",
+      "id": "item-230064d2485f1199",
       "floor": 2,
-      "zone": "zone-6caef59366b86712",
+      "zone": "zone-f4a671abc31bd257",
       "type": "plate-loaded-unidentified",
       "count": 2,
       "confidence": "L",
@@ -430,9 +430,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-70cc2db3b961495c",
+      "id": "item-cf0d2300b6e414e9",
       "floor": 2,
-      "zone": "zone-6caef59366b86712",
+      "zone": "zone-f4a671abc31bd257",
       "type": "plate-tree-iron",
       "count": 2,
       "confidence": "C",
@@ -440,9 +440,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-d412b3327ac7cbd3",
+      "id": "item-55921e5abfa69f83",
       "floor": 2,
-      "zone": "zone-6caef59366b86712",
+      "zone": "zone-f4a671abc31bd257",
       "type": "foam-roller-rack",
       "count": 1,
       "confidence": "C",
@@ -452,9 +452,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-a265ed8f910c97c4",
+      "id": "item-b0db7a21a912a24c",
       "floor": 2,
-      "zone": "zone-635789530b80fafb",
+      "zone": "zone-37fd7aeaef9f0340",
       "type": "stretch-table",
       "count": 3,
       "confidence": "C",
@@ -462,9 +462,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-594aa1d078b1cd71",
+      "id": "item-55bf20d9f3c83503",
       "floor": 2,
-      "zone": "zone-e0e8968f61f63d5a",
+      "zone": "zone-4f84047201f53e94",
       "type": "motorised-treadmill",
       "count": 15,
       "confidence": "C",
@@ -474,9 +474,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-9505af84813a997e",
+      "id": "item-feb08a8733735e02",
       "floor": 2,
-      "zone": "zone-e0e8968f61f63d5a",
+      "zone": "zone-4f84047201f53e94",
       "type": "revolving-stair-climber",
       "count": 4,
       "confidence": "C",
@@ -486,10 +486,10 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-9dd2399758450c67",
+      "id": "item-5a8a5d9a718d5a47",
       "floor": 2,
-      "zone": "zone-e0e8968f61f63d5a",
-      "type": "elliptical-or-ascent-trainer",
+      "zone": "zone-4f84047201f53e94",
+      "type": "elliptical",
       "count": 6,
       "confidence": "L",
       "exercises": [
@@ -498,9 +498,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-6488711eeb3e4349",
+      "id": "item-21890840a1c60a8f",
       "floor": 2,
-      "zone": "zone-e0e8968f61f63d5a",
+      "zone": "zone-4f84047201f53e94",
       "type": "rear-drive-elliptical",
       "count": 2,
       "confidence": "L",
@@ -510,9 +510,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-923ae44740138d21",
+      "id": "item-5b938ab16676b2f2",
       "floor": 2,
-      "zone": "zone-e0e8968f61f63d5a",
+      "zone": "zone-4f84047201f53e94",
       "type": "recumbent-cross-trainer",
       "count": 2,
       "confidence": "C",
@@ -520,9 +520,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-436cfb89a70190cb",
+      "id": "item-c337ec4008238724",
       "floor": 2,
-      "zone": "zone-e0e8968f61f63d5a",
+      "zone": "zone-4f84047201f53e94",
       "type": "exercise-bike",
       "count": 1,
       "confidence": "L",
@@ -530,9 +530,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-488841cfec33e015",
+      "id": "item-e166d1439efcf104",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-seated-leg-press",
       "count": 1,
       "confidence": "C",
@@ -542,9 +542,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-5289603e700c0e6d",
+      "id": "item-26e30801bbc7a1a1",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-leg-extension",
       "count": 1,
       "confidence": "L",
@@ -554,9 +554,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-87b34e36f6eb6801",
+      "id": "item-673c9bf733459ca0",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-seated-leg-curl",
       "count": 1,
       "confidence": "L",
@@ -566,9 +566,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-b21504be49f55d95",
+      "id": "item-f959127006410da8",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-hip-abductor-adductor",
       "count": 1,
       "confidence": "L",
@@ -579,9 +579,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-5450896430c52250",
+      "id": "item-352b28246cb011ee",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-glute-kickback",
       "count": 1,
       "confidence": "L",
@@ -589,9 +589,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-6e2a1c1f0022d8ad",
+      "id": "item-76d6a6557b24d202",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-chest-press",
       "count": 1,
       "confidence": "C",
@@ -601,9 +601,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-f8152fa958e84d3c",
+      "id": "item-886075f1cda76f9d",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-pec-fly-rear-delt",
       "count": 2,
       "confidence": "C",
@@ -614,9 +614,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-0f3a56afb01f43ef",
+      "id": "item-0b4336001cb38d19",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-shoulder-press",
       "count": 1,
       "confidence": "L",
@@ -626,9 +626,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-1769797c3fb4c405",
+      "id": "item-cf3267feb2d0959e",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-lateral-raise",
       "count": 1,
       "confidence": "C",
@@ -638,9 +638,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-2f6af232962865f7",
+      "id": "item-4cbdee2e8c067c16",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-lat-pulldown-diverging",
       "count": 1,
       "confidence": "C",
@@ -651,9 +651,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-85fdc7d3ab5a310f",
+      "id": "item-c5a1df9a9b1ef735",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-seated-row",
       "count": 1,
       "confidence": "L",
@@ -663,9 +663,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-fcd9740c4da931ee",
+      "id": "item-5bf80c4670a64018",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-biceps-curl",
       "count": 1,
       "confidence": "L",
@@ -675,9 +675,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-8132f0345585c39c",
+      "id": "item-df6afa5ccbddafc2",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-triceps-extension",
       "count": 1,
       "confidence": "L",
@@ -687,9 +687,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-c711ab3389f39073",
+      "id": "item-d90f625422e8c959",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-abdominal-crunch",
       "count": 1,
       "confidence": "C",
@@ -699,9 +699,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-c29e77f1ee4db68a",
+      "id": "item-9532227c5f040da2",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-back-extension",
       "count": 1,
       "confidence": "L",
@@ -711,9 +711,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-11c86efdbbb84e7c",
+      "id": "item-cf6c05dc8c88738a",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-rotary-torso",
       "count": 1,
       "confidence": "L",
@@ -721,9 +721,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-62a26e683b3d3f5b",
+      "id": "item-2b492a480c70c1f8",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "vkr-dip-station",
       "count": 1,
       "confidence": "C",
@@ -733,9 +733,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-e77410f960a69d8d",
+      "id": "item-28c7ef0e8004a4b2",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "selectorized-assisted-chin-dip",
       "count": 1,
       "confidence": "G",
@@ -746,9 +746,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-6fb955e3e20425fa",
+      "id": "item-5584333e378e1827",
       "floor": 2,
-      "zone": "zone-feace2f985b8b6f1",
+      "zone": "zone-c64b0e68bed77255",
       "type": "open-rubber-floor",
       "count": 1,
       "confidence": "C",
@@ -761,9 +761,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-0f7fe02c9d9b559a",
+      "id": "item-530b520f0f44cc77",
       "floor": 1,
-      "zone": "zone-2f2326ae8b52ce7a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "type": "power-rack",
       "count": 6,
       "confidence": "C",
@@ -777,9 +777,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-fcfac983c00490a4",
+      "id": "item-d068c7431c6b407d",
       "floor": 1,
-      "zone": "zone-2f2326ae8b52ce7a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "type": "lifting-platform",
       "count": 8,
       "confidence": "L",
@@ -792,9 +792,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-7a18146c23e78c8a",
+      "id": "item-72ad4d76cb6a8648",
       "floor": 1,
-      "zone": "zone-2f2326ae8b52ce7a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "type": "bumper-plates",
       "count": 1,
       "confidence": "C",
@@ -802,9 +802,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-d3d9fca8b316c126",
+      "id": "item-1dbfa90a7cefde58",
       "floor": 1,
-      "zone": "zone-2f2326ae8b52ce7a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "type": "bar-storage-specialty",
       "count": 1,
       "confidence": "C",
@@ -816,9 +816,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-cade2b0539d11b85",
+      "id": "item-e24bffc30d071b30",
       "floor": 1,
-      "zone": "zone-2f2326ae8b52ce7a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "type": "plate-loaded-belt-squat",
       "count": 1,
       "confidence": "C",
@@ -826,9 +826,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-04c6c712f462c742",
+      "id": "item-d576fdec4d2a6c26",
       "floor": 1,
-      "zone": "zone-2f2326ae8b52ce7a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "type": "plate-loaded-45-leg-press",
       "count": 2,
       "confidence": "L",
@@ -838,9 +838,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-14567b4e5c8517bc",
+      "id": "item-5a63362ec9cdd6fa",
       "floor": 1,
-      "zone": "zone-2f2326ae8b52ce7a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "type": "plate-loaded-squat-unidentified",
       "count": 1,
       "confidence": "G",
@@ -848,9 +848,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-ce011e482d40367b",
+      "id": "item-9be5b23edb159403",
       "floor": 1,
-      "zone": "zone-2f2326ae8b52ce7a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "type": "plate-loaded-standing-calf-raise",
       "count": 1,
       "confidence": "C",
@@ -860,9 +860,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-ce0d221bf6af8144",
+      "id": "item-b68c5a08644acc33",
       "floor": 1,
-      "zone": "zone-2f2326ae8b52ce7a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "type": "plate-loaded-hip-thrust",
       "count": 1,
       "confidence": "L",
@@ -872,9 +872,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-d1d974c614f928d7",
+      "id": "item-f1d97ec79dbcedf0",
       "floor": 1,
-      "zone": "zone-2f2326ae8b52ce7a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "type": "single-adjustable-cable-column",
       "count": 1,
       "confidence": "L",
@@ -887,9 +887,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-cd4dff9315a26403",
+      "id": "item-b493dc07a87d301a",
       "floor": 1,
-      "zone": "zone-2f2326ae8b52ce7a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "type": "heavy-bag",
       "count": 1,
       "confidence": "C",
@@ -897,9 +897,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-ba7fd1ec23713dd7",
+      "id": "item-3528853d04ad25bd",
       "floor": 1,
-      "zone": "zone-77a42ea41e315e3d",
+      "zone": "zone-614cd96975e79a55",
       "type": "multi-station-cable-tower",
       "count": 3,
       "confidence": "C",
@@ -917,9 +917,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-3d96d2ecd77a5482",
+      "id": "item-b90e902ffb501f3d",
       "floor": 1,
-      "zone": "zone-77a42ea41e315e3d",
+      "zone": "zone-614cd96975e79a55",
       "type": "dual-adjustable-pulley",
       "count": 1,
       "confidence": "L",
@@ -932,9 +932,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-74c9fbf5eeeba59f",
+      "id": "item-ced61710f7309617",
       "floor": 1,
-      "zone": "zone-f6b76aa606d0a797",
+      "zone": "zone-a2c17b7018d6581c",
       "type": "selectorized-low-back-extension",
       "count": 1,
       "confidence": "C",
@@ -944,9 +944,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-d3eb61c845f2690c",
+      "id": "item-4de5a62d27942eae",
       "floor": 1,
-      "zone": "zone-f6b76aa606d0a797",
+      "zone": "zone-a2c17b7018d6581c",
       "type": "selectorized-seated-leg-curl",
       "count": 1,
       "confidence": "L",
@@ -956,9 +956,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-f8f9cd62d603ac1f",
+      "id": "item-5e7b98f353bdf5d8",
       "floor": 1,
-      "zone": "zone-f6b76aa606d0a797",
+      "zone": "zone-a2c17b7018d6581c",
       "type": "selectorized-unidentified",
       "count": 8,
       "confidence": "G",
@@ -966,9 +966,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-3715d49148c537a5",
+      "id": "item-60d2d19384ec3b53",
       "floor": 1,
-      "zone": "zone-9b5e928f7753e045",
+      "zone": "zone-57c2db280f51ea64",
       "type": "olympic-bench-mixed",
       "count": 8,
       "confidence": "C",
@@ -978,9 +978,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-1b325fb28175716f",
+      "id": "item-3ba723098f89459f",
       "floor": 1,
-      "zone": "zone-9b5e928f7753e045",
+      "zone": "zone-57c2db280f51ea64",
       "type": "adjustable-bench",
       "count": 6,
       "confidence": "C",
@@ -993,9 +993,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-4297533ba010a088",
+      "id": "item-d86947bd1edf0a24",
       "floor": 1,
-      "zone": "zone-9b5e928f7753e045",
+      "zone": "zone-57c2db280f51ea64",
       "type": "dumbbell-set-round-urethane",
       "count": 3,
       "confidence": "C",
@@ -1011,9 +1011,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-d0f194bd583223c0",
+      "id": "item-45c6448c00ab688c",
       "floor": 1,
-      "zone": "zone-9b5e928f7753e045",
+      "zone": "zone-57c2db280f51ea64",
       "type": "fixed-barbell-rack",
       "count": 1,
       "confidence": "C",
@@ -1024,9 +1024,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-d1835706062b4e25",
+      "id": "item-7c854f460080283d",
       "floor": 1,
-      "zone": "zone-9b5e928f7753e045",
+      "zone": "zone-57c2db280f51ea64",
       "type": "preacher-curl-bench",
       "count": 1,
       "confidence": "C",
@@ -1034,9 +1034,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-16603d58192a1c15",
+      "id": "item-cc4f3ef7ac4f384e",
       "floor": 1,
-      "zone": "zone-9b5e928f7753e045",
+      "zone": "zone-57c2db280f51ea64",
       "type": "plate-tree-iron",
       "count": 2,
       "confidence": "C",
@@ -1044,9 +1044,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-b4cc29dacfc8387c",
+      "id": "item-085f936b405889e4",
       "floor": 1,
-      "zone": "zone-2572ca27a0ab8fd0",
+      "zone": "zone-aef8e259ca3b04c9",
       "type": "plate-loaded-unidentified",
       "count": 3,
       "confidence": "L",
@@ -1054,9 +1054,9 @@ export const HOME_GYM: GymProfile = {
       "verified": false
     },
     {
-      "id": "item-20955a55e2de8a3e",
+      "id": "item-bdfef1adbfa7fb5c",
       "floor": 2,
-      "zone": "zone-0dc93fc01ed59ebb",
+      "zone": "zone-07479831d31b6e1b",
       "type": "standing-hip-abductor",
       "count": 1,
       "confidence": "C",
@@ -1067,9 +1067,9 @@ export const HOME_GYM: GymProfile = {
       "pending": true
     },
     {
-      "id": "item-8c9d45ee4fcdfba7",
+      "id": "item-c172303100a0b49f",
       "floor": 2,
-      "zone": "zone-0dc93fc01ed59ebb",
+      "zone": "zone-07479831d31b6e1b",
       "type": "unknown",
       "count": 3,
       "confidence": "C",
@@ -1080,124 +1080,124 @@ export const HOME_GYM: GymProfile = {
   ],
   "pods": [
     {
-      "id": "pod-5c8123b64cd76c84",
-      "zone": "zone-feace2f985b8b6f1",
+      "id": "pod-77291fe5bdd7d58b",
+      "zone": "zone-c64b0e68bed77255",
       "items": [
-        "item-488841cfec33e015",
-        "item-5289603e700c0e6d",
-        "item-87b34e36f6eb6801",
-        "item-b21504be49f55d95",
-        "item-5450896430c52250"
+        "item-e166d1439efcf104",
+        "item-26e30801bbc7a1a1",
+        "item-673c9bf733459ca0",
+        "item-f959127006410da8",
+        "item-352b28246cb011ee"
       ]
     },
     {
-      "id": "pod-388892b16c89d4e5",
-      "zone": "zone-feace2f985b8b6f1",
+      "id": "pod-35a2c23d6c2265e9",
+      "zone": "zone-c64b0e68bed77255",
       "items": [
-        "item-6e2a1c1f0022d8ad",
-        "item-85fdc7d3ab5a310f",
-        "item-2f6af232962865f7",
-        "item-0f3a56afb01f43ef",
-        "item-1769797c3fb4c405",
-        "item-f8152fa958e84d3c",
-        "item-fcd9740c4da931ee",
-        "item-8132f0345585c39c"
+        "item-76d6a6557b24d202",
+        "item-c5a1df9a9b1ef735",
+        "item-4cbdee2e8c067c16",
+        "item-0b4336001cb38d19",
+        "item-cf3267feb2d0959e",
+        "item-886075f1cda76f9d",
+        "item-5bf80c4670a64018",
+        "item-df6afa5ccbddafc2"
       ]
     },
     {
-      "id": "pod-1824ab0a52b7f55d",
-      "zone": "zone-feace2f985b8b6f1",
+      "id": "pod-7f79162f651476c7",
+      "zone": "zone-c64b0e68bed77255",
       "items": [
-        "item-c711ab3389f39073",
-        "item-c29e77f1ee4db68a",
-        "item-62a26e683b3d3f5b",
-        "item-11c86efdbbb84e7c",
-        "item-6fb955e3e20425fa"
+        "item-d90f625422e8c959",
+        "item-9532227c5f040da2",
+        "item-2b492a480c70c1f8",
+        "item-cf6c05dc8c88738a",
+        "item-5584333e378e1827"
       ]
     },
     {
-      "id": "pod-360b59210c18bd96",
-      "zone": "zone-6caef59366b86712",
+      "id": "pod-953fce24a682a1e1",
+      "zone": "zone-f4a671abc31bd257",
       "items": [
-        "item-c949c9543cca5fcd",
-        "item-dcfc0440b61886a0",
-        "item-55dbf94c54611e70",
-        "item-cf72ac14a1eb4db8"
+        "item-fc4ee31fe9a6899e",
+        "item-7ebc460c8563e56b",
+        "item-3a4bfa1b136a4f87",
+        "item-f98ad3813545338f"
       ]
     },
     {
-      "id": "pod-e910487839a4921b",
-      "zone": "zone-6caef59366b86712",
+      "id": "pod-c725b72e5917cbb4",
+      "zone": "zone-f4a671abc31bd257",
       "items": [
-        "item-158f3e6453473ab7",
-        "item-55dbf94c54611e70",
-        "item-c949c9543cca5fcd",
-        "item-70cc2db3b961495c"
+        "item-f24c851328b708e5",
+        "item-3a4bfa1b136a4f87",
+        "item-fc4ee31fe9a6899e",
+        "item-cf0d2300b6e414e9"
       ]
     },
     {
-      "id": "pod-668a3105677be3b9",
-      "zone": "zone-8f23cebc9dcfe741",
+      "id": "pod-64d228419cc80e42",
+      "zone": "zone-3570876461410cdb",
       "items": [
-        "item-e071eb6af7d165f3",
-        "item-4a79d77d4238e741",
-        "item-99381d445b908a68",
-        "item-d4a9fb3e2a3f7d98",
-        "item-7272c3a4d7fedcba",
-        "item-a1f7a7e5872d07c3",
-        "item-5ef97cdf5175696e",
-        "item-f54dc37e341237db",
-        "item-6d9a1f11e859553b"
+        "item-716861eab2674389",
+        "item-468495f55185acb9",
+        "item-7c517830db4863b3",
+        "item-00a8344c325dd859",
+        "item-4f77046063da5d28",
+        "item-06a8d89d5da2a9ec",
+        "item-05466237ee327d55",
+        "item-f99df11637eba1b6",
+        "item-3023b592a226809e"
       ]
     },
     {
-      "id": "pod-426006f86073a15a",
-      "zone": "zone-8f23cebc9dcfe741",
+      "id": "pod-c531f4eb0fd1bef5",
+      "zone": "zone-3570876461410cdb",
       "items": [
-        "item-d75af64e000c4355",
-        "item-211ac9a6ebeb7a81",
-        "item-5cf82e7bb9a408fb",
-        "item-99381d445b908a68",
-        "item-7ea04d53fc869f13"
+        "item-70405c58da813d50",
+        "item-36341feb60c101b6",
+        "item-999a0321ffbc1a8c",
+        "item-7c517830db4863b3",
+        "item-212b6556ef840875"
       ]
     },
     {
-      "id": "pod-b50a00062bbec1f9",
-      "zone": "zone-2f2326ae8b52ce7a",
+      "id": "pod-4ab78153590ffe1a",
+      "zone": "zone-ec3a92fa9ebf49da",
       "items": [
-        "item-0f7fe02c9d9b559a",
-        "item-fcfac983c00490a4",
-        "item-7a18146c23e78c8a",
-        "item-d3d9fca8b316c126"
+        "item-530b520f0f44cc77",
+        "item-d068c7431c6b407d",
+        "item-72ad4d76cb6a8648",
+        "item-1dbfa90a7cefde58"
       ]
     },
     {
-      "id": "pod-e4e55a0aefb8032b",
-      "zone": "zone-2f2326ae8b52ce7a",
+      "id": "pod-7dde25682a7d3ea5",
+      "zone": "zone-ec3a92fa9ebf49da",
       "items": [
-        "item-cade2b0539d11b85",
-        "item-04c6c712f462c742",
-        "item-ce011e482d40367b",
-        "item-ce0d221bf6af8144"
+        "item-e24bffc30d071b30",
+        "item-d576fdec4d2a6c26",
+        "item-9be5b23edb159403",
+        "item-b68c5a08644acc33"
       ]
     },
     {
-      "id": "pod-20b60c6d38e62fe7",
-      "zone": "zone-77a42ea41e315e3d",
+      "id": "pod-68bc4b4bd94dd8b2",
+      "zone": "zone-614cd96975e79a55",
       "items": [
-        "item-ba7fd1ec23713dd7",
-        "item-3d96d2ecd77a5482"
+        "item-3528853d04ad25bd",
+        "item-b90e902ffb501f3d"
       ]
     },
     {
-      "id": "pod-b5e5f73115300cc3",
-      "zone": "zone-9b5e928f7753e045",
+      "id": "pod-592da973f89cb02e",
+      "zone": "zone-57c2db280f51ea64",
       "items": [
-        "item-3715d49148c537a5",
-        "item-1b325fb28175716f",
-        "item-4297533ba010a088",
-        "item-d0f194bd583223c0",
-        "item-d1835706062b4e25"
+        "item-60d2d19384ec3b53",
+        "item-3ba723098f89459f",
+        "item-d86947bd1edf0a24",
+        "item-45c6448c00ab688c",
+        "item-7c854f460080283d"
       ]
     }
   ]
