@@ -118,6 +118,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('link', { name: 'Today' }).click();
     await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'rest');
     await expect(page.getByRole('link', { name: 'Log weigh-in' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Log weigh-in' })).toHaveAttribute('href', '#/progress/body');
     await expect(page.locator('main .primary')).toHaveCount(0);
     await capture('home-rest');
 
@@ -134,10 +135,10 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('interim Progress opens all five destinations', async ({ page }) => {
+test('Progress opens all five destinations', async ({ page }) => {
   await onboard(page);
   for (const [id, heading] of [
-    ['history', 'History'], ['weigh-in', 'Weigh-in'], ['volume', 'Weekly volume'],
+    ['history', 'History'], ['weigh-in', 'Weigh-in'], ['volume', /Week \d+ volume/],
     ['builder', 'Build a session'], ['hybrid', 'Hybrid'],
   ]) {
     await page.goto('./#/progress');

@@ -11,6 +11,12 @@
 ## Learned quirks
 <!-- e2e workers append here -->
 
+### Centre Builder Save/Start before clicking
+_Learned 2026-11-20 · costs: one silent missed Save and a DB check_
+**You'll see:** on `#/builder` with one block, `find testid builder-save click` prints Done but nothing saves (no navigation, `templates` store empty): the button sits at the viewport bottom under the fixed tab bar.
+**Do:** `eval "document.querySelector('[data-testid=builder-save]').scrollIntoView({block:'center'})"`, re-snapshot, click by ref; expect URL `#/progress` with the template under `my-workouts`.
+**Where:** `#/builder`, `#/builder/<id>`.
+
 ### Count taps with one listener per page load
 _Learned 2026-11-19 · costs: one recount of the 2-tap check_
 **You'll see:** a `document.addEventListener('click', …)` tap counter reads 6 after 2 taps, because `open` of a `#/` hash URL does not reload the SPA, so counters from earlier checks keep firing.

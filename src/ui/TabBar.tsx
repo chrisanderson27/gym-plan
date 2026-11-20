@@ -7,8 +7,7 @@ const tabs = [
 ] as const;
 
 export const showTabs = (route: string) =>
-  route === '/' || route === '/progress' || route === '/settings' || route === '/weigh-in'
-  || route === '/lift/volume' || /^\/(history|builder)(\/|$)/.test(route);
+  route === '/' || route === '/settings' || /^\/(progress|history|builder)(\/|$)/.test(route);
 
 export function TabBar({ route }: { route: string }) {
   const current = route === '/' || route === '/settings' ? route : '/progress';

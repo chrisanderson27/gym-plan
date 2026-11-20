@@ -1,7 +1,9 @@
 import { HOME_GYM, LIFT_TEMPLATES, defaultEquipmentFor, exerciseById } from '../content';
 import type { EquipmentTag, Muscle } from '../content';
 import type { CardioModality, CircuitStation, Equipment, RunKind } from '../data/types';
+import { round1 } from '../engine/body';
 import { CARDIO_MODALITY_LABELS } from '../engine/config';
+import type { PR } from '../engine/pr';
 
 /** Display helpers: ids stay in storage, they are mapped to names only when rendered. */
 
@@ -29,6 +31,11 @@ export function stationEquipmentLabel(
 }
 
 export const exerciseName = (id: string): string => exerciseById.get(id)?.name ?? id;
+
+export function prLabel(pr: PR): string {
+  if (pr.kind === 'block-work') return `Block · ${round1(pr.total)} rounds`;
+  return `${exerciseName(pr.exerciseId)} ${pr.weight} × ${pr.reps}`;
+}
 
 /** "After lower-a: upper-b" -> "After Lower A: Upper B". Free text passes through otherwise unchanged. */
 export const humanize = (text: string): string => text.replace(VARIANT_RE, (m) => variantName(m));
@@ -128,6 +135,9 @@ const SCREEN_NAMES: [RegExp, string][] = [
   [/^\/mine\//, 'Saved workout'],
   [/^\/again\//, 'Do this again'],
   [/^\/weigh-in/, 'Weigh-in'],
+  [/^\/progress\/history/, 'History'],
+  [/^\/progress\/body/, 'Weigh-in'],
+  [/^\/progress\/volume/, 'Weekly volume'],
   [/^\/progress/, 'Progress'],
   [/^\/settings/, 'Settings'],
 ];

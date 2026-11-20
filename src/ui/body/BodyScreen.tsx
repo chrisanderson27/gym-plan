@@ -7,6 +7,7 @@ import { BODY_MAINTAIN_BAND_LB, BODY_RATE_BAND_LB, BODY_RATE_MIN_SPAN_DAYS } fro
 import { etaToGoal, rateBand, round1, waistDue, weeklyRate, weightTrend } from '../../engine/body';
 import { localDate } from '../../engine/dates';
 import { MoreMenu } from '../MoreMenu';
+import { TrendChart } from './TrendChart';
 
 const BAND_TEXT = { gaining: 'gaining', below: 'below band', in: 'in band', above: 'above band' } as const;
 
@@ -43,7 +44,7 @@ export function BodyScreen({ settings }: { settings: Settings }) {
     <main class="screen">
       <header class="bar">
         <h1>Weigh-in</h1>
-        <a class="gear" href="#/">Home</a>
+        <a class="gear" href="#/progress">Progress</a>
         <MoreMenu feedback={{ kind: 'workout', context: {} }} />
       </header>
       <label>
@@ -72,22 +73,26 @@ export function BodyScreen({ settings }: { settings: Settings }) {
 
       {last && (
         <section class="card">
-          <p data-testid="body-trend">Trend {round1(last.trend)} lb</p>
-          <p data-testid="body-rate">
+          <p class="num" data-testid="body-trend">Trend {round1(last.trend)} lb</p>
+          <p class="num" data-testid="body-rate">
             {rate === null || band === null
               ? `not enough data (need ${BODY_RATE_MIN_SPAN_DAYS} days)`
               : `${rate < 0 ? '−' : '+'}${round1(Math.abs(rate))} lb/wk${direction === 'lose' ? ` · ${BAND_TEXT[band]} (${BODY_RATE_BAND_LB[0]}–${BODY_RATE_BAND_LB[1]})` : ''}`}
           </p>
-          <p data-testid="body-eta">
+          <p class="num" data-testid="body-eta">
             {eta === 'reached' ? `Goal ${settings.goalWeightLb} reached` : eta === null ? noEta[direction] : `ETA ${settings.goalWeightLb} ≈ ${eta}`}
           </p>
         </section>
       )}
-      <ul class="plan">
-        {points.slice(-14).reverse().map((p) => (
-          <li key={p.date}><span>{p.date}</span><span>{p.weight} · trend {round1(p.trend)}</span></li>
-        ))}
-      </ul>
+      <TrendChart points={points} goal={settings.goalWeightLb} />
+      <details>
+        <summary>Entries</summary>
+        <ul class="plan num">
+          {points.slice(-14).reverse().map((p) => (
+            <li key={p.date}><span>{p.date}</span><span>{p.weight} lb · trend {round1(p.trend)} lb</span></li>
+          ))}
+        </ul>
+      </details>
     </main>
   );
 }

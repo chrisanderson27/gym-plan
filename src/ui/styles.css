@@ -347,8 +347,6 @@ main.screen { overflow-wrap: break-word; }
 .activity-choices { display: grid; grid-template-columns: repeat(4, minmax(56px, 1fr)); }
 .activity-choices button { gap: var(--space-1); padding: 0; }
 .direction-choices button { flex: 1; padding: 0 var(--s-1); }
-.progress-links { display: grid; gap: var(--s-1); list-style: none; margin: var(--s-2) 0; padding: 0; }
-.progress-links a { display: flex; justify-content: space-between; margin: 0; }
 details[data-testid='developer'] { margin-top: var(--s-2); }
 summary { min-height: var(--tap); padding: var(--s-2) 0; cursor: pointer; }
 .bar > .more { margin-left: auto; }
@@ -435,3 +433,41 @@ button.block-station { border-radius: var(--radius); }
   to { opacity: 0; transform: rotate(var(--angle)) translateX(136px) rotate(80deg); }
 }
 .plan .session-summary-step { align-items: flex-start; flex-direction: column; }
+
+/* Progress (P5) */
+.progress-screen > .card { margin: var(--s-3) 0; }
+.progress-workouts { display: grid; gap: var(--s-1); }
+.progress-workouts > .btn { justify-self: start; margin: 0; }
+.progress-workouts .row-label { min-width: 0; overflow-wrap: anywhere; }
+.history-cards {
+  display: grid; gap: var(--s-1); list-style: none; padding: 0; margin: var(--s-2) 0;
+}
+.history-card {
+  display: grid; gap: var(--s-1); min-height: 56px; padding: var(--s-1);
+  background: var(--color-surface); color: var(--color-text-primary); text-decoration: none;
+  border: 1px solid var(--color-border-subtle); border-left: 6px solid var(--activity-color, var(--color-border-strong));
+  border-radius: var(--radius);
+}
+.history-card:active { background: var(--color-surface-hover); }
+.history-card-heading, .history-card-metrics { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-1); }
+.history-card-metrics { color: var(--color-text-secondary); font-size: var(--text-14); }
+.history-card-metrics:empty { display: none; }
+.streak-big { font-size: 48px; font-weight: var(--weight-semibold); line-height: 1; margin: 0; }
+.streak-big + p { margin: 0; }
+.ring-history {
+  display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); text-align: center;
+  padding: 0; margin: var(--s-2) 0; list-style: none;
+  font-size: var(--text-12); color: var(--color-text-secondary);
+}
+.ring-history li { display: grid; justify-items: center; gap: var(--s-1); border-radius: var(--radius); }
+.ring-history svg { max-width: 100%; }
+.ring-history [data-state='current'] {
+  box-shadow: inset 0 0 0 2px var(--color-link); color: var(--color-text-primary); font-weight: var(--weight-semibold);
+}
+.trend-chart { display: block; }
+.trend-chart text { fill: var(--color-text-secondary); font-size: var(--text-12); }
+.trend-dot { fill: var(--color-text-secondary); }
+.trend-line {
+  fill: none; stroke: var(--color-text-primary); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.trend-goal { stroke: var(--color-border-strong); stroke-dasharray: 4 4; }

@@ -74,7 +74,7 @@ export function HeroCard(props: HeroProps) {
           ) : (
             <>
               <h2>Rest day</h2>
-              <a class="btn" href="#/weigh-in">Log weigh-in</a>
+              <a class="btn" href="#/progress/body">Log weigh-in</a>
             </>
           )}
         </div>

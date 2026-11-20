@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 /** Screens that legitimately carry no feedback button; each needs a reason. */
 const NO_FEEDBACK = [
-  'ProgressScreen.tsx', // links to progress screens
   'GymScreen.tsx', // equipment/gym settings editor, not a workout
   'VolumeScreen.tsx', // read-only weekly volume table
   'CssTestScreen.tsx', // one-off test entry form, not a workout

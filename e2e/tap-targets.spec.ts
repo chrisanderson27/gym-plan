@@ -28,6 +28,7 @@ async function onboardWithHistory(page: Page) {
 const ROUTES = [
   '#/', '#/lift', '#/lift/volume', '#/lift/gym', '#/burn', '#/run', '#/swim', '#/swim/css',
   '#/hybrid', '#/progress', '#/history', '#/weigh-in', '#/builder', '#/settings',
+  '#/progress/history', '#/progress/body', '#/progress/volume',
 ];
 
 test('every tap target on the key screens is at least 56 x 56 px and no page scrolls sideways', async ({ page }) => {
@@ -136,7 +137,6 @@ test('a burst of stepper taps is kept and a repeated Done logs only one set', as
   }), sessionId);
   expect(saved).toMatchObject([{ weight: w0 + 6 * step, reps: r0 + 5, idx: 0 }]);
   await page.reload();
-  await page.getByTestId('warmup-done').click();
 
   await expect(page.getByTestId(`set-weight-${ex}-1`)).toBeVisible();
   await expect(page.getByTestId('rest-timer')).toHaveCount(0);

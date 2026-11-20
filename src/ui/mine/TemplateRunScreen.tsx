@@ -34,7 +34,7 @@ export function TemplateRunScreen(src: { templateId: string } | { sessionId: str
       <main class="screen">
         <header class="bar">
           <h1>Not found</h1>
-          <a href="#/history">History</a>
+          <a href="#/progress/history">History</a>
           <MoreMenu feedback={{ kind: 'workout', context: {} }} />
         </header>
       </main>
@@ -59,7 +59,7 @@ function LiftAgain({ run }: { run: Runnable }) {
     <main class="screen">
       <header class="bar">
         <h1>{run.name}</h1>
-        <a class="gear" href="#/history">History</a>
+        <a class="gear" href="#/progress/history">History</a>
         <MoreMenu feedback={{ kind: 'workout', context: { ...(run.templateId ? { templateId: run.templateId } : {}) } }} />
       </header>
       <p class="dim">Weights are re-prescribed from your current history.</p>
@@ -113,7 +113,7 @@ function BurnAgain({ run, snap }: { run: Runnable; snap: CardioSnapshot }) {
     <main class="screen">
       <header class="bar">
         <h1>{run.name}</h1>
-        <a class="gear" href="#/history">History</a>
+        <a class="gear" href="#/progress/history">History</a>
         <MoreMenu feedback={{ kind: 'workout', context: { sessionId, templateId } }} />
       </header>
       <ul class="plan">{blocks.map((b) => <li key={b.id}>{b.label ?? 'Block'} · {b.rounds}×</li>)}</ul>
@@ -162,7 +162,7 @@ function RunAgain({ run, block, snap }: { run: Runnable; block: RunBlock; snap: 
     <main class="screen">
       <header class="bar">
         <h1>{run.name}</h1>
-        <a class="gear" href="#/history">History</a>
+        <a class="gear" href="#/progress/history">History</a>
         <MoreMenu feedback={{ kind: 'workout', context: ctx }} />
       </header>
       <p data-testid="run-planned"><strong>Planned {Math.round(plan.plannedSec / 60)} min</strong></p>
@@ -210,7 +210,7 @@ function SwimAgain({ run, snap }: { run: Runnable; snap: CardioSnapshot }) {
     <main class="screen">
       <header class="bar">
         <h1>{run.name}</h1>
-        <a class="gear" href="#/history">History</a>
+        <a class="gear" href="#/progress/history">History</a>
         <MoreMenu feedback={{ kind: 'workout', context: ctx }} />
       </header>
       <SwimCard blocks={plan.blocks} totalDistance={plan.totalDistance} poolUnit={pool.poolUnit} />

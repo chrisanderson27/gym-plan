@@ -15,7 +15,7 @@ export function VolumeScreen() {
     <main class="screen">
       <header class="bar">
         <h1>Week {wk} volume</h1>
-        <a class="gear" href="#/lift">Lift</a>
+        <a class="gear" href="#/progress">Progress</a>
       </header>
       <p class="dim">Fractional sets per muscle: primary 1, secondary ½.</p>
       <ul class="cardrows">

@@ -45,7 +45,7 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
   const onSave = async () => {
     setBusy(true);
     await save();
-    navigate('/lift');
+    navigate('/progress');
   };
   const onStart = async () => {
     setBusy(true);
@@ -59,7 +59,7 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
     <main class="screen">
       <header class="bar">
         <h1>Build a session</h1>
-        <a class="gear" href="#/">Home</a>
+        <a class="gear" href="#/progress">Progress</a>
         <MoreMenu feedback={{ kind: 'workout', context: {} }} />
       </header>
       <label>

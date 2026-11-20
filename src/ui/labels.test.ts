@@ -5,7 +5,7 @@ import { HYBRID_LEG_MODALITIES, TRACKED_MUSCLES } from '../engine/config';
 import {
   EQUIPMENT_TAG_LABELS, MODALITY_LABELS, MUSCLE_LABELS, RUN_KIND_LABELS,
   durationLabel, equipmentTagName, humanize, modalityName, muscleName, plural, runKindName, screenName, sessionTypeLabel, tagLabel, exerciseName, variantName,
-  floorLabel, stationEquipmentLabel, zoneLabel,
+  floorLabel, prLabel, stationEquipmentLabel, zoneLabel,
 } from './labels';
 
 /** A label is "raw" when it is the id itself or still starts lower-case (a slug), e.g. "side-delts", "db". */
@@ -47,6 +47,17 @@ describe('every id used in content has a display label', () => {
 });
 
 describe('display labels', () => {
+  it('names Progress detail screens', () => {
+    expect(screenName('#/progress/history')).toBe('History');
+    expect(screenName('#/progress/body')).toBe('Weigh-in');
+    expect(screenName('#/progress/volume')).toBe('Weekly volume');
+  });
+  it('formats set and circuit PRs', () => {
+    const set = { exerciseId: 'goblet-squat', equipmentId: 'bells', weight: 45, reps: 8, prev: 6 };
+    expect(prLabel({ kind: 'weight-at-reps', ...set })).toBe(`${exerciseName(set.exerciseId)} 45 × 8`);
+    expect(prLabel({ kind: 'reps-at-weight', ...set })).toBe(`${exerciseName(set.exerciseId)} 45 × 8`);
+    expect(prLabel({ kind: 'block-work', blockId: 'b', total: 12.34, prev: 11 })).toBe('Block · 12.3 rounds');
+  });
   it('maps variant ids inside free text and leaves the rest alone', () => {
     expect(humanize('After lower-a: upper-b')).toBe('After Lower A: Upper B');
     expect(humanize('upper-a muscles still recovering — lower-b instead')).toBe('Upper A muscles still recovering — Lower B instead');

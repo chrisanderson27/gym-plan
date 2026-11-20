@@ -2,8 +2,8 @@ import { useEffect, useState } from 'preact/hooks';
 import { db } from '../../data/db';
 import { listHistory, type HistoryItem } from '../../data/history';
 import { HISTORY_PAGE } from '../../engine/config';
-import { dayOf } from '../cardio/format';
 import { MoreMenu } from '../MoreMenu';
+import { HistoryCard } from './HistoryCard';
 
 export function HistoryScreen() {
   const [rows, setRows] = useState<HistoryItem[] | null>(null);
@@ -24,18 +24,12 @@ export function HistoryScreen() {
     <main class="screen">
       <header class="bar">
         <h1>History</h1>
-        <a class="gear" href="#/">Home</a>
+        <a class="gear" href="#/progress">Progress</a>
         <MoreMenu feedback={{ kind: 'workout', context: {} }} />
       </header>
       {rows && rows.length === 0 && <p class="dim">No sessions yet.</p>}
-      <ul class="rows">
-        {(rows ?? []).map(({ session, summary }) => (
-          <li key={session.id} class="row-item">
-            <a class="row" href={'#/history/' + session.id} data-testid={`history-${session.id}`}>
-              {dayOf(session.date)} · {summary}{session.endedAt ? '' : ' · in progress'}
-            </a>
-          </li>
-        ))}
+      <ul class="history-cards">
+        {(rows ?? []).map((item) => <li key={item.session.id}><HistoryCard item={item} /></li>)}
       </ul>
       {more && <button type="button" data-testid="history-more" onClick={() => setPage(page + 1)}>Load more</button>}
     </main>
