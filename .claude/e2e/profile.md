@@ -11,6 +11,18 @@
 ## Learned quirks
 <!-- e2e workers append here -->
 
+### Seed rest-day Today inside the current program week
+_Learned 2026-11-20 · costs: one re-import_
+**You'll see:** after seeding finished sessions on each of the previous 5 days, Today still shows `hero-state` `data-state=workout`, not `rest`.
+**Do:** rest is due when the **program week** (counted from `settings.programStart`, not Mon–Sun) has its training days used. Set `programStart` to today − 5 d so all 5 seeded days fall in the current week, and re-import with a later `settings.updatedAt`.
+**Where:** `#/` rest hero.
+
+### Seeded lift sessions need lift blocks for Again
+_Learned 2026-11-20 · costs: one dead end and a source lookup_
+**You'll see:** **Do this again** on a seeded lift (session `blocks: []`, sets only) opens `#/again/<id>` with the heading "Nothing to run". Real lift sessions store `lift` blocks, so this is a seed artifact, not a bug.
+**Do:** to test Again on a lift, finish a real session first (for example Progress → Build a workout → Save → Start → Done ×2 → Finish → Right), then open its card. A seeded legacy `interval` Burn repeats fine.
+**Where:** `#/history/<id>` → `#/again/<id>`.
+
 ### Centre Builder Save/Start before clicking
 _Learned 2026-11-20 · costs: one silent missed Save and a DB check_
 **You'll see:** on `#/builder` with one block, `find testid builder-save click` prints Done but nothing saves (no navigation, `templates` store empty): the button sits at the viewport bottom under the fixed tab bar.
