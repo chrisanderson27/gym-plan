@@ -4,13 +4,13 @@ import { dayOf } from '../cardio/format';
 import { prLabel, sessionTypeLabel } from '../labels';
 
 export function HistoryCard({ item }: { item: HistoryItem }) {
-  const { session, summary, numbers, prs } = item;
+  const { session, title, numbers, prs } = item;
   const records = prs.map(prLabel).join(', ');
   return (
     <a class="history-card" href={'#/history/' + session.id} data-testid={'history-' + session.id}
       data-activity={activityOf(session.type) ?? undefined}>
       <span class="history-card-heading">
-        <strong>{summary.split(' · ')[0]}</strong>
+        <strong>{title}</strong>
         <span class="dim num">{dayOf(session.date)}</span>
         {prs.length > 0 && <span class="badge num" data-testid="pr-badge" title={records}>
           PR{prs.length > 1 ? ` ×${prs.length}` : ''}

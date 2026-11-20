@@ -181,7 +181,7 @@ test('Builder saves to Progress and starts from a saved workout', async ({ page 
 });
 
 test('ring history shows closed weeks and the same streak as Today', async ({ page }) => {
-  const days = [17, 16, 10, 9];
+  const days = [17, 16, 10, 9, 1];
   await seed(page, {
     sessions: days.map((day) => liftSession(`lift-${day}`, 'upper-a', NOW - day * DAY)),
     sets: days.flatMap((day) => setsFor(`lift-${day}`, 'chest-press-machine', 'pin-stack', NOW - day * DAY, 100, 10)),
@@ -190,11 +190,18 @@ test('ring history shows closed weeks and the same streak as Today', async ({ pa
   const today = page.getByTestId('streak');
   await expect(today).toContainText('2-week streak');
   const count = (await today.textContent())!.match(/\d+/)![0];
+  const todayRing = page.getByTestId('ring');
+  await expect(todayRing.locator('.ring-fill')).toHaveAttribute('stroke-dasharray', '50 50');
+  const track = (await todayRing.locator('.ring-track').getAttribute('stroke-dasharray'))!;
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Progress' }).click();
   await expect(page.getByTestId('progress-streak')).toHaveText(count);
   const weeks = page.getByTestId('ring-week');
   await expect(weeks.and(page.locator('[data-state="closed"]'))).toHaveCount(2);
-  await expect(weeks.and(page.locator('[data-state="current"]'))).toHaveCount(1);
+  const current = weeks.and(page.locator('[data-state="current"]'));
+  await expect(current).toHaveCount(1);
+  await expect(current.locator('.ring-track')).toHaveAttribute('stroke-dasharray', track);
+  await expect(current.locator('.ring-fill')).toHaveAttribute('stroke-dasharray', '50 50');
+  await expect(current).toContainText('Lifts 1 of 2');
 
   await seed(page, {}, {
     programStart: localDay(new Date(NOW + DAY)), updatedAt: new Date(NOW + 120_000).toISOString(),

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GymDb } from './db';
 import { cardNumbers, listHistory, loadSessionDetail, loadSessionPRs } from './history';
 import { session, topSets } from './p4-test-utils';
@@ -30,6 +30,7 @@ describe('history', () => {
     await db.runs.put({ sessionId: 'h', kind: 'easy', modality: 'bike', distanceMi: 0, durationSec: 1200, intervals: [], rpe: 6, painFlag: false });
     await db.sets.bulkPut(topSets('h', 5));
     const [item] = await listHistory(db);
+    expect(item!.title).toBe('Hybrid · Lower A');
     expect(item!.summary).toContain('Hybrid · Lower A');
     expect(item!.summary).toContain('Bike 20 min');
     const d = (await loadSessionDetail(db, 'h'))!;
@@ -64,6 +65,50 @@ describe('history', () => {
     expect((await listHistory(db)).every(({ prs }) => prs.length === 0)).toBe(true);
     expect(await loadSessionPRs(db, 'a')).toEqual([]);
   });
+  it('only reads sets and sessions relevant to the current page and its PRs', async () => {
+    const db = open();
+    const unrelated = Array.from({ length: 20 }, (_, i) => session(`other-${i}`, i + 4));
+    await db.sessions.bulkPut([session('current', 1), session('prior', 2), ...unrelated]);
+    await db.sets.bulkPut([
+      ...topSets('current', 1).map((s) => ({ ...s, weight: 110 })),
+      ...topSets('prior', 2),
+      ...unrelated.flatMap((s, i) => topSets(s.id, i + 4).map((set) => ({ ...set, equipmentId: 'other' }))),
+    ]);
+    const readSession = vi.fn((row: { id: string }) => row);
+    const readSet = vi.fn((row: { sessionId: string }) => row);
+    db.sessions.hook('reading', readSession);
+    db.sets.hook('reading', readSet);
+
+    const [item] = await listHistory(db, 0, 1);
+
+    expect(item!.prs).toMatchObject([{ kind: 'weight-at-reps', weight: 110, prev: 100 }]);
+    expect(readSession.mock.calls.map(([row]) => row.id).sort()).toEqual(['current', 'prior']);
+    expect(readSet.mock.calls.map(([row]) => row.sessionId).sort()).toEqual([
+      'current', 'current', 'current', 'prior', 'prior', 'prior',
+    ]);
+  });
+  it('finds prior matching circuits across session types without reading their sets', async () => {
+    const db = open();
+    const circuit = (completedRounds: number, exerciseId = 'rower'): CircuitBlock => ({
+      id: 'circuit', kind: 'circuit', role: 'block', podId: 'turf', durationSec: 480, targetRounds: 5,
+      stations: [{ exerciseId, target: { unit: 'cal', amount: 10 } }],
+      log: { completedRounds, actualDurationSec: 480, stations: [{ exerciseId }] },
+    });
+    await db.sessions.bulkPut([
+      session('current', 2, { blocks: [circuit(3)] }),
+      session('prior', 3, { type: 'burn', blocks: [circuit(2)] }),
+      session('future', 1, { blocks: [circuit(4)] }),
+      session('other', 4, { blocks: [circuit(4, 'air-bike')] }),
+    ]);
+    await db.sets.bulkPut(topSets('prior', 3));
+    const readSet = vi.fn((row: { sessionId: string }) => row);
+    db.sets.hook('reading', readSet);
+
+    const [item] = await listHistory(db, 1, 1);
+    expect(item!.prs).toEqual([{ kind: 'block-work', blockId: 'circuit', total: 3, prev: 2 }]);
+    expect(await loadSessionPRs(db, 'current')).toEqual(item!.prs);
+    expect(readSet).not.toHaveBeenCalled();
+  });
   it('shows minutes, working sets and circuit rounds before cardio distance', () => {
     const circuit: CircuitBlock = {
       id: 'circuit', kind: 'circuit', role: 'block', podId: 'turf', durationSec: 480, targetRounds: 5,
@@ -90,6 +135,8 @@ describe('history', () => {
     expect(cardNumbers(swim, [])).toEqual([]);
     await db.sessions.put(swim);
     await db.swims.put(row);
-    expect((await listHistory(db))[0]?.numbers).toEqual(cardNumbers(swim, [], undefined, row));
+    const [item] = await listHistory(db);
+    expect(item?.title).toBe('Swim');
+    expect(item?.numbers).toEqual(cardNumbers(swim, [], undefined, row));
   });
 });

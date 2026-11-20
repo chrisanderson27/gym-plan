@@ -3,6 +3,7 @@ import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
 import { round1, weeklyRate, weightTrend } from '../../engine/body';
 import { localDate } from '../../engine/dates';
+import { rateLabel } from '../labels';
 import { TrendChart } from './TrendChart';
 
 export function BodyCard() {
@@ -16,7 +17,7 @@ export function BodyCard() {
       {last ? (
         <>
           <TrendChart compact points={points} />
-          <p class="num">Trend {round1(last.trend)} lb{rate !== null && ` · ${rate < 0 ? '−' : '+'}${round1(Math.abs(rate))} lb/wk`}</p>
+          <p class="num">Trend {round1(last.trend)} lb{rate !== null && ` · ${rateLabel(rate)}`}</p>
         </>
       ) : logs && <p class="dim">No weigh-ins yet</p>}
       <a class="btn" href="#/progress/body" data-testid="progress-link-weigh-in">Log weigh-in</a>

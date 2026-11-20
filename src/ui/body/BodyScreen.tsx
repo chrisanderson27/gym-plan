@@ -6,6 +6,7 @@ import type { Settings } from '../../data/types';
 import { BODY_MAINTAIN_BAND_LB, BODY_RATE_BAND_LB, BODY_RATE_MIN_SPAN_DAYS } from '../../engine/config';
 import { etaToGoal, rateBand, round1, waistDue, weeklyRate, weightTrend } from '../../engine/body';
 import { localDate } from '../../engine/dates';
+import { rateLabel } from '../labels';
 import { MoreMenu } from '../MoreMenu';
 import { TrendChart } from './TrendChart';
 
@@ -77,7 +78,7 @@ export function BodyScreen({ settings }: { settings: Settings }) {
           <p class="num" data-testid="body-rate">
             {rate === null || band === null
               ? `not enough data (need ${BODY_RATE_MIN_SPAN_DAYS} days)`
-              : `${rate < 0 ? '−' : '+'}${round1(Math.abs(rate))} lb/wk${direction === 'lose' ? ` · ${BAND_TEXT[band]} (${BODY_RATE_BAND_LB[0]}–${BODY_RATE_BAND_LB[1]})` : ''}`}
+              : `${rateLabel(rate)}${direction === 'lose' ? ` · ${BAND_TEXT[band]} (${BODY_RATE_BAND_LB[0]}–${BODY_RATE_BAND_LB[1]})` : ''}`}
           </p>
           <p class="num" data-testid="body-eta">
             {eta === 'reached' ? `Goal ${settings.goalWeightLb} reached` : eta === null ? noEta[direction] : `ETA ${settings.goalWeightLb} ≈ ${eta}`}

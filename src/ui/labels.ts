@@ -32,6 +32,8 @@ export function stationEquipmentLabel(
 
 export const exerciseName = (id: string): string => exerciseById.get(id)?.name ?? id;
 
+export const rateLabel = (rate: number): string => `${rate < 0 ? '−' : '+'}${round1(Math.abs(rate))} lb/wk`;
+
 export function prLabel(pr: PR): string {
   if (pr.kind === 'block-work') return `Block · ${round1(pr.total)} rounds`;
   return `${exerciseName(pr.exerciseId)} ${pr.weight} × ${pr.reps}`;

@@ -8,6 +8,7 @@ import { circuitWork } from '../../engine/block/work';
 import { dayOf } from '../cardio/format';
 import { exerciseName, modalityName, prLabel, runKindName, sessionTypeLabel } from '../labels';
 import { MoreMenu } from '../MoreMenu';
+import { circuitSummary } from './circuit-summary';
 
 export function HistoryDetailScreen({ id }: { id: string }) {
   const d = useLiveQuery(() => loadSessionDetail(db, id), [id]);
@@ -72,7 +73,7 @@ export function HistoryDetailScreen({ id }: { id: string }) {
         return (
           <section key={block.id} class="card">
             <h2 class="num" data-testid="circuit-summary">
-              {block.label ?? 'Block'} · {log ? `${log.completedRounds} rounds${log.partialReps ? ` + ${log.partialReps.count} reps` : ''}` : 'not logged'}
+              {block.label ?? 'Block'} · {circuitSummary(block)}
             </h2>
             {work && <ul class="plan">
               {work.perStation.map(({ exerciseId, unit, amount }, i) => (
