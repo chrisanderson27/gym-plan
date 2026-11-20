@@ -19,13 +19,13 @@ export function useWakeLock(active: boolean) {
   useEffect(() => active ? holdWakeLock() : undefined, [active]);
 }
 
-export function useStoredState<T>(key: string, init: T) {
+export function useStoredState<T>(key: string, restore: (saved: unknown) => T) {
   const [value, setValue] = useState<T>(() => {
     try {
       const saved = localStorage.getItem(key);
-      return saved === null ? init : (JSON.parse(saved) as T | null) ?? init;
+      return restore(saved === null ? null : JSON.parse(saved));
     } catch {
-      return init;
+      return restore(null);
     }
   });
   const current = useRef(value);

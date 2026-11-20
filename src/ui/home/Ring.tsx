@@ -5,7 +5,14 @@ import { Sheet } from '../Sheet';
 
 const LINE_LABELS = { lift: 'Lifts', run: 'Long runs', swim: 'Swims', burn: 'Training days' };
 
-export function Ring({ ring, budget, freezeAvailable }: { ring: ReturnType<typeof weekRing>; budget: BudgetLine[]; freezeAvailable: boolean }) {
+type RingState = ReturnType<typeof weekRing>;
+
+export function Ring({ ring, previousRing, budget, freezeAvailable }: {
+  ring: RingState;
+  previousRing?: RingState;
+  budget: BudgetLine[];
+  freezeAvailable: boolean;
+}) {
   const [open, setOpen] = useState(false);
   let offset = 0;
   return (
@@ -15,15 +22,19 @@ export function Ring({ ring, budget, freezeAvailable }: { ring: ReturnType<typeo
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" focusable="false">
           {ring.segments.map(({ activity, done, min }) => {
             const length = min / ring.target * 100;
-            const fill = Math.min(done, min) / min * length;
+            const fill = Math.min(done / min * length, length - 3);
+            const previous = previousRing?.segments.find((segment) => segment.activity === activity)?.done ?? 0;
+            const previousFill = Math.min(previous / min * length, length - 3);
+            const animate = previousRing && previousFill < fill;
             const start = offset;
             offset += length;
             return (
               <g key={activity} data-activity={activity} transform="rotate(-90 16 16)">
                 <circle class="ring-track" cx="16" cy="16" r="12" pathLength="100"
                   stroke-dasharray={`${length - 3} ${103 - length}`} stroke-dashoffset={-start} />
-                {fill > 0 && <circle class="ring-fill" cx="16" cy="16" r="12" pathLength="100"
-                  stroke-dasharray={`${Math.min(fill, length - 3)} ${100 - Math.min(fill, length - 3)}`} stroke-dashoffset={-start} />}
+                {fill > 0 && <circle class={animate ? 'ring-fill ring-filling' : 'ring-fill'} cx="16" cy="16" r="12" pathLength="100"
+                  style={animate ? { '--ring-fill-from': `${previousFill} ${100 - previousFill}` } : undefined}
+                  stroke-dasharray={`${fill} ${100 - fill}`} stroke-dashoffset={-start} />}
               </g>
             );
           })}

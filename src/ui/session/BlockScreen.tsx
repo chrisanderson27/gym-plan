@@ -10,15 +10,9 @@ import { Sheet } from '../Sheet';
 import { fmtMSS } from '../cardio/format';
 import { BlockEndSheet } from './BlockEndSheet';
 import { StepperSheet } from './StepperSheet';
+import { blockStateKey, restoreBlockState } from './blockState';
 import { blockChangeItems } from './changeItems';
 import { useNow, useStoredState } from './hooks';
-
-interface BlockState {
-  startedAtMs: number | null;
-  rounds: number;
-  swapped: Record<number, true>;
-  loads: Record<number, number>;
-}
 
 interface Props {
   sessionId: string;
@@ -36,7 +30,7 @@ interface Props {
 }
 
 export function BlockScreen({ sessionId, block, names, equipmentName, steps, place, headerLeft, onSave, onSkip, onNotAtMyGym, changeItems, feedback }: Props) {
-  const [state, update, clear] = useStoredState<BlockState>(`block:${sessionId}:${block.id}`, { startedAtMs: null, rounds: 0, swapped: {}, loads: {} });
+  const [state, update, clear] = useStoredState(blockStateKey(sessionId, block.id), restoreBlockState);
   const [editing, setEditing] = useState<number | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [unavailableError, setUnavailableError] = useState(false);

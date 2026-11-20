@@ -7,11 +7,13 @@ import {
 } from '../../data/lift';
 import { useLiveQuery } from '../../data/live';
 import type { CircuitBlock, CircuitLog, LiftBlock, RunBlock, SetRow } from '../../data/types';
-import { BLOCK_TRANSITION_MIN, COOLDOWN_MIN, MIN_PER_SET, REST_DEFAULT_SEC, WARMUP_MIN } from '../../engine/config';
+import { estimateLiftDayMinutes } from '../../engine/block/generate';
+import { REST_DEFAULT_SEC } from '../../engine/config';
 import { localDate } from '../../engine/dates';
 import { zoneOf } from '../../engine/gym/availability';
-import { resumeIndex, sessionSteps, stepDone, upNext, type Step } from '../../engine/lift/focus';
+import { isLiftDayCooldown, resumeIndex, sessionSteps, stepDone, upNext, type Step } from '../../engine/lift/focus';
 import { pickSubstitute } from '../../engine/lift/generator';
+import { isWorking } from '../../engine/lift/types';
 import { sessionPRs, setPRs, type PR } from '../../engine/pr';
 import { isRampInWeek, weekIndex } from '../../engine/week';
 import { MoreMenu } from '../MoreMenu';
@@ -23,6 +25,7 @@ import { BlockScreen } from '../session/BlockScreen';
 import { FinishSheet } from '../session/FinishSheet';
 import { PrBanner } from '../session/PrBanner';
 import { RestTimer } from '../session/RestTimer';
+import { blockStateKey } from '../session/blockState';
 import { blockChangeItems, exerciseChangeItems } from '../session/changeItems';
 import { PoseView } from '../slots/PoseView';
 import { useNow, useWakeLock } from '../session/hooks';
@@ -104,7 +107,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
   const done = (block: LiftBlock) => stepDone({ kind: 'lift', blocks: [block] }, sets);
   const activeBlock = step?.kind === 'lift' ? step.blocks.find((b) => !done(b)) ?? step.blocks.at(-1) : undefined;
   const last = activeBlock && rowsFor(activeBlock)
-    .filter((row) => row.setKind === undefined || row.setKind === 'working').sort((a, b) => a.idx - b.idx).at(-1);
+    .filter(isWorking).sort((a, b) => a.idx - b.idx).at(-1);
 
   const advance = () => {
     setRest(null);
@@ -144,7 +147,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
       for (const b of session.blocks) {
         if (b.kind !== 'circuit') continue;
         try {
-          localStorage.removeItem(`block:${sessionId}:${b.id}`);
+          localStorage.removeItem(blockStateKey(sessionId, b.id));
         } catch {
           // Discarding the workout does not depend on localStorage.
         }
@@ -204,13 +207,9 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
       <span class="step-dots" aria-hidden="true">{steps.map((_, j) => <i key={j} class={j < count ? 'current' : ''} />)}</span>
     </p>
   );
-  const estimate = session.blocks.some((b) => b.label?.startsWith('Cool-down')) ? Math.round(
-    WARMUP_MIN + COOLDOWN_MIN + session.blocks.reduce((minutes, b) => {
-      if (b.kind === 'circuit') return minutes + b.durationSec / 60 + BLOCK_TRANSITION_MIN;
-      if (b.kind === 'lift' && !b.warmup) return minutes + b.sets * MIN_PER_SET[LIFT_EXERCISES.get(b.exerciseId)?.repClass ?? 'other'];
-      return minutes;
-    }, 0),
-  ) : null;
+  const estimate = session.blocks.some(isLiftDayCooldown)
+    ? Math.round(estimateLiftDayMinutes(session.blocks, LIFT_EXERCISES))
+    : null;
 
   return (
     <main class="screen lift-session">

@@ -31,17 +31,36 @@ it('groups only consecutive working blocks in the same superset', () => {
   ]);
 });
 
+it('honours explicit note roles independently of labels and keeps legacy cool-downs', () => {
+  const renamed = { ...warm, role: 'cooldown', label: 'Time to stretch' } as const;
+  const misleading = { ...warm, role: 'warmup', label: 'Cool-down prep' } as const;
+  expect(sessionSteps([misleading, renamed, cool]).map((step) => step.kind === 'note' && step.role))
+    .toEqual(['warmup', 'cooldown', 'cooldown']);
+});
+
 it('resumes past the furthest finished step even if it skipped an earlier block', () => {
   const logged = { ...circuit, log: { completedRounds: 2, actualDurationSec: 420, stations: [] } };
   const steps = sessionSteps([warm, lift('skipped'), logged, cool]);
-  expect(resumeIndex(steps, [])).toBe(3);
+  expect(resumeIndex(steps, [row('skipped', 0)])).toBe(3);
   expect(resumeIndex(sessionSteps([warm, lift('main'), circuit]), [])).toBe(0);
+});
+
+it('resumes the main lift after one working set and advances only once it is complete', () => {
+  const steps = sessionSteps([warm, lift('main'), circuit]);
+  expect(resumeIndex(steps, [
+    row('main', 0, { setKind: 'warmup' }),
+    row('main', 0, { equipmentId: 'other' }),
+    row('main', 0, { reps: 0 }),
+  ])).toBe(0);
+  expect(resumeIndex(steps, [row('main', 0)])).toBe(1);
+  expect(resumeIndex(steps, [row('main', 0), row('main', 1)])).toBe(2);
 });
 
 it('counts working sets for the exercise and equipment, or one calibration row', () => {
   const step = sessionSteps([lift('main')])[0]!;
   expect(stepDone(step, [row('main', 0), row('main', 1, { equipmentId: 'other' })])).toBe(false);
   expect(stepDone(step, [row('main', 0), row('main', 1, { setKind: 'warmup' })])).toBe(false);
+  expect(stepDone(step, [row('main', 0), row('main', 1, { reps: 0 })])).toBe(false);
   expect(stepDone(step, [row('main', 0), row('main', 1)])).toBe(true);
   expect(stepDone(step, [row('main', 0, { setKind: 'calibration' })])).toBe(true);
 });

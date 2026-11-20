@@ -78,9 +78,8 @@ test('workout feedback from More, cardio entry points, JSONL export, and the pos
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(`./#/lift/session/${sessionId}`);
   await page.reload();
-  await page.getByTestId('warmup-done').click();
 
-  await page.getByTestId(`set-weight-${ex}-1`).waitFor();
+  await expect(page.getByTestId(`set-weight-${ex}-1`)).toBeVisible();
   await expect(page.getByTestId(`pose-${ex}`)).toHaveAttribute('data-static', 'true');
   testInfo.annotations.push({ type: 'covered', description: 'AC1 AC2 AC3' });
 });

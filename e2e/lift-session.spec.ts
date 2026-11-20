@@ -3,7 +3,7 @@ import { SEED_EQUIPMENT } from '../src/content';
 import { liftDayInputFrom } from '../src/data/liftday';
 import type { CircuitBlock, LiftVariant, Session, SetRow } from '../src/data/types';
 import { generateLiftDay } from '../src/engine/block/generate';
-import { onboard, pageWidth, primaryCount, seedBackup, tooSmall } from './helpers';
+import { emojiText, onboard, pageWidth, primaryCount, seedBackup, tooSmall } from './helpers';
 
 test.use({ viewport: { width: 390, height: 844 }, timezoneId: 'America/New_York' });
 
@@ -62,6 +62,7 @@ async function setup(page: Page, { theme = 'light', runningClock = false, progra
 }
 
 async function capture(page: Page, testInfo: TestInfo, name: string) {
+  expect(await emojiText(page)).toEqual([]);
   await testInfo.attach(name, { body: await page.screenshot({ animations: 'disabled' }), contentType: 'image/png' });
 }
 
@@ -100,13 +101,17 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(stepper).toBeVisible();
     await rules(page);
     await capture(page, testInfo, `stepper-${theme}`);
+    await stepper.getByRole('button', { name: 'weight up' }).click();
+    await stepper.getByRole('button', { name: 'reps up' }).click();
     await stepper.getByRole('button', { name: 'Done' }).click();
+    const weight = await page.locator('[data-testid^="set-weight-"]').innerText();
+    const reps = await page.locator('[data-testid^="set-reps-"]').innerText();
 
     await page.getByTestId('set-done').click();
     await expect(page.getByTestId('rest-timer')).toBeVisible({ timeout: 300 });
     const id = page.url().split('/').at(-1);
     expect((await readStore<SetRow>(page, 'sets')).filter((set) => set.sessionId === id))
-      .toMatchObject([{ idx: 0, setKind: 'working' }]);
+      .toMatchObject([{ idx: 0, setKind: 'working', weight: parseFloat(weight), reps: parseInt(reps, 10) }]);
     await expect(page.getByTestId('rest-remaining')).toHaveText('2:30');
     await page.getByRole('button', { name: '+15 s' }).click();
     await expect(page.getByTestId('rest-remaining')).toHaveText('2:45');
@@ -116,6 +121,11 @@ for (const theme of ['light', 'dark'] as const) {
     await capture(page, testInfo, `rest-${theme}`);
     await page.getByRole('button', { name: 'Skip', exact: true }).click();
     await expect(page.getByTestId('rest-timer')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="set-weight-"][data-testid$="-1"]')).toHaveText(weight);
+    await expect(page.locator('[data-testid^="set-reps-"][data-testid$="-1"]')).toHaveText(reps);
+    await page.reload();
+    await expect(page.locator('[data-testid^="set-weight-"][data-testid$="-1"]')).toHaveText(weight);
+    await expect(page.locator('[data-testid^="set-reps-"][data-testid$="-1"]')).toHaveText(reps);
   });
 
   test(`a running block saves rounds, partial work and a clock-safe swap in ${theme}`, async ({ page }, testInfo) => {
@@ -134,6 +144,9 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(page.getByTestId(`set-weight-${main.exerciseId}-${i}`)).toBeVisible();
       await page.getByTestId('set-done').click();
     }
+    const firstBlock = started.blocks.find((b) => b.kind === 'circuit')!;
+    const storageKey = `block:${sessionId}:${firstBlock.id}`;
+    await page.evaluate((key) => localStorage.setItem(key, JSON.stringify({ rounds: 0 })), storageKey);
     await page.getByTestId('step-next').click();
     await expect(page.getByTestId('block-screen').getByRole('heading', { level: 1 })).toHaveText(`Block A · ${place}`);
     await page.getByTestId('block-start').click();
@@ -173,6 +186,19 @@ for (const theme of ['light', 'dark'] as const) {
     const first = saved.blocks.find((b): b is CircuitBlock => b.kind === 'circuit')!;
     expect(first.log?.stations[stationIndex]?.swappedFromExerciseId).toBe(first.stations[stationIndex]?.exerciseId);
     expect(first.log?.actualDurationSec).toBeGreaterThanOrEqual(5);
+    await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), storageKey)).toBeNull();
+
+    // Discard clears all circuit keys for this session, even if a block is no longer on screen.
+    const otherKey = 'block:another-session:work';
+    await page.evaluate(([key, other]) => {
+      localStorage.setItem(key!, '{}');
+      localStorage.setItem(other!, '{}');
+    }, [storageKey, otherKey]);
+    await openChange(page, 'discard');
+    await page.getByTestId('discard-confirm').click();
+    await expect(page).toHaveURL(/#\/$/);
+    expect(await page.evaluate(([key, other]) => [localStorage.getItem(key!), localStorage.getItem(other!)],
+      [storageKey, otherKey])).toEqual([null, '{}']);
   });
 }
 
@@ -210,25 +236,40 @@ test('a seeded chest press PR celebrates unless reduced motion is on', async ({ 
   }
 });
 
-test('Right saves RPE 7, advances the ring and returns to a warning-free Today', async ({ page }, testInfo) => {
-  // Put Monday's saved lift in the same program week as Thursday's new lift.
-  await setup(page, { programStart: '2026-10-19' });
-  const ring = page.getByTestId('ring');
-  await expect(ring).toContainText('1/2');
-  await page.getByTestId('start').click();
-  await page.getByTestId('warmup-done').click();
-  await page.getByTestId('set-done').click();
-  const id = page.url().split('/').at(-1);
-  await openChange(page, 'finish-now');
-  await expect(page.getByRole('dialog', { name: 'How was it?' })).toBeVisible();
-  await rules(page);
-  await capture(page, testInfo, 'finish-light');
-  await page.getByTestId('finish-right').click();
-  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'done');
-  await expect(page.locator('.warn')).toHaveCount(0);
-  await expect(ring).toContainText('2/2');
-  expect((await readStore<Session>(page, 'sessions')).find((s) => s.id === id)).toMatchObject({ rpe: 7 });
-});
+for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+  test(`Right saves RPE 7, shows the closed ring and returns to Today with ${reducedMotion}`, async ({ page }, testInfo) => {
+    await page.emulateMedia({ reducedMotion });
+    // Put Monday's saved lift in the same program week as Thursday's new lift.
+    await setup(page, { programStart: '2026-10-19' });
+    const ring = page.getByTestId('ring');
+    await expect(ring).toContainText('1/2');
+    await page.getByTestId('start').click();
+    await page.getByTestId('warmup-done').click();
+    await page.getByTestId('set-done').click();
+    const id = page.url().split('/').at(-1);
+    await openChange(page, 'finish-now');
+    await expect(page.getByRole('dialog', { name: 'How was it?' })).toBeVisible();
+    await rules(page);
+    await capture(page, testInfo, reducedMotion === 'reduce' ? 'finish-reduced' : 'finish-light');
+    await page.getByTestId('finish-right').click();
+    const sheet = page.getByRole('dialog', { name: 'How was it?' });
+    const saved = sheet.getByRole('heading', { name: 'Workout saved' });
+    const fill = sheet.locator('.ring-fill');
+    await expect(saved).toBeVisible();
+    await expect(sheet.getByTestId('ring')).toHaveText('2/2');
+    await expect(fill).toHaveAttribute('stroke-dasharray', '97 3');
+    await expect(fill).toHaveCSS('--ring-fill-from', '50 50');
+    await expect(fill).toHaveCSS('animation-name', reducedMotion === 'reduce' ? 'none' : 'finish-ring-fill');
+    await expect(sheet.locator('.session-confetti')).toHaveCount(reducedMotion === 'reduce' ? 0 : 1);
+    expect(await emojiText(page)).toEqual([]);
+    await page.waitForTimeout(350);
+    expect(await saved.isVisible()).toBe(true);
+    await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'done');
+    await expect(page.locator('.warn')).toHaveCount(0);
+    await expect(ring).toContainText('2/2');
+    expect((await readStore<Session>(page, 'sessions')).find((s) => s.id === id)).toMatchObject({ rpe: 7 });
+  });
+}
 
 test('Today resumes a recent lift across midnight and can discard a stale lift', async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-11-19T01:00:00-05:00'));

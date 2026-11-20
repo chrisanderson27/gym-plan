@@ -72,6 +72,7 @@ const block: Check = (v) => {
       return shape({
         exerciseId: str, sets: num, repMin: num, repMax: num,
         equipmentId: opt(str), targetWeight: opt(num), restSec: opt(num), rirTarget: opt(num), supersetGroup: opt(str), warmup: opt(bool),
+        role: opt(oneOf('warmup', 'cooldown')),
       })(v);
     case 'swim': return swimBlock(v);
     case 'run':

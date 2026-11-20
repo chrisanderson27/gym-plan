@@ -1,9 +1,11 @@
 import { expect, it } from 'vitest';
 import { HOME_GYM, SEED_EQUIPMENT } from '../content';
-import { generateLiftDay, type LiftDayPlan } from '../engine/block/generate';
+import { estimateLiftDayMinutes, generateLiftDay, type LiftDayPlan } from '../engine/block/generate';
 import { blockContext, validateBlock, validateLiftDay } from '../engine/block/validate';
 import { availableOn } from '../engine/gym/availability';
+import { BLOCK_TRANSITION_MIN } from '../engine/config';
 import type { LiftSnapshot } from '../engine/lift/types';
+import { LIFT_EXERCISES } from './lift';
 import { BLOCK_EXERCISES, BODYWEIGHT_IDS, liftDayInputFrom, planLiftDay, planTodayLift, startOrResumePlannedLift } from './liftday';
 import { openTestDb } from './test-utils';
 import type { CircuitBlock, LiftVariant, Session } from './types';
@@ -69,7 +71,17 @@ it('prescribes upstairs Romanian deadlifts using the dumbbell steps even after t
 
 it('round-trips a generated plan through persisted session validation', () => {
   const session = sessionWith(generateLiftDay(liftDayInputFrom(snapshot, 'upper-a', 60, 123)));
+  expect(session.blocks.at(-1)).toMatchObject({ kind: 'lift', role: 'cooldown' });
   expect(() => validateRows('sessions', [JSON.parse(JSON.stringify(session))])).not.toThrow();
+});
+
+it('reproduces the plan estimate from stored blocks and includes transitions only for the remaining circuits', () => {
+  const plan = generateLiftDay(liftDayInputFrom(snapshot, 'upper-a', 60, 123));
+  const circuit = circuits(plan)[0]!;
+  const blocks = JSON.parse(JSON.stringify(plan.blocks)) as Session['blocks'];
+  expect(estimateLiftDayMinutes(blocks, LIFT_EXERCISES)).toBe(plan.estMin);
+  expect(estimateLiftDayMinutes(blocks.filter(({ id }) => id !== circuit.id), LIFT_EXERCISES))
+    .toBeCloseTo(plan.estMin - circuit.durationSec / 60 - BLOCK_TRANSITION_MIN);
 });
 
 it('loads the snapshot and plans without writing a session', async () => {

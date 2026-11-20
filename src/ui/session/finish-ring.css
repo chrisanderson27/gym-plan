@@ -1,0 +1,8 @@
+@media (prefers-reduced-motion: no-preference) {
+  .finish-ring .ring-filling { animation: finish-ring-fill var(--dur-slow) ease-out; }
+  .finish-ring .session-confetti > span { animation-delay: var(--dur-slow); }
+}
+
+@keyframes finish-ring-fill {
+  from { stroke-dasharray: var(--ring-fill-from); }
+}

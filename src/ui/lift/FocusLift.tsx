@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { exerciseById } from '../../content';
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
-import { LIFT_EXERCISES, prescribeExercise, setLastSetRir, toggleWorkingSet } from '../../data/lift';
+import { LIFT_EXERCISES, logWorkingSet, prescribeExercise, setLastSetRir } from '../../data/lift';
 import type { LiftBlock, Session, SetRow } from '../../data/types';
 import { pickSubstitute } from '../../engine/lift/generator';
 import { painSwapOffer } from '../../engine/lift/pain';
@@ -36,10 +36,11 @@ export function FocusLift({ block, sets, snapshot, session, flags, onSwapTo, onL
   const presc = eq ? prescribeExercise(snapshot, block.exerciseId, equipmentId, flags, block) : null;
   const baseWeight = block.targetWeight ?? presc?.weight ?? 0;
   const baseReps = presc?.reps ?? block.repMin;
-  const working = sets.filter((s) => s.setKind === undefined || s.setKind === 'working');
+  const working = sets.filter(isWorking);
   const marks = Array.from({ length: block.sets }, (_, id) => working.some((s) => s.idx === id));
   const idx = marks.indexOf(false);
   const lastLogged = working.reduce<SetRow | undefined>((last, row) => !last || row.idx > last.idx ? row : last, undefined);
+  const previousSet = working.find((row) => row.idx === idx - 1);
   let lastTime: SetRow | undefined;
   let lastTimeAt = -Infinity;
   for (const prior of snapshot.history) {
@@ -62,12 +63,13 @@ export function FocusLift({ block, sets, snapshot, session, flags, onSwapTo, onL
   const pending = useRef<SetRow | null>(null);
   useEffect(() => {
     if (pending.current && working.some((s) => s.id === pending.current?.id)) {
+      delete draft.current[pending.current.idx];
       pending.current = null;
       rerender((n) => n + 1);
     }
   }, [sets]);
 
-  const view = () => draft.current[idx] ?? { weight: baseWeight, reps: baseReps };
+  const view = () => draft.current[idx] ?? { weight: previousSet?.weight ?? baseWeight, reps: previousSet?.reps ?? baseReps };
   const change = (patch: Partial<ReturnType<typeof view>>) => {
     draft.current[idx] = { ...view(), ...patch };
     rerender((n) => n + 1);
@@ -86,7 +88,7 @@ export function FocusLift({ block, sets, snapshot, session, flags, onSwapTo, onL
     pending.current = row;
     rerender((n) => n + 1);
     queue.current = queue.current.then(async () => {
-      if (await toggleWorkingSet(db, row, { logOnly: true }) === 'logged') {
+      if (await logWorkingSet(db, row) === 'logged') {
         onLogged(row);
       } else {
         pending.current = null;

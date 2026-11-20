@@ -8,7 +8,7 @@ import { generateLift, type LiftPlan } from '../engine/lift/generator';
 import { isLowerBarbell, prescribe } from '../engine/lift/progression';
 import { summarizeLiftSession } from '../engine/lift/session';
 import { isRampInWeek, weekIndex } from '../engine/week';
-import type { HistorySession, LiftExercise, LiftSnapshot, Prescription } from '../engine/lift/types';
+import { isWorking, isWorkingKind, type HistorySession, type LiftExercise, type LiftSnapshot, type Prescription } from '../engine/lift/types';
 import type { GymDb } from './db';
 import { newId } from './ids';
 import type { Block, CircuitLog, Equipment, ExerciseOverride, LiftBlock, LiftVariant, Session, SessionType, SetRow } from './types';
@@ -206,29 +206,40 @@ export async function unlogSet(db: GymDb, id: string): Promise<void> {
   await db.sets.delete(id);
 }
 
+function workingRowsForSlot(db: GymDb, row: SetRow): Promise<SetRow[]> {
+  return db.sets.where('sessionId').equals(row.sessionId).filter(
+    (s) => s.exerciseId === row.exerciseId && s.equipmentId === row.equipmentId && s.idx === row.idx && isWorkingKind(s),
+  ).toArray();
+}
+
 /**
  * Tick / untick one working set. Decides from the database inside one transaction, not from the rendered
  * (possibly stale) live-query snapshot, so a tap before the snapshot refreshes cannot write a duplicate row
  * for the same idx or untick a set that is not there.
  */
-export async function toggleWorkingSet(db: GymDb, row: SetRow): Promise<'logged' | 'unlogged'>;
-export async function toggleWorkingSet(db: GymDb, row: SetRow, options: { logOnly: true }): Promise<'logged' | 'unlogged' | 'unchanged'>;
-export async function toggleWorkingSet(db: GymDb, row: SetRow, options?: { logOnly: true }): Promise<'logged' | 'unlogged' | 'unchanged'> {
-  return db.transaction('rw', [db.sessions, db.sets], async () => {
-    if (options?.logOnly) {
-      const session = await db.sessions.get(row.sessionId);
-      if (!session || session.endedAt) return 'unchanged';
-    }
-    const existing = (await db.sets.where('sessionId').equals(row.sessionId).toArray()).filter(
-      (s) => s.exerciseId === row.exerciseId && s.equipmentId === row.equipmentId && s.idx === row.idx && (s.setKind === undefined || s.setKind === 'working'),
-    );
+export async function toggleWorkingSet(db: GymDb, row: SetRow): Promise<'logged' | 'unlogged'> {
+  return db.transaction('rw', db.sets, async () => {
+    const existing = await workingRowsForSlot(db, row);
     if (existing.length > 0) {
-      if (options?.logOnly) return 'unchanged';
       await db.sets.bulkDelete(existing.map((s) => s.id));
-      return 'unlogged' as const;
+      return 'unlogged';
     }
     await db.sets.put(row);
-    return 'logged' as const;
+    return 'logged';
+  });
+}
+
+/** Log once while the session is open, replacing any zero-rep placeholder at this slot. */
+export async function logWorkingSet(db: GymDb, row: SetRow): Promise<'logged' | 'unchanged'> {
+  if (!isWorking(row)) return 'unchanged';
+  return db.transaction('rw', [db.sessions, db.sets], async () => {
+    const session = await db.sessions.get(row.sessionId);
+    if (!session || session.endedAt) return 'unchanged';
+    const existing = await workingRowsForSlot(db, row);
+    if (existing.some(isWorking)) return 'unchanged';
+    if (existing.length) await db.sets.bulkDelete(existing.map((s) => s.id));
+    await db.sets.put(row);
+    return 'logged';
   });
 }
 
@@ -317,7 +328,7 @@ export async function saveCircuitLog(db: GymDb, sessionId: string, blockId: stri
 export async function undoLastSet(db: GymDb, sessionId: string, exerciseId: string, equipmentId: string): Promise<void> {
   await db.transaction('rw', db.sets, async () => {
     const rows = await db.sets.where('sessionId').equals(sessionId).filter((s) => (
-      s.exerciseId === exerciseId && s.equipmentId === equipmentId && (s.setKind === undefined || s.setKind === 'working')
+      s.exerciseId === exerciseId && s.equipmentId === equipmentId && isWorking(s)
     )).sortBy('idx');
     const last = rows.at(-1);
     if (last) await db.sets.delete(last.id);

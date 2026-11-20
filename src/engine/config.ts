@@ -140,5 +140,6 @@ export const STATION_TARGETS = {
 export const REST_DEFAULT_SEC = 90;
 export const REST_STEP_SEC = 15;
 export const FINISH_RPE = { easy: 5, right: 7, hard: 9 } as const;
+export const FINISH_DWELL_MS = 1500;
 export const BLOCK_BEEP_AT_SEC = [60, 30, 3, 2, 1] as const;
 export const PR_BANNER_MS = 2500;

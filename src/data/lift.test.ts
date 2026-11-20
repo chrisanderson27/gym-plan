@@ -16,6 +16,7 @@ import {
   undoLastSet,
   loadLiftSnapshot,
   logSet,
+  logWorkingSet,
   resolveEquipmentId,
   setLastSetRir,
   setNotAtMyGym,
@@ -123,23 +124,34 @@ describe('lift data layer', () => {
   it('undoes the highest working index for only that exercise and equipment', async () => {
     const db = open();
     await db.sets.bulkPut([
-      setRow('open', 'ex', 'eq', 0, { id: 'first' }), setRow('open', 'ex', 'eq', 1, { id: 'last' }),
+      setRow('open', 'ex', 'eq', 0, { id: 'first' }), setRow('open', 'ex', 'eq', 1, { id: 'last', setKind: undefined }),
       setRow('open', 'ex', 'eq', 2, { id: 'warm', setKind: 'warmup' }), setRow('open', 'ex', 'other', 3, { id: 'other' }),
+      setRow('open', 'ex', 'eq', 3, { id: 'zero', reps: 0 }),
     ]);
     await undoLastSet(db, 'open', 'ex', 'eq');
-    expect((await db.sets.toArray()).map((s) => s.id)).toEqual(['first', 'other', 'warm']);
+    expect((await db.sets.toArray()).map((s) => s.id)).toEqual(['first', 'other', 'warm', 'zero']);
   });
 
-  it('logs the next set idempotently and refuses writes after discard', async () => {
+  it('replaces a zero-rep working row when logging its set', async () => {
     const db = open();
     await db.sessions.put(session('open', NOW));
-    const options = { logOnly: true } as const;
+    await db.sets.put(setRow('open', 'ex', 'eq', 0, { reps: 0, setKind: undefined }));
     const row = setRow('open', 'ex', 'eq', 0);
-    expect(await toggleWorkingSet(db, row, options)).toBe('logged');
-    expect(await toggleWorkingSet(db, { ...row, id: 'duplicate' }, options)).toBe('unchanged');
+    expect(await logWorkingSet(db, row)).toBe('logged');
+    expect(await db.sets.toArray()).toEqual([row]);
+  });
+
+  it('logs the next set idempotently and refuses writes after finish or discard', async () => {
+    const db = open();
+    await db.sessions.put(session('open', NOW));
+    const row = setRow('open', 'ex', 'eq', 0);
+    expect(await Promise.all([logWorkingSet(db, row), logWorkingSet(db, { ...row, id: 'duplicate' })]))
+      .toEqual(['logged', 'unchanged']);
+    await db.sessions.put({ ...session('finished', NOW), endedAt: NOW.toISOString() });
+    expect(await logWorkingSet(db, setRow('finished', 'ex', 'eq', 0))).toBe('unchanged');
     expect(await db.sets.toArray()).toEqual([row]);
     await discardLiftSession(db, 'open');
-    expect(await toggleWorkingSet(db, row, options)).toBe('unchanged');
+    expect(await logWorkingSet(db, row)).toBe('unchanged');
     expect(await db.sets.count()).toBe(0);
   });
 

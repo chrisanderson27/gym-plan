@@ -41,5 +41,8 @@ export interface Prescription {
   reason: string;
 }
 
+export const isWorkingKind = (s: { setKind?: string }): boolean =>
+  s.setKind === undefined || s.setKind === 'working';
+
 export const isWorking = (s: { setKind?: string; reps: number }): boolean =>
-  (s.setKind === undefined || s.setKind === 'working') && s.reps > 0;
+  isWorkingKind(s) && s.reps > 0;

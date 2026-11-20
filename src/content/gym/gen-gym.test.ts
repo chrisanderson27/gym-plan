@@ -7,25 +7,16 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { buildProfile, renderModule } from '../../../scripts/gen-gym.mjs';
+import { expectPublicGymKeys } from './expectPublicGymKeys';
 
 const fixturePath = fileURLToPath(new URL('../../../scripts/fixtures/gym-fixture.yaml', import.meta.url));
 const fixtureKey = 'ab'.repeat(32);
 const fixture = () => ({ ...parse(readFileSync(fixturePath, 'utf8')), idKey: fixtureKey });
-const keys = (value: object) => Object.keys(value).sort();
 
 describe('gym catalog generator', () => {
   it('emits only allowlisted fields and renders deterministically', () => {
     const { profile } = buildProfile(fixture());
-    expect(keys(profile)).toEqual(['id', 'items', 'pods', 'zones']);
-    for (const zone of profile.zones) {
-      expect(keys(zone)).toEqual(zone.label ? ['floor', 'id', 'label', 'neighbours'] : ['floor', 'id', 'neighbours']);
-    }
-    for (const pod of profile.pods) expect(keys(pod)).toEqual(['id', 'items', 'zone']);
-    for (const item of profile.items) {
-      const allowed = ['confidence', 'count', 'exercises', 'floor', 'id', 'type', 'verified', 'zone'];
-      if (item.pending) allowed.push('pending');
-      expect(keys(item)).toEqual(allowed.sort());
-    }
+    expectPublicGymKeys(profile);
     const rendered = renderModule(profile);
     expect(rendered).toBe(renderModule(buildProfile(fixture()).profile));
     expect(rendered).not.toMatch(/Fixture|Acme|Fake|fixture-photo|2026-01-01|count_claims|weight_range_lb|walk_note/);

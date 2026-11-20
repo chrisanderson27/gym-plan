@@ -46,6 +46,18 @@ export interface LiftDayPlan {
 type Choice = { option: Option; ex: BlockExerciseShape; group: ReturnType<typeof groupOf>; kit: ReturnType<typeof kitOf> };
 const minutesFor = (shape: readonly number[]) => shape.reduce((total, minutes) => total + minutes + BLOCK_TRANSITION_MIN, 0);
 
+export function estimateLiftDayMinutes(
+  blocks: readonly Block[], exercises: ReadonlyMap<string, Pick<BlockExerciseShape, 'repClass'>>,
+): number {
+  return blocks.reduce((minutes, block) => {
+    if (block.kind === 'circuit') return minutes + block.durationSec / 60 + BLOCK_TRANSITION_MIN;
+    if (block.kind === 'lift' && !block.warmup) {
+      return minutes + block.sets * MIN_PER_SET[exercises.get(block.exerciseId)?.repClass ?? 'other'];
+    }
+    return minutes;
+  }, WARMUP_MIN + COOLDOWN_MIN);
+}
+
 function chooseStations(
   pool: Choice[], size: number, finisher: boolean, rand: () => number,
 ): Choice[] {
@@ -193,13 +205,12 @@ export function generateLiftDay(input: LiftDayInput): LiftDayPlan {
     const warmId = warm?.ex.id ?? '';
     const easyMovement = warm ? `Easy ${warm.ex.id.replaceAll('-', ' ')}` : 'Easy walking in place';
     blocks.push({
-      id: '', kind: 'lift', exerciseId: warmId, sets: 1, repMin: 0, repMax: 0, warmup: true,
+      id: '', kind: 'lift', exerciseId: warmId, sets: 1, repMin: 0, repMax: 0, warmup: true, role: 'warmup',
       label: `Warm-up · ${WARMUP_MIN} min`,
       notes: `${easyMovement} for 3–5 min, then hip airplane, world's greatest stretch, glute bridge, cat-cow, ankle rocks`,
     });
 
     let main: Prescription = { mode: 'hold', weight: 0, reps: 0, sets: 0, rirTarget: 0, reason: 'No available main lift' };
-    let mainMin = 0;
     const dropped: string[] = [];
     if (mainId) {
       const ex = exercises.get(mainId)!;
@@ -212,7 +223,6 @@ export function generateLiftDay(input: LiftDayInput): LiftDayPlan {
         const { min, max, reducedMin } = LIFT_DAY_MAIN_SETS;
         main.sets = Math.min(max, Math.max(deload || rampIn ? reducedMin : min, main.sets));
       }
-      mainMin = main.sets * MIN_PER_SET[ex.repClass];
       blocks.push({
         id: '', kind: 'lift', exerciseId: mainId, equipmentId, sets: main.sets,
         repMin: ex.repMin, repMax: ex.repMax, targetWeight: main.weight, rirTarget: main.rirTarget,
@@ -222,18 +232,18 @@ export function generateLiftDay(input: LiftDayInput): LiftDayPlan {
       dropped.push('main');
     }
 
-    const baseMin = WARMUP_MIN + mainMin + COOLDOWN_MIN;
+    const baseMin = estimateLiftDayMinutes(blocks, exercises);
     const lastShape = LIFT_DAY_SHAPES[LIFT_DAY_SHAPES.length - 1]!;
     const shape = LIFT_DAY_SHAPES.find((shape) => baseMin + minutesFor(shape) <= budgetMin) ?? lastShape;
     const { circuits, dropped: missedBlocks } = mainId
       ? buildCircuits(input, choices, shape, mainId, jfOnly, ctx, weekIdx)
       : { circuits: [], dropped: [] };
     blocks.push(...circuits, {
-      id: '', kind: 'lift', exerciseId: warmId, sets: 1, repMin: 0, repMax: 0, warmup: true,
+      id: '', kind: 'lift', exerciseId: warmId, sets: 1, repMin: 0, repMax: 0, warmup: true, role: 'cooldown',
       label: `Cool-down · ${COOLDOWN_MIN} min`,
       notes: `${easyMovement}, then stretch hips, hamstrings and chest`,
     });
-    const estMin = baseMin + circuits.reduce((min, block) => min + block.durationSec / 60 + BLOCK_TRANSITION_MIN, 0);
+    const estMin = estimateLiftDayMinutes(blocks, exercises);
     return { variant, floor, deload, rampIn, weekIdx, blocks, main, estMin, dropped: [...dropped, ...missedBlocks] };
   }
 

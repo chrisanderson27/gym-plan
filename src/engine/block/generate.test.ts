@@ -93,8 +93,8 @@ it('uses a no-equipment warm-up and cool-down when the floor has no allowed card
   const warmup = plan.blocks.filter((block) => block.kind === 'lift' && block.warmup);
   expect(warmup).toHaveLength(2);
   expect(warmup).toEqual([
-    expect.objectContaining({ exerciseId: '', notes: expect.stringMatching(/walking in place/i) }),
-    expect.objectContaining({ exerciseId: '', notes: expect.stringMatching(/walking in place/i) }),
+    expect.objectContaining({ exerciseId: '', role: 'warmup', notes: expect.stringMatching(/walking in place/i) }),
+    expect.objectContaining({ exerciseId: '', role: 'cooldown', notes: expect.stringMatching(/walking in place/i) }),
   ]);
 });
 

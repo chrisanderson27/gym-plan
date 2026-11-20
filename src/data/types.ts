@@ -93,6 +93,7 @@ export interface LiftBlock extends BlockBase {
   rirTarget?: number;
   supersetGroup?: string;
   warmup?: boolean;
+  role?: 'warmup' | 'cooldown';
 }
 export interface SwimItem {
   reps: number;
