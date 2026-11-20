@@ -1,55 +1,136 @@
-import type { IntervalBlock, ISODateTime, TimedPhase } from '../data/types';
+import type { Block, CircuitBlock, Equipment, ISODateTime, LiftBlock, StationUnit } from '../data/types';
+import { pickBackup, primaryPod, workingWeightsOf, type Choice } from './block/generate';
+import { prescribeBlock, slotKeyOf, type Draft } from './block/progression';
+import { groupOf, kitOf, NO_BLOCK_IDS, type BlockExerciseShape } from './block/rules';
+import { blockContext, validateBlock } from './block/validate';
+import { BLOCK_TRANSITION_MIN, BURN_BUDGET_SLACK_MIN, BURN_COOLDOWN_MIN, BURN_WARMUP_MIN } from './config';
+import { availableOn, defaultBurnPods, zoneOf } from './gym/availability';
+import type { GymItemShape, GymProfileShape } from './gym/types';
+import type { HistorySession } from './lift/types';
 
+export interface BurnStationSpec { exerciseId: string; unit?: StationUnit }
+export interface BurnBlockSpec { label: string; minutes: number; role: CircuitBlock['role']; stations: BurnStationSpec[] }
+export interface BurnTemplateShape { id: string; blocks: BurnBlockSpec[] }
 export interface BurnInput {
-  blocks: IntervalBlock[];
+  template: BurnTemplateShape;
   budgetMin: number;
-  excluded: ReadonlySet<string>;
-  substitutesOf: Readonly<Record<string, string[]>>;
-  labelOf: Readonly<Record<string, string>>;
-  /** Injected: the engine cannot import data/ids. */
-  makeId: () => string;
+  weekIdx: number;
+  profile: GymProfileShape;
+  exercises: Map<string, BlockExerciseShape>;
+  bodyweightIds: readonly string[];
+  notAtMyGym: ReadonlySet<string>;
+  history: HistorySession[];
+  equipment: Map<string, Equipment>;
+  resolveEquipmentId(exerciseId: string, item: GymItemShape | undefined, weekIdx: number): string;
+  makeId(): string;
+  /** Pods the stations may use. Defaults to the turf. */
+  pods?: readonly string[];
 }
 export interface BurnResult {
-  blocks: IntervalBlock[];
+  blocks: Block[];
   totalMin: number;
   swaps: { from: string; to: string }[];
+  dropped: string[];
 }
 
-const phaseSec = (b: IntervalBlock) => b.phases.reduce((n, p) => n + p.sec, 0);
-const blockSec = (b: IntervalBlock) => b.rounds * phaseSec(b);
-const totalSec = (bs: IntervalBlock[]) => bs.reduce((n, b) => n + blockSec(b), 0);
-const isFixed = (b: IntervalBlock) => b.phases.every((p) => p.role === 'warmup' || p.role === 'cooldown');
+function burnMinutes(minutes: number[]): number {
+  return Math.round(minutes.reduce((total, time) => total + time + BLOCK_TRANSITION_MIN, BURN_WARMUP_MIN + BURN_COOLDOWN_MIN));
+}
 
-/** Budget → exclusions → fresh ids. A template that cannot shrink enough sheds its last blocks. */
-export function generateBurn({ blocks, budgetMin, excluded, substitutesOf, labelOf, makeId }: BurnInput): BurnResult {
-  const budgetSec = budgetMin * 60;
-  const fixed = blocks.filter(isFixed).reduce((n, b) => n + blockSec(b), 0);
-  const main = blocks.filter((b) => !isFixed(b)).reduce((n, b) => n + blockSec(b), 0);
-  const factor = main > 0 ? Math.max(0, budgetSec - fixed) / main : 1;
+export function estimateBurnMinutes(blocks: readonly Block[]): number {
+  return burnMinutes(blocks.flatMap((block) => block.kind === 'circuit' ? [block.durationSec / 60] : []));
+}
 
-  const swaps: { from: string; to: string }[] = [];
-  let out: IntervalBlock[] = blocks.map((b) => {
-    const rounds = isFixed(b) ? b.rounds : Math.max(1, Math.round(b.rounds * factor));
-    const phases = b.phases.map((p): TimedPhase => {
-      if (!p.exerciseId || !excluded.has(p.exerciseId)) return { ...p };
-      const to = (substitutesOf[p.exerciseId] ?? []).find((s) => !excluded.has(s));
-      if (!to) {
-        const { exerciseId: _drop, ...rest } = p;
-        void _drop;
-        return { ...rest, label: 'Choice: bodyweight' };
-      }
-      if (!swaps.some((s) => s.from === p.exerciseId && s.to === to)) swaps.push({ from: p.exerciseId, to });
-      return { ...p, exerciseId: to, label: labelOf[to] ?? to };
-    });
-    return { ...b, id: makeId(), rounds, phases };
+export function generateBurn(input: BurnInput): BurnResult {
+  const { template, budgetMin, profile, exercises, bodyweightIds, notAtMyGym, history, equipment, weekIdx, resolveEquipmentId, makeId } = input;
+  const specs = [...template.blocks];
+  const overBudget = () => burnMinutes(specs.map((spec) => spec.minutes)) > budgetMin + BURN_BUDGET_SLACK_MIN;
+  while (overBudget() && specs.filter((spec) => spec.role !== 'finisher').length > 1) {
+    specs.splice(specs.map((spec) => spec.role !== 'finisher').lastIndexOf(true), 1);
+  }
+  while (overBudget()) {
+    const i = specs.map((spec) => spec.minutes).lastIndexOf(12);
+    if (i < 0) break;
+    specs[i] = { ...specs[i]!, minutes: 8 };
+  }
+
+  const pods = input.pods ?? defaultBurnPods(profile);
+  const zone = zoneOf(profile, pods[0] ?? '');
+  const floor = profile.zones.find((entry) => entry.id === zone)?.floor;
+  const pool = floor === undefined ? [] : availableOn(profile, floor, { notAtMyGym, bodyweightIds }).flatMap((option): Choice[] => {
+    const ex = exercises.get(option.exerciseId);
+    return ex && pods.includes(option.podId) && !NO_BLOCK_IDS.includes(ex.id)
+      ? [{ option, ex, group: groupOf(ex), kit: kitOf(ex) }] : [];
+  });
+  const ctx = blockContext(profile, exercises);
+  const workingWeights = workingWeightsOf(history);
+  const draftOf = ({ ex, option }: Choice, unit?: StationUnit) => ({
+    exercise: ex, itemId: option.itemId, unit,
+    equipmentId: resolveEquipmentId(ex.id, option.itemId === undefined ? undefined : ctx.item(option.itemId), weekIdx),
   });
 
-  // Blocks already at one round: shed trailing non-fixed blocks until near the budget (keep ≥ 1).
-  while (totalSec(out) > budgetSec + 120 && out.filter((b) => !isFixed(b)).length > 1) {
-    const idx = out.map((b) => !isFixed(b)).lastIndexOf(true);
-    out = out.filter((_, i) => i !== idx);
+  const swaps: BurnResult['swaps'] = [];
+  const dropped: string[] = [];
+  const circuits: CircuitBlock[] = [];
+  for (const { label, minutes, role, stations } of specs) {
+    const choices: Choice[] = [];
+    const drafts: Draft[] = [];
+    for (const { exerciseId, unit } of stations) {
+      const ex = exercises.get(exerciseId);
+      const group = ex && groupOf(ex);
+      const candidates = new Set([exerciseId, ...(ex?.substitutes ?? []), ...pool.filter((c) => c.group === group).map((c) => c.ex.id)]);
+      let match: { choice: Choice; backup?: Choice } | undefined;
+      for (const id of candidates) {
+        if (choices.some((c) => c.ex.id === id)) continue;
+        for (const choice of pool) {
+          if (choice.ex.id !== id || !choice.option.anchorOk) continue;
+          const backup = pickBackup(choice, pool);
+          if (choice.option.count === 1 && !backup) continue;
+          match = { choice, backup };
+          break;
+        }
+        if (match) break;
+      }
+      if (!match) {
+        dropped.push(`station:${exerciseId}`);
+        continue;
+      }
+      const { choice, backup } = match;
+      choices.push(choice);
+      drafts.push({ ...draftOf(choice, unit), ...(backup && { backup: draftOf(backup, unit) }) });
+      if (choice.ex.id !== exerciseId && !swaps.some(({ from, to }) => from === exerciseId && to === choice.ex.id)) {
+        swaps.push({ from: exerciseId, to: choice.ex.id });
+      }
+    }
+    if (drafts.length < 3) {
+      dropped.push(`block:${label}`);
+      continue;
+    }
+    const durationSec = minutes * 60;
+    const prescription = prescribeBlock({
+      slotKey: slotKeyOf({ type: 'burn', templateId: template.id }, label), stations: drafts, durationSec, role,
+      history, equipment, workingWeightOf: (id, equipmentId) => workingWeights.get(id)?.get(equipmentId),
+    });
+    const block: CircuitBlock = { id: '', kind: 'circuit', role, label, durationSec, podId: primaryPod(choices), ...prescription };
+    if (validateBlock(block, ctx, 'burn').length) dropped.push(`block:${label}`);
+    else circuits.push(block);
   }
-  return { blocks: out, totalMin: Math.round(totalSec(out) / 60), swaps };
+
+  const firstCardio = circuits.flatMap((block) => block.stations).find(({ exerciseId }) => {
+    const ex = exercises.get(exerciseId);
+    return ex && kitOf(ex) === 'cardio';
+  });
+  const machine = firstCardio?.itemId ? ctx.item(firstCardio.itemId)?.type : undefined;
+  const movement = firstCardio
+    ? `Easy ${(machine ?? firstCardio.exerciseId).replaceAll('-', ' ')}`
+    : 'Easy walking in place';
+  const note: LiftBlock = { id: '', kind: 'lift', warmup: true, exerciseId: firstCardio?.exerciseId ?? '', sets: 1, repMin: 0, repMax: 0 };
+  const blocks: Block[] = [
+    { ...note, role: 'warmup', label: `Warm-up · ${BURN_WARMUP_MIN} min`, notes: `${movement} for 3 min, then leg swings, inchworms, hip openers` },
+    ...circuits,
+    { ...note, role: 'cooldown', label: `Cool-down · ${BURN_COOLDOWN_MIN} min`, notes: 'Walk, then stretch hips, hamstrings and chest' },
+  ];
+  return { blocks: blocks.map((block) => ({ ...block, id: makeId() })), totalMin: estimateBurnMinutes(blocks), swaps, dropped };
 }
 
 /** Least recently done template; ties go to list order, never-done first. */

@@ -9,7 +9,7 @@ import type { GymItemShape, GymProfileShape } from '../gym/types';
 import { deloadState } from '../lift/deload';
 import { pickSubstitute } from '../lift/generator';
 import { isLowerBarbell, prescribe } from '../lift/progression';
-import { isWorking, type LiftSnapshot, type Prescription } from '../lift/types';
+import { isWorking, type HistorySession, type LiftSnapshot, type Prescription } from '../lift/types';
 import { isRampInWeek, weekIndex } from '../week';
 import { prescribeBlock, type Draft } from './progression';
 import { mulberry32, shuffle } from './rng';
@@ -43,7 +43,7 @@ export interface LiftDayPlan {
   dropped: string[];
 }
 
-type Choice = { option: Option; ex: BlockExerciseShape; group: ReturnType<typeof groupOf>; kit: ReturnType<typeof kitOf> };
+export type Choice = { option: Option; ex: BlockExerciseShape; group: ReturnType<typeof groupOf>; kit: ReturnType<typeof kitOf> };
 const minutesFor = (shape: readonly number[]) => shape.reduce((total, minutes) => total + minutes + BLOCK_TRANSITION_MIN, 0);
 
 export function estimateLiftDayMinutes(
@@ -85,10 +85,32 @@ function chooseStations(
   return picked;
 }
 
-function primaryPod(choices: Choice[]): string {
+export function primaryPod(choices: Choice[]): string {
   const counts = new Map<string, number>();
   for (const { option } of choices) counts.set(option.podId, (counts.get(option.podId) ?? 0) + 1);
   return [...counts].sort((a, b) => b[1] - a[1])[0]![0];
+}
+
+export function workingWeightsOf(history: HistorySession[]): Map<string, Map<string, number>> {
+  const workingWeights = new Map<string, Map<string, number>>();
+  for (const { session, sets } of history) {
+    if (session.flags?.deload) continue;
+    for (const set of sets) {
+      if (!isWorking(set)) continue;
+      let weights = workingWeights.get(set.exerciseId);
+      if (!weights) workingWeights.set(set.exerciseId, weights = new Map());
+      weights.set(set.equipmentId, set.weight);
+    }
+  }
+  return workingWeights;
+}
+
+export function pickBackup<T extends { option: Option; ex: BlockExerciseShape; group: string }>(choice: T, pool: T[]): T | undefined {
+  const swaps = pool.filter((other) => other.option.podId === choice.option.podId
+    && other.ex.id !== choice.ex.id && other.group === choice.group
+    && (choice.option.count !== 1 || other.option.itemId !== choice.option.itemId));
+  return swaps.find((other) => other.option.anchorOk && choice.ex.substitutes.includes(other.ex.id))
+    ?? swaps.find((other) => other.option.anchorOk) ?? swaps[0];
 }
 
 function buildCircuits(
@@ -108,16 +130,7 @@ function buildCircuits(
     exercise: ex, itemId: option.itemId,
     equipmentId: resolveEquipmentId(ex.id, option.itemId === undefined ? undefined : ctx.item(option.itemId), weekIdx),
   });
-  const workingWeights = new Map<string, Map<string, number>>();
-  for (const { session, sets } of snapshot.history) {
-    if (session.flags?.deload) continue;
-    for (const set of sets) {
-      if (!isWorking(set)) continue;
-      let weights = workingWeights.get(set.exerciseId);
-      if (!weights) workingWeights.set(set.exerciseId, weights = new Map());
-      weights.set(set.equipmentId, set.weight);
-    }
-  }
+  const workingWeights = workingWeightsOf(snapshot.history);
 
   for (const [index, minutes] of shape.entries()) {
     const role = minutes === FINISHER_MIN ? 'finisher' : 'block';
@@ -132,11 +145,7 @@ function buildCircuits(
       const pool = allowed.filter((choice) => choice.option.zone === zone && !used.has(choice.ex.id));
       const backups = new Map<Choice, Choice>();
       for (const choice of pool) {
-        const swaps = pool.filter((other) => other.option.podId === choice.option.podId
-          && other.ex.id !== choice.ex.id && other.group === choice.group
-          && (choice.option.count !== 1 || other.option.itemId !== choice.option.itemId));
-        const backup = swaps.find((other) => other.option.anchorOk && choice.ex.substitutes.includes(other.ex.id))
-          ?? swaps.find((other) => other.option.anchorOk) ?? swaps[0];
+        const backup = pickBackup(choice, pool);
         if (backup) backups.set(choice, backup);
       }
       const primaries = pool.filter((choice) => choice.option.anchorOk && (choice.option.count !== 1 || backups.has(choice)));

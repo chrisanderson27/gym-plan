@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import type { CircuitBlock, Equipment } from '../../data/types';
 import type { HistorySession } from '../lift/types';
-import { prescribeBlock } from './progression';
+import { prescribeBlock, slotKeyOf } from './progression';
 import type { BlockExerciseShape } from './rules';
 
 const eq: Equipment = { id: 'bells', name: 'Bells', kind: 'kb', steps: [10, 15, 20, 25, 30, 35, 40, 45, 50] };
@@ -86,4 +86,18 @@ it('excludes logs from another variant, slot or station set', () => {
   const otherStations = previous(3, 12);
   (otherStations.session.blocks[0] as CircuitBlock).log!.stations[0]!.exerciseId = 'another-squat';
   expect(make([otherVariant, otherSlot, otherStations])).toEqual(make());
+});
+
+it('keeps progression in the Burn template slot and uses a supported target unit', () => {
+  const a = previous(3, 4);
+  a.session = { ...a.session, type: 'burn', templateId: 'a' };
+  const b = previous(4, 2);
+  b.session = { ...b.session, type: 'burn', templateId: 'b' };
+  const recipe = (history: HistorySession[]) => prescribeBlock({
+    slotKey: slotKeyOf(a.session, 'Block A'), stations: [drafts[0]!, drafts[1]!, { ...drafts[2]!, unit: 'm' }],
+    durationSec: 480, role: 'block', history, equipment: new Map([[eq.id, eq]]), workingWeightOf: () => 45,
+  });
+  (a.session.blocks[0] as CircuitBlock).log!.stations[0]!.actualLoad = 40;
+  expect(recipe([b])).toEqual(recipe([]));
+  expect(recipe([a, b])).toMatchObject({ targetRounds: 3, stations: [{ load: 45 }, {}, { target: { unit: 'm' } }] });
 });

@@ -133,6 +133,10 @@ describe('stylesheet contracts', () => {
   it('timer focus ring uses --timer-focus', () => {
     expect(styles).toMatch(/\.timer > button:focus-visible[^{]*\{\s*outline-color:\s*var\(--timer-focus\)/);
   });
+  it('swim plan drill cues use the on-colour token with specificity over the neutral cue style', () => {
+    expect(styles).toMatch(/\.plan-card \.swim-card \.swim-cue\s*\{[^}]*\bcolor:\s*var\(--activity-text\)/);
+    expect(styles).toMatch(/\[data-activity='swim'\]\s*\{[^}]*--activity-text:\s*var\(--on-act-swim\)/);
+  });
   it('selected chips are tinted, never solid action blue', () => {
     expect(styles).toMatch(/\.chip\.on\s*\{[^}]*var\(--chip-on-bg\)/);
     expect(css).toMatch(/--chip-on-bg:\s*var\(--color-selected-bg\)/);

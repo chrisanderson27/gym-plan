@@ -32,6 +32,20 @@ function equipmentTagFor(itemType: string, tags: EquipmentTag[]): EquipmentTag |
   return undefined;
 }
 
+export function blockEquipmentResolver(snapshot: LiftSnapshot): LiftDayInput['resolveEquipmentId'] {
+  return (id, item, weekIdx) => {
+    const exercise = exerciseById.get(id)!;
+    const resolved = resolveEquipmentId(snapshot, exercise, weekIdx);
+    const tag = item && equipmentTagFor(item.type, exercise.equipment);
+    if (!tag) return resolved;
+    const seedId = defaultEquipmentFor(tag);
+    const seed = snapshot.equipment.get(seedId);
+    const preferred = snapshot.equipment.get(resolved);
+    // Earlier sessions may use the same movement on another kind of kit.
+    return preferred && preferred.kind === seed?.kind && (!preferred.builtin || preferred.id === seedId) ? resolved : seedId;
+  };
+}
+
 export function liftDayInputFrom(
   snapshot: LiftSnapshot, variant: LiftVariant, budgetMin: number, seed: number, profile: GymProfile = HOME_GYM,
 ): LiftDayInput {
@@ -39,17 +53,7 @@ export function liftDayInputFrom(
   return {
     snapshot, variant, budgetMin, seed, profile, exercises: BLOCK_EXERCISES, bodyweightIds: BODYWEIGHT_IDS,
     mainCandidates: LIFT_TEMPLATES[variant].slots[0]!.candidates,
-    resolveEquipmentId: (id, item, weekIdx) => {
-      const exercise = exerciseById.get(id)!;
-      const resolved = resolveEquipmentId(snapshot, exercise, weekIdx);
-      const tag = item && equipmentTagFor(item.type, exercise.equipment);
-      if (!tag) return resolved;
-      const seedId = defaultEquipmentFor(tag);
-      const seed = snapshot.equipment.get(seedId);
-      const preferred = snapshot.equipment.get(resolved);
-      // Earlier sessions may use the same movement on another kind of kit.
-      return preferred && preferred.kind === seed?.kind && (!preferred.builtin || preferred.id === seedId) ? resolved : seedId;
-    },
+    resolveEquipmentId: blockEquipmentResolver(snapshot),
     makeId: () => `b${id++}`,
   };
 }

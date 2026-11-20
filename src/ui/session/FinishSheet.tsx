@@ -18,8 +18,11 @@ function ringFor({ sessions, today, programStart, activities }: Awaited<ReturnTy
   return weekRing(sessions, programWeekRange(today, programStart), activities);
 }
 
-export function FinishSheet({ sessionId, onClose, onDone }: {
+export function FinishSheet({
+  sessionId, onClose, onDone, finish = (rpe, now) => finishLiftSession(db, sessionId, rpe, now),
+}: {
   sessionId: string;
+  finish?: (rpe: number, now: Date) => Promise<void>;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -35,7 +38,7 @@ export function FinishSheet({ sessionId, onClose, onDone }: {
     return () => clearTimeout(id);
   }, [result]);
 
-  const finish = async (rating: Rating) => {
+  const saveRating = async (rating: Rating) => {
     if (saving.current) return;
     saving.current = true;
     setBusy(true);
@@ -43,7 +46,7 @@ export function FinishSheet({ sessionId, onClose, onDone }: {
     const now = new Date();
     try {
       const before = ringFor(await loadRingInput(db, now));
-      await finishLiftSession(db, sessionId, FINISH_RPE[rating], now);
+      await finish(FINISH_RPE[rating], now);
       const after = ringFor(await loadRingInput(db, now));
       setResult({ before, after });
     } catch {
@@ -64,7 +67,7 @@ export function FinishSheet({ sessionId, onClose, onDone }: {
       ) : (
         <div class="session-actions">
           {(Object.keys(RATINGS) as Rating[]).map((rating) => (
-            <button key={rating} type="button" class="btn" data-testid={`finish-${rating}`} disabled={busy} onClick={() => finish(rating)}>
+            <button key={rating} type="button" class="btn" data-testid={`finish-${rating}`} disabled={busy} onClick={() => saveRating(rating)}>
               {RATINGS[rating]}
             </button>
           ))}

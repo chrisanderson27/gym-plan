@@ -150,13 +150,13 @@ test('Progress opens all five destinations', async ({ page }) => {
 test('run links select long and intervals directly and after an in-app route change', async ({ page }) => {
   await onboard(page);
   await page.goto('./#/run/long');
-  await expect(page.getByTestId('run-kind-long')).toHaveClass(/\bon\b/);
+  await expect(page.getByTestId('run-kind')).toContainText('Long');
   await page.goto('./#/run/intervals');
-  await expect(page.getByTestId('run-kind-intervals')).toHaveClass(/\bon\b/);
+  await expect(page.getByTestId('run-kind')).toContainText('Intervals');
   await page.goto('./#/run');
-  await expect(page.getByTestId('run-kind-easy')).toHaveClass(/\bon\b/);
+  await expect(page.getByTestId('run-kind')).toContainText('Easy');
   await page.evaluate(() => { location.hash = '#/run/long'; });
-  await expect(page.getByTestId('run-kind-long')).toHaveClass(/\bon\b/);
+  await expect(page.getByTestId('run-kind')).toContainText('Long');
   await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
 });
 

@@ -11,9 +11,13 @@ export interface SwimLogValues {
   css?: CssInput;
 }
 
-export function SwimLog({ defaultDistance, onSave }: { defaultDistance: number; onSave: (v: SwimLogValues) => Promise<void> }) {
+export function SwimLog({ defaultDistance, defaultMinutes = 45, onSave }: {
+  defaultDistance: number;
+  defaultMinutes?: number;
+  onSave: (v: SwimLogValues) => Promise<void>;
+}) {
   const [distance, setDistance] = useState(String(defaultDistance));
-  const [minutes, setMinutes] = useState('45');
+  const [minutes, setMinutes] = useState(String(defaultMinutes));
   const [rpe, setRpe] = useState<number | null>(null);
   const [pain, setPain] = useState(false);
   const [didTest, setDidTest] = useState(false);

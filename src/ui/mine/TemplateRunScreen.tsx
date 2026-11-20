@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'preact/hooks';
+import { BURN_TEMPLATES } from '../../content/burn-templates';
 import { RUN_FORMATS } from '../../content/run-formats';
 import { burnInputs, loadCardioSnapshot, saveBurn, saveRun, saveSwim, type CardioSnapshot } from '../../data/cardio';
 import { db } from '../../data/db';
@@ -13,6 +14,7 @@ import { runToIntervals } from '../../engine/run/to-timer';
 import { latestCss } from '../../engine/swim/css';
 import { generateSwim } from '../../engine/swim/generator';
 import { weekIndex } from '../../engine/week';
+import { BurnScreen } from '../cardio/BurnScreen';
 import { RpeChips } from '../cardio/RpeChips';
 import { RunLog } from '../cardio/RunLog';
 import { SwimCard } from '../cardio/SwimCard';
@@ -41,6 +43,9 @@ export function TemplateRunScreen(src: { templateId: string } | { sessionId: str
     );
   }
   const first = run.blocks.find((b) => b.kind !== 'lift' || !b.warmup);
+  if (run.type === 'burn' && run.blocks.some((b) => b.kind === 'circuit')) {
+    return <BurnScreen templateId={BURN_TEMPLATES.some((t) => t.id === run.templateId) ? run.templateId : undefined} />;
+  }
   if (run.blocks.some((b) => b.kind === 'lift')) return <LiftAgain run={run} />;
   if (first?.kind === 'interval') return <BurnAgain run={run} snap={snap} />;
   if (first?.kind === 'run') return <RunAgain run={run} block={first} snap={snap} />;

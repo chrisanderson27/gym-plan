@@ -1,56 +1,117 @@
 import { describe, expect, it } from 'vitest';
 import { BURN_TEMPLATES } from '../content/burn-templates';
-import { generateBurn, nextBurnTemplate } from './burn';
+import { HOME_GYM } from '../content/gym/home-gym';
+import { SEED_EQUIPMENT } from '../content';
+import { burnInputFrom } from '../data/burn';
+import { BLOCK_EXERCISES } from '../data/liftday';
+import type { CircuitBlock } from '../data/types';
+import { mulberry32 } from './block/rng';
+import { countsAsCardio, groupOf, kitOf } from './block/rules';
+import { blockContext, validateBlock } from './block/validate';
+import { generateBurn, nextBurnTemplate, type BurnResult } from './burn';
+import { BURN_BUDGETS_MIN } from './config';
+import { defaultBurnPods } from './gym/availability';
+import type { LiftSnapshot } from './lift/types';
 
-let n = 0;
-const base = {
-  excluded: new Set<string>(),
-  substitutesOf: { 'ski-erg': ['rower', 'air-bike'], rower: ['ski-erg', 'air-bike'] } as Record<string, string[]>,
-  labelOf: { rower: 'Rower', 'air-bike': 'Air bike' } as Record<string, string>,
-  makeId: () => `id${n++}`,
+const snapshot: LiftSnapshot = {
+  now: '2026-11-19T12:00:00Z', programStart: '2026-10-22', history: [],
+  overrides: new Map(), equipment: new Map(SEED_EQUIPMENT.map((eq) => [eq.id, eq])),
 };
-const tpl = (id: string) => BURN_TEMPLATES.find((t) => t.id === id)!.blocks;
-const isFixed = (b: { phases: { role: string }[] }) => b.phases.every((p) => p.role === 'warmup' || p.role === 'cooldown');
+const tpl = BURN_TEMPLATES[0]!;
+const ctx = blockContext(HOME_GYM, BLOCK_EXERCISES);
+const circuits = (result: BurnResult) => result.blocks.filter((b): b is CircuitBlock => b.kind === 'circuit');
+const itemIds = (pods: readonly string[]) => new Set(HOME_GYM.pods.filter((pod) => pods.includes(pod.id)).flatMap((pod) => pod.items));
 
 describe('generateBurn', () => {
   it('default 55 lands in 50–60 for every template', () => {
-    for (const t of BURN_TEMPLATES) {
-      const r = generateBurn({ ...base, blocks: t.blocks, budgetMin: 55 });
-      expect(r.totalMin, t.id).toBeGreaterThanOrEqual(50);
-      expect(r.totalMin, t.id).toBeLessThanOrEqual(60);
+    for (const template of BURN_TEMPLATES) {
+      const result = generateBurn(burnInputFrom(snapshot, template, 55));
+      expect(result.totalMin, template.id).toBeGreaterThanOrEqual(50);
+      expect(result.totalMin, template.id).toBeLessThanOrEqual(60);
+      expect(circuits(result).map((b) => b.durationSec / 60)).toEqual(template.blocks.map((b) => b.minutes));
     }
   });
 
-  it('30 min budget shrinks to ≤ 32 and keeps every non-fixed block once', () => {
-    for (const id of ['burn-tread-floor', 'burn-strength-hybrid']) {
-      const src = tpl(id);
-      const r = generateBurn({ ...base, blocks: src, budgetMin: 30 });
-      expect(r.totalMin, id).toBeLessThanOrEqual(32);
-      expect(r.blocks.filter((b) => !isFixed(b)).length).toBe(src.filter((b) => !isFixed(b)).length);
+  it('30 min budget gives ≤32 and keeps the finisher plus at least one other block', () => {
+    for (const template of BURN_TEMPLATES) {
+      const result = generateBurn(burnInputFrom(snapshot, template, 30));
+      expect(result.totalMin, template.id).toBeLessThanOrEqual(32);
+      expect(circuits(result)).toHaveLength(2);
+      expect(circuits(result).at(-1)?.role).toBe('finisher');
     }
-    const circuit = generateBurn({ ...base, blocks: tpl('burn-station-circuit'), budgetMin: 30 });
-    expect(circuit.totalMin).toBeLessThanOrEqual(32); // laps are shed
   });
 
-  it('swaps excluded stations to the first available substitute', () => {
-    const one = generateBurn({ ...base, excluded: new Set(['ski-erg']), blocks: tpl('burn-tread-floor'), budgetMin: 55 });
-    const ski = one.blocks.find((b) => b.label === 'Ski')!;
-    expect(ski.phases[0]?.exerciseId).toBe('rower');
-    expect(ski.phases[0]?.label).toBe('Rower');
-    const two = generateBurn({ ...base, excluded: new Set(['ski-erg', 'rower']), blocks: tpl('burn-tread-floor'), budgetMin: 55 });
-    expect(two.blocks.find((b) => b.label === 'Ski')!.phases[0]?.exerciseId).toBe('air-bike');
+  it('swaps an excluded SkiErg to its first available substitute', () => {
+    const result = generateBurn({ ...burnInputFrom(snapshot, tpl, 55), notAtMyGym: new Set(['ski-erg']) });
+    const ski = circuits(result).find((b) => b.label === 'Block D');
+    expect(ski?.stations[0]?.exerciseId).toBe('rower');
+    expect(result.swaps).toContainEqual({ from: 'ski-erg', to: 'rower' });
   });
 
-  it('with every substitute excluded the station becomes a bodyweight choice', () => {
-    const r = generateBurn({ ...base, excluded: new Set(['ski-erg', 'rower', 'air-bike']), blocks: tpl('burn-tread-floor'), budgetMin: 55 });
-    const p = r.blocks.find((b) => b.label === 'Ski')!.phases[0]!;
-    expect(p.exerciseId).toBeUndefined();
-    expect(p.label).toBe('Choice: bodyweight');
+  it('reports dropped work when every exercise in a station group is excluded', () => {
+    const group = groupOf(BLOCK_EXERCISES.get('ski-erg')!);
+    const excluded = [...BLOCK_EXERCISES.values()].filter((ex) => groupOf(ex) === group).map((ex) => ex.id);
+    const result = generateBurn({ ...burnInputFrom(snapshot, tpl, 55), notAtMyGym: new Set(excluded) });
+    expect(result.dropped).toContain('block:Block D');
+    expect(result.blocks[0]?.kind === 'lift' && result.blocks[0].notes).toContain('Easy walking in place');
+    for (const block of circuits(result)) expect(validateBlock(block, ctx, 'burn')).toEqual([]);
   });
 
   it('gives each block a fresh id', () => {
-    const r = generateBurn({ ...base, blocks: tpl('burn-tread-floor'), budgetMin: 55 });
-    expect(new Set(r.blocks.map((b) => b.id)).size).toBe(r.blocks.length);
+    const input = burnInputFrom(snapshot, tpl, 55);
+    const ids = [...generateBurn(input).blocks, ...generateBurn(input).blocks].map((b) => b.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('generates valid turf circuits with at most two cardio stations across 2,400 exclusion sets', () => {
+    const turf = defaultBurnPods(HOME_GYM);
+    const allowed = itemIds(turf);
+    const ids = [...BLOCK_EXERCISES.keys()];
+    const random = mulberry32(42);
+    for (const template of BURN_TEMPLATES) for (const budget of BURN_BUDGETS_MIN) {
+      const input = burnInputFrom(snapshot, template, budget);
+      for (let seed = 0; seed < 200; seed++) {
+        const excluded = ids.filter(() => random() < 0.2);
+        const result = generateBurn({ ...input, notAtMyGym: new Set(excluded) });
+        for (const block of circuits(result)) {
+          expect(validateBlock(block, ctx, 'burn')).toEqual([]);
+          expect(turf).toContain(block.podId);
+          expect(block.stations.filter(({ exerciseId }) => {
+            const ex = BLOCK_EXERCISES.get(exerciseId)!;
+            return countsAsCardio(groupOf(ex), kitOf(ex));
+          }).length).toBeLessThanOrEqual(2);
+          for (const station of block.stations) for (const id of [station.itemId, station.backup?.itemId]) {
+            if (id !== undefined) expect(allowed.has(id)).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it('draws equipment from the specified non-turf pods', () => {
+    const turf = defaultBurnPods(HOME_GYM);
+    const bells = HOME_GYM.items.filter((item) => item.floor === 2 && item.type.startsWith('dumbbell')).map((item) => item.id);
+    const pods = HOME_GYM.pods.filter((pod) => !turf.includes(pod.id) && pod.items.some((id) => bells.includes(id))).map((pod) => pod.id);
+    const input = burnInputFrom(snapshot, tpl, 55);
+    const result = generateBurn({
+      ...input, pods,
+      template: { id: tpl.id, blocks: [{ label: 'Block A', role: 'block', minutes: 8, stations: [
+        { exerciseId: 'goblet-squat' }, { exerciseId: 'one-arm-db-row' }, { exerciseId: 'db-bench' },
+      ] }] },
+    });
+    expect(circuits(result)).toHaveLength(1);
+    const block = circuits(result)[0]!;
+    expect(pods).toContain(block.podId);
+    const used = block.stations.flatMap((s) => [s.itemId, s.backup?.itemId]).filter((id) => id !== undefined);
+    expect(used.length).toBeGreaterThan(0);
+    for (const id of used) expect(itemIds(pods).has(id)).toBe(true);
+  });
+
+  it('produces warm-up, circuit and cool-down blocks with no intervals', () => {
+    const { blocks } = generateBurn(burnInputFrom(snapshot, tpl, 55));
+    expect(blocks[0]).toMatchObject({ kind: 'lift', warmup: true, role: 'warmup' });
+    expect(blocks.at(-1)).toMatchObject({ kind: 'lift', warmup: true, role: 'cooldown' });
+    expect(blocks.slice(1, -1).every((b) => b.kind === 'circuit')).toBe(true);
   });
 });
 

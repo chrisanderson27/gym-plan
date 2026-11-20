@@ -1,142 +1,104 @@
-import { useMemo, useState } from 'preact/hooks';
+import { useRef, useState } from 'preact/hooks';
 import { BURN_TEMPLATES } from '../../content/burn-templates';
-import { burnInputs, loadCardioSnapshot, saveBurn } from '../../data/cardio';
+import { findStaleOpenBurns, planBurn, startOrResumeBurn } from '../../data/burn';
+import { loadCardioSnapshot } from '../../data/cardio';
 import { db } from '../../data/db';
-import { newId } from '../../data/ids';
+import { findOpenLiftSession } from '../../data/lift';
 import { useLiveQuery } from '../../data/live';
-import type { IntervalBlock } from '../../data/types';
-import { generateBurn, nextBurnTemplate } from '../../engine/burn';
 import { BURN_BUDGETS_MIN, BURN_DEFAULT_MIN } from '../../engine/config';
+import { unlockAudio } from '../../platform/audio';
+import { exerciseName } from '../labels';
 import { MineRow } from '../mine/MineRow';
-import { navigate } from '../router';
 import { MoreMenu } from '../MoreMenu';
+import { navigate } from '../router';
+import { Sheet } from '../Sheet';
 import { dayOf } from './format';
-import { RpeChips } from './RpeChips';
-import { TimerScreen } from './TimerScreen';
 
-type Stage = 'preview' | 'timer' | 'log';
-const { substitutesOf, labelOf } = burnInputs();
-const blockMin = (b: IntervalBlock) => Math.round((b.rounds * b.phases.reduce((n, p) => n + p.sec, 0)) / 60);
+const staleDate = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
-export function BurnScreen() {
-  const snap = useLiveQuery(() => loadCardioSnapshot(db), []);
-  const [picked, setPicked] = useState<string | null>(null);
-  const [budget, setBudget] = useState<number>(BURN_DEFAULT_MIN);
-  const [swaps, setSwaps] = useState<Record<string, string>>({});
-  const [stage, setStage] = useState<Stage>('preview');
-  const [frozen, setFrozen] = useState<IntervalBlock[]>([]);
-  const [result, setResult] = useState<{ blocks: IntervalBlock[]; startedAt: string; early: boolean } | null>(null);
-  const [rpe, setRpe] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  // Cardio holds no session row until Save, so the id is pre-allocated for feedback to link to it.
-  const [sessionId] = useState(newId);
+export function BurnScreen({ templateId }: { templateId?: string }) {
+  const [picked, setPicked] = useState<string>();
+  const [budgetMin, setBudgetMin] = useState<number>(BURN_DEFAULT_MIN);
+  const [changing, setChanging] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const starting = useRef(false);
+  const data = useLiveQuery(async () => {
+    const now = new Date();
+    const [plan, open, stale, snap] = await Promise.all([
+      planBurn(db, { templateId: picked ?? templateId, budgetMin }, now),
+      findOpenLiftSession(db, now, ['burn']),
+      findStaleOpenBurns(db, now),
+      loadCardioSnapshot(db, now),
+    ]);
+    return { plan, open, stale: stale[0], last: snap.lastByType.burn };
+  }, [picked, templateId, budgetMin]);
 
-  const templateId = picked ?? nextBurnTemplate(BURN_TEMPLATES.map((t) => t.id), snap?.lastDone ?? {});
-  const template = BURN_TEMPLATES.find((t) => t.id === templateId) ?? BURN_TEMPLATES[0]!;
-  const excluded = snap?.excluded;
-
-  const plan = useMemo(() => {
-    const gen = generateBurn({ blocks: template.blocks, budgetMin: budget, excluded: excluded ?? new Set(), substitutesOf, labelOf, makeId: newId });
-    // Per-session swaps sit on top of the persistent "not at my gym" exclusions.
-    const blocks = gen.blocks.map((b) => ({
-      ...b,
-      phases: b.phases.map((p) => {
-        const to = p.exerciseId ? swaps[p.exerciseId] : undefined;
-        return to ? { ...p, exerciseId: to, label: labelOf[to] ?? to } : p;
-      }),
-    }));
-    return { ...gen, blocks };
-  }, [template, budget, excluded, swaps]);
-
-  if (!snap) return <main class="screen"><h1>Burn class</h1></main>;
-
-  if (stage === 'timer') {
-    return (
-      <TimerScreen
-        blocks={frozen}
-        feedbackContext={{ sessionId, templateId: template.id }}
-        onExit={() => setStage('preview')}
-        onFinish={(blocks, startedAt, early) => { setResult({ blocks, startedAt, early }); setStage('log'); }}
-      />
-    );
-  }
-
-  if (stage === 'log' && result) {
-    const save = async () => {
-      setSaving(true);
-      try {
-        await saveBurn(db, { templateId: template.id, blocks: result.blocks, rpe, startedAt: result.startedAt, id: sessionId });
-        navigate('/');
-      } finally {
-        setSaving(false);
-      }
-    };
-    return (
-      <main class="screen">
-        <header class="bar">
-          <h1>{result.early ? 'Session ended early' : 'Session complete'}</h1>
-          <MoreMenu feedback={{ kind: 'workout', context: { sessionId, templateId: template.id } }} />
-        </header>
-        <p>How hard was it? (optional)</p>
-        <RpeChips value={rpe} onChange={setRpe} allowSkip />
-        <button type="button" class="primary" data-testid="burn-save" disabled={saving} onClick={save}>Save</button>
-      </main>
-    );
-  }
-
-  // Cycle through the stations a swap can use; the current one is first so "no swap" is a stop.
-  const swapFor = (id: string) => {
-    const options = [id, ...(substitutesOf[id] ?? []).filter((s) => !excluded?.has(s))];
-    const next = options[(options.indexOf(swaps[id] ?? id) + 1) % options.length]!;
-    setSwaps({ ...swaps, [id]: next });
+  if (!data) return <main class="screen"><h1>Burn</h1></main>;
+  const { plan, open, stale, last } = data;
+  const selected = picked ?? plan.template.id;
+  const start = async () => {
+    if (starting.current) return;
+    starting.current = true;
+    setBusy(true);
+    setError(false);
+    unlockAudio();
+    try {
+      const id = open?.id ?? await startOrResumeBurn(db, { templateId: selected, budgetMin });
+      navigate(`/burn/session/${id}`);
+    } catch {
+      setError(true);
+      starting.current = false;
+      setBusy(false);
+    }
   };
-  const last = snap.lastByType.burn;
+  const swap = plan.swaps[0];
 
   return (
     <main class="screen">
       <header class="bar">
-        <h1>Burn class</h1>
+        <h1>Burn</h1>
         <a class="gear" href="#/">Home</a>
-        <MoreMenu feedback={{ kind: 'workout', context: { templateId: template.id } }} />
+        <MoreMenu feedback={{ kind: 'workout', context: { templateId: plan.template.id } }} />
       </header>
-      <div class="chips">
-        {BURN_TEMPLATES.map((t) => (
-          <button key={t.id} type="button" class={t.id === template.id ? 'chip on' : 'chip'} data-testid={`burn-template-${t.id}`} onClick={() => { setPicked(t.id); setSwaps({}); }}>
-            {t.name}
-          </button>
-        ))}
-      </div>
-      <p class="dim">{template.summary}</p>
-      <div class="chips">
-        {BURN_BUDGETS_MIN.map((m) => (
-          <button key={m} type="button" class={m === budget ? 'chip on' : 'chip'} data-testid={`burn-budget-${m}`} onClick={() => setBudget(m)}>{m}</button>
-        ))}
-      </div>
-      <p data-testid="burn-total"><strong>{plan.totalMin} min</strong>{plan.swaps.length > 0 && ` · swapped ${plan.swaps.map((s) => `${labelOf[s.from] ?? s.from} → ${labelOf[s.to] ?? s.to}`).join(', ')}`}</p>
-      <ul class="plan burn-blocks">
-        {plan.blocks.map((b) => {
-          const stations = [...new Set(b.phases.filter((p) => p.exerciseId).map((p) => p.exerciseId!))];
-          return (
-            <li key={b.id} class="burn-row">
-              <span class="row-label">{b.label ?? 'Block'} · {b.rounds}×</span>
-              <span class="row-meta">{blockMin(b)} min</span>
-              {stations.length > 0 && stations.length <= 4 && (
-                <span class="stations">
-                  {stations.map((id) => (
-                    <span key={id} class="station">
-                      <span class="station-name">{labelOf[id] ?? id}</span>
-                      <button type="button" class="iconbtn" aria-label={`Swap ${labelOf[id] ?? id}`} onClick={() => swapFor(id)}>⇄</button>
-                    </span>
-                  ))}
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      <button type="button" class="primary" data-testid="burn-start" onClick={() => { setFrozen(plan.blocks); setStage('timer'); }}>Start</button>
+      <section class="plan-card" data-activity="burn" data-testid="burn-plan">
+        <h2>{plan.template.name}</h2>
+        <p class="num" data-testid="burn-total">{plan.totalMin} min · turf</p>
+        <ul class="plan">
+          {plan.blocks.map((b) => (
+            <li key={b.id}>{b.kind === 'circuit' ? `${b.label} · ${b.durationSec / 60} min · ${b.stations.length} stations` : b.label}</li>
+          ))}
+        </ul>
+        {(swap || plan.dropped.length > 0) && (
+          <p class="dim">{swap ? `Swapped ${exerciseName(swap.from)} → ${exerciseName(swap.to)}` : 'Some planned stations were unavailable.'}</p>
+        )}
+      </section>
+      <button type="button" class="btn change-line" data-testid="burn-change" onClick={() => setChanging(true)}>
+        {plan.template.name} · {plan.totalMin} min · Change
+      </button>
+      <button type="button" class="primary" data-testid="burn-start" disabled={busy} onClick={start}>{open ? 'Resume' : 'Start'}</button>
+      {error && <p class="error" role="alert">Could not start Burn. Try again.</p>}
+      {stale && <a class="btn" data-testid="burn-stale" href={`#/burn/session/${stale.id}`}>Unfinished Burn from {staleDate.format(new Date(stale.date))}</a>}
       <p class="dim">{last ? `Last Burn: ${dayOf(last)}` : 'No Burn yet'}</p>
       <MineRow types={['burn']} />
+      {changing && (
+        <Sheet label="Change Burn" onClose={() => setChanging(false)}>
+          <h2>Change Burn</h2>
+          <div class="chips">
+            {BURN_TEMPLATES.map((t) => (
+              <button key={t.id} type="button" class={t.id === selected ? 'chip on' : 'chip'} aria-pressed={t.id === selected}
+                data-testid={`burn-template-${t.id}`} onClick={() => setPicked(t.id)}>{t.name}</button>
+            ))}
+          </div>
+          <div class="chips">
+            {BURN_BUDGETS_MIN.map((m) => (
+              <button key={m} type="button" class={m === budgetMin ? 'chip on' : 'chip'} aria-pressed={m === budgetMin}
+                data-testid={`burn-budget-${m}`} onClick={() => setBudgetMin(m)}>{m} min</button>
+            ))}
+          </div>
+          <button type="button" class="btn sheet-cancel" onClick={() => setChanging(false)}>Done</button>
+        </Sheet>
+      )}
     </main>
   );
 }

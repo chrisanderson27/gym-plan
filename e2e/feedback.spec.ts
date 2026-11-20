@@ -48,10 +48,11 @@ test('workout feedback from More, cardio entry points, JSONL export, and the pos
   await expect(page.getByRole('status').filter({ hasText: 'Feedback saved' }).first()).toBeVisible();
   await expect(page.getByTestId('more')).toBeFocused();
 
-  // AC2: reachable from Burn (plan and timer), run and swim.
+  // AC2: reachable from Burn (plan and warm-up), run and swim.
   await page.goto('./#/burn');
   await expect(page.getByTestId('more')).toBeVisible();
   await page.getByTestId('burn-start').click();
+  await expect(page.getByTestId('burn-warmup-remaining')).toBeVisible();
   await expect(page.getByTestId('more')).toBeVisible();
   await page.goto('./#/run');
   await expect(page.getByTestId('more')).toBeVisible();

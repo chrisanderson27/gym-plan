@@ -1,5 +1,5 @@
 // Structural mirrors of content/types.ts. The eslint fence forbids importing content.
-export interface GymZoneShape { id: string; floor: number; neighbours: string[] }
+export interface GymZoneShape { id: string; floor: number; label?: string; neighbours: string[] }
 export interface GymItemShape {
   id: string;
   floor: number;

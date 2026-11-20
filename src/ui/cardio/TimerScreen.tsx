@@ -81,8 +81,10 @@ export function TimerScreen({ blocks, onFinish, onExit, feedbackContext }: Props
         <>
           <h1>Ready</h1>
           <p>{fmtMSS(v.totalSec)} total · {steps[0]?.label}</p>
-          <button type="button" class="primary" data-testid="timer-start" onClick={start}>Start</button>
-          <button type="button" onClick={onExit}>Back</button>
+          <div class="timer-controls" data-testid="timer-controls">
+            <button type="button" class="primary" data-testid="timer-start" onClick={start}>Start</button>
+            <button type="button" class="btn" onClick={onExit}>Back</button>
+          </div>
         </>
       ) : (
         <>
@@ -90,18 +92,20 @@ export function TimerScreen({ blocks, onFinish, onExit, feedbackContext }: Props
           <div class="timer-remaining" data-testid="timer-remaining">{fmtMSS(v.remainingSec)}</div>
           <div class="timer-round" data-testid="timer-round">{v.roundLabel}</div>
           <div class="timer-next" data-testid="timer-next">{v.next ? `Next: ${v.next}` : 'Last one'}</div>
-          <div class="timer-controls">
-            <button type="button" data-testid="timer-pause" onClick={() => dispatch({ type: v.paused ? 'resume' : 'pause' })}>
-              {v.paused ? 'Resume' : 'Pause'}
-            </button>
-            <button type="button" data-testid="timer-skip" onClick={() => dispatch({ type: 'skip' })}>Skip</button>
+          <div class="timer-controls" data-testid="timer-controls">
             {confirmEnd ? (
               <>
-                <button type="button" data-testid="timer-end-confirm" onClick={() => finish(true)}>End now</button>
-                <button type="button" onClick={() => setConfirmEnd(false)}>Keep going</button>
+                <button type="button" class="btn" data-testid="timer-end-confirm" onClick={() => finish(true)}>Stop and log</button>
+                <button type="button" class="btn" onClick={() => setConfirmEnd(false)}>Back to timer</button>
               </>
             ) : (
-              <button type="button" data-testid="timer-end" onClick={() => setConfirmEnd(true)}>End</button>
+              <>
+                <button type="button" class="btn" data-testid="timer-pause" onClick={() => dispatch({ type: v.paused ? 'resume' : 'pause' })}>
+                  {v.paused ? 'Resume' : 'Pause'}
+                </button>
+                <button type="button" class="btn" data-testid="timer-skip" onClick={() => dispatch({ type: 'skip' })}>Skip step</button>
+                <button type="button" class="btn" data-testid="timer-end" onClick={() => setConfirmEnd(true)}>End</button>
+              </>
             )}
           </div>
         </>

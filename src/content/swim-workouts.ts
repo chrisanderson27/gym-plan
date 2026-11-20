@@ -8,6 +8,14 @@ export interface SwimWorkoutDef {
   blocks: SwimSetBlock[];
 }
 
+export const SWIM_STROKE_WORDS: Record<SwimItem['stroke'], string> = {
+  FR: 'freestyle', BK: 'backstroke', BR: 'breaststroke', FL: 'butterfly', IM: 'medley', CH: 'choice',
+};
+
+export const SWIM_EFFORT_WORDS: Record<SwimItem['intensity'], string> = {
+  EZ: 'easy', MOD: 'steady', CSS: 'threshold', FAST: 'fast', SPRINT: 'sprint',
+};
+
 /** What to do when a piece of gear is missing. Gear is not a stored inventory (PRD §5). */
 export const SWIM_GEAR_SUBSTITUTES: Record<string, string> = {
   paddles: 'No paddles: pull with fists closed',

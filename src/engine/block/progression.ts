@@ -1,4 +1,4 @@
-import type { CircuitBlock, CircuitStation, Equipment, StationTarget } from '../../data/types';
+import type { CircuitBlock, CircuitStation, Equipment, StationTarget, StationUnit } from '../../data/types';
 import {
   BLOCK_DROP_PCT, BLOCK_DROP_SESSIONS, BLOCK_START_LOAD_PCT,
   SEC_PER_M_CARRY, SEC_PER_UNIT, STATION_TARGETS, TRANSITION_SEC,
@@ -9,7 +9,7 @@ import type { HistorySession } from '../lift/types';
 import { kitOf, type BlockExerciseShape } from './rules';
 import { circuitWork } from './work';
 
-type StationDraft = { exercise: BlockExerciseShape; equipmentId?: string; itemId?: string };
+type StationDraft = { exercise: BlockExerciseShape; equipmentId?: string; itemId?: string; unit?: StationUnit };
 export type Draft = StationDraft & { backup?: StationDraft };
 type BlockPrescriptionInput = {
   slotKey: string;
@@ -21,9 +21,15 @@ type BlockPrescriptionInput = {
   workingWeightOf(exId: string, eqId: string): number | undefined;
 };
 
-function targetOf(ex: BlockExerciseShape, role: CircuitBlock['role']): StationTarget {
+export function slotKeyOf(session: { type: string; variant?: string; templateId?: string }, label?: string): string {
+  return session.type === 'burn' ? `burn:${session.templateId}:${label}` : `${session.variant}:${label}`;
+}
+
+function targetOf(ex: BlockExerciseShape, role: CircuitBlock['role'], requestedUnit?: StationUnit): StationTarget {
   const lane = role === 'finisher' ? 'short' : 'normal';
-  const unit = ex.targets?.[0] ?? (ex.unit === 'amrap' || ex.unit === 'steps' ? 'reps' : ex.unit);
+  const unit = requestedUnit && (ex.targets?.includes(requestedUnit) || requestedUnit === ex.unit)
+    ? requestedUnit
+    : ex.targets?.[0] ?? (ex.unit === 'amrap' || ex.unit === 'steps' ? 'reps' : ex.unit);
   const min = ex.unitMin ?? (ex.repMin || 8);
   const max = ex.unitMax ?? (ex.repMax || min + 4);
   const amount = unit === 'reps'
@@ -42,7 +48,7 @@ function roundDownToStep(steps: number[], weight: number): number {
 function freshStation(draft: StationDraft, input: BlockPrescriptionInput): Omit<CircuitStation, 'backup'> {
   const { exercise, equipmentId, itemId } = draft;
   const station: Omit<CircuitStation, 'backup'> = {
-    exerciseId: exercise.id, equipmentId, itemId, target: targetOf(exercise, input.role),
+    exerciseId: exercise.id, equipmentId, itemId, target: targetOf(exercise, input.role, draft.unit),
   };
   const eq = equipmentId === undefined ? undefined : input.equipment.get(equipmentId);
   if (eq && eq.kind !== 'bodyweight' && !exercise.equipment.every((tag) => tag === 'bodyweight') && kitOf(exercise) !== 'cardio') {
@@ -67,7 +73,7 @@ export function prescribeBlock(input: BlockPrescriptionInput): { targetRounds: n
   const recent = [...input.history]
     .sort((a, b) => a.session.date.localeCompare(b.session.date))
     .flatMap(({ session }) => session.blocks.filter((block): block is CircuitBlock =>
-      block.kind === 'circuit' && !!block.log && `${session.variant}:${block.label}` === input.slotKey
+      block.kind === 'circuit' && !!block.log && slotKeyOf(session, block.label) === input.slotKey
       && stationKey(block.log.stations.map((station) => station.exerciseId)) === plannedKey))
     .slice(-(BLOCK_DROP_SESSIONS + 1));
 

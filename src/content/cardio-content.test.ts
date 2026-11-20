@@ -8,20 +8,17 @@ import { SWIM_WORKOUTS } from './swim-workouts';
 const VALID_FORMATS = ['sprint-walk', 'sprint-jog', '30-30', 'norwegian-4x4', 'hill', 'treadmill-incline', 'run-walk'];
 
 describe('cardio content', () => {
-  it('every Burn phase exercise exists', () => {
-    for (const t of BURN_TEMPLATES) for (const b of t.blocks) for (const p of b.phases) {
-      if (p.exerciseId) expect(exerciseById.has(p.exerciseId), `${t.id}:${p.exerciseId}`).toBe(true);
+  it('every Burn station exercise exists and supports its specified target', () => {
+    for (const t of BURN_TEMPLATES) for (const b of t.blocks) for (const s of b.stations) {
+      const exercise = exerciseById.get(s.exerciseId);
+      expect(exercise, `${t.id}:${s.exerciseId}`).toBeDefined();
+      if (s.unit) expect([exercise?.prescription.unit, ...(exercise?.targets ?? [])]).toContain(s.unit);
     }
   });
 
-  it('each Burn template totals 50–60 min with no zero-length phase', () => {
+  it('authors three Burn templates with positive block minutes', () => {
     expect(BURN_TEMPLATES).toHaveLength(3);
-    for (const t of BURN_TEMPLATES) {
-      const sec = t.blocks.reduce((n, b) => n + b.rounds * b.phases.reduce((m, p) => m + p.sec, 0), 0);
-      expect(sec / 60, t.id).toBeGreaterThanOrEqual(50);
-      expect(sec / 60, t.id).toBeLessThanOrEqual(60);
-      for (const b of t.blocks) for (const p of b.phases) expect(p.sec).toBeGreaterThan(0);
-    }
+    for (const t of BURN_TEMPLATES) for (const b of t.blocks) expect(b.minutes).toBeGreaterThan(0);
   });
 
   it('ids are unique and prefixed', () => {

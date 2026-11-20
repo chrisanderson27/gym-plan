@@ -234,6 +234,7 @@ a.row:active { background: var(--color-surface-hover); }
 .timer {
   min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: var(--space-3); padding: var(--space-4); text-align: center;
+  padding-bottom: calc(var(--tap) + 3 * var(--space-2) + env(safe-area-inset-bottom));
   background: var(--timer-idle); color: var(--timer-text);
 }
 .timer[data-role='work'] { background: var(--timer-work); }
@@ -243,10 +244,24 @@ a.row:active { background: var(--color-surface-hover); }
 .timer-phase { font-size: var(--text-32); font-weight: 700; }
 .timer-remaining { font-size: 28vw; font-weight: 800; font-variant-numeric: var(--numeric); line-height: 1; }
 .timer-round, .timer-next { font-size: var(--text-20); opacity: 0.9; }
-.timer-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: center; }
-/* Direct children / controls only: the feedback sheet nests inside .timer and keeps normal surface styling. */
-.timer > button, .timer-controls button { background: var(--timer-control-bg); color: var(--timer-text); border-color: var(--timer-control-border); }
-.timer > button.primary { background: var(--timer-primary-bg); color: var(--timer-primary-text); width: auto; padding: 0 48px; }
+.plan-card {
+  background: var(--activity-color); color: var(--activity-text); padding: var(--s-3);
+  border-radius: var(--s-3);
+}
+.plan-card h2 { margin-top: 0; }
+.plan-card p, .plan-card .plan { margin: var(--s-1) 0; }
+.plan-card a, .plan-card .dim, .plan-card .warn,
+.plan-card .swim-card h3 { color: inherit; }
+.change-line { width: 100%; text-align: left; }
+.timer-controls {
+  position: fixed; inset: auto 0 0; padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom));
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--space-1);
+}
+.timer-controls button {
+  min-height: var(--tap); margin: 0; padding: 0 var(--space-1);
+  background: var(--timer-control-bg); color: var(--timer-text); border-color: var(--timer-control-border);
+}
+.timer-controls .primary { background: var(--timer-primary-bg); color: var(--timer-primary-text); }
 .timer > button:focus-visible, .timer-controls button:focus-visible { outline-color: var(--timer-focus); }
 .timer-header > .sheet { color: var(--color-text-primary); text-align: left; }
 .stations { display: flex; flex-wrap: wrap; gap: var(--space-1); width: 100%; }
@@ -256,6 +271,7 @@ a.row:active { background: var(--color-surface-hover); }
 .swim-card small { font-size: 0.85rem; }
 /* Drill cue: ordinary secondary text under the set line, not 1.6 rem inline text with a stretched line-height. */
 .swim-card .swim-cue { display: block; font-size: var(--text-14); line-height: 1.4; color: var(--color-text-secondary); margin: 0 0 var(--space-2); }
+.plan-card .swim-card .swim-cue { color: var(--activity-text); }
 
 /* ---- feedback + pose ---- */
 .tick svg { display: block; margin: auto; }

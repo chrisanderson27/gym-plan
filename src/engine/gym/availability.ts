@@ -15,6 +15,19 @@ export const floors = (profile: GymProfileShape): number[] => [...new Set(profil
 export const zoneOf = (profile: GymProfileShape, podId: string): string =>
   profile.pods.find((pod) => pod.id === podId)?.zone ?? '';
 
+export function podsInZoneLabelled(profile: GymProfileShape, label: string): string[] {
+  const zones = new Set(profile.zones.filter((zone) => zone.label === label).map((zone) => zone.id));
+  return profile.pods.filter((pod) => zones.has(pod.zone)).map((pod) => pod.id);
+}
+
+export function defaultBurnPods(profile: GymProfileShape): string[] {
+  if (profile.zones.some((zone) => zone.label === 'turf')) return podsInZoneLabelled(profile, 'turf');
+  return [2, 1].flatMap((floor) => {
+    const zones = new Set(profile.zones.filter((zone) => zone.floor === floor).map((zone) => zone.id));
+    return profile.pods.filter((pod) => zones.has(pod.zone)).map((pod) => pod.id);
+  });
+}
+
 export function availableOn(
   profile: GymProfileShape,
   floor: number,
