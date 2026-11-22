@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anglesAt, cycleMs, HEAD_RADIUS, layout, skeleton } from '../engine/pose';
+import { anglesAt, cycleMs, HEAD_RADIUS, layout, resolveFrames, skeleton } from '../engine/pose';
 import { EXERCISES } from './exercises';
 import { LIFT_TEMPLATES } from './lift-templates';
 import { POSES } from './poses';
@@ -9,6 +9,23 @@ const BONES = new Set([
 ]);
 
 describe('poses', () => {
+  it('shows a rower sliding from catch to finish and recovering over fixed foot supports', () => {
+    const def = POSES.rower!;
+    const { anchorAt, propRect } = layout(def);
+    const [catchPose, drive, finish, recovery] = resolveFrames(def).map((a) => skeleton(a, def.anchor, anchorAt));
+    expect(def.prop).toBe('rower');
+    expect(propRect!.x).toBeLessThan(finish!.hip.x);
+    expect(propRect!.x + propRect!.w).toBeGreaterThan(anchorAt.x);
+    expect(catchPose!.hip.x - drive!.hip.x).toBeGreaterThan(20);
+    expect(finish!.wristN.x - finish!.hip.x).toBeLessThan(drive!.wristN.x - drive!.hip.x);
+    expect(recovery!.wristN.x).toBeGreaterThan(finish!.wristN.x);
+    for (let t = 0; t < cycleMs(def); t += 20) {
+      const pose = skeleton(anglesAt(def, t), def.anchor, anchorAt);
+      expect(pose.ankleN).toEqual(anchorAt);
+      expect(Math.abs(pose.hip.y - catchPose!.hip.y)).toBeLessThan(4);
+    }
+  });
+
   it('every def has 1–4 frames (2–4 animated) of finite angles on known bones', () => {
     for (const [id, def] of Object.entries(POSES)) {
       expect(def.frames.length, id).toBeGreaterThanOrEqual(2);

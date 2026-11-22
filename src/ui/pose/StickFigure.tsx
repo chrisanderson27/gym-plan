@@ -17,10 +17,18 @@ const SEGMENTS: { key: string; a: Joint; b: Joint; far?: boolean }[] = [
 ];
 const IMPLEMENT_R = { bar: 5, db: 4, kb: 5, handle: 3, none: 0 } as const;
 const r1 = (n: number) => Math.round(n * 10) / 10;
+const rowerSeat = (hipX: number, railY: number) => [{ x: hipX - 11, y: railY - 5 }, { x: hipX + 11, y: railY - 5 }] as const;
 
 /** Static furniture positioned from frame 0. */
 function Prop({ def, lay }: { def: PoseDef; lay: Layout }) {
-  const { hip0: h, propRect, viewBox: v } = lay;
+  const { hip0: h, propRect, viewBox: v, anchorAt: foot } = lay;
+  if (def.prop === 'rower' && propRect) {
+    return <g fill="none">
+      <rect class="prop" x={r1(propRect.x)} y={r1(propRect.y)} width={r1(propRect.w)} height={propRect.h} />
+      <circle class="prop" cx={r1(foot.x + 50)} cy={r1(foot.y - 5)} r={12} />
+      <line class="prop" x1={r1(foot.x + 2)} y1={r1(foot.y + 7)} x2={r1(foot.x + 13)} y2={r1(foot.y - 9)} />
+    </g>;
+  }
   if (propRect) {
     return <rect class="prop" x={r1(propRect.x)} y={r1(propRect.y)} width={propRect.w} height={propRect.h} fill="none" />;
   }
@@ -61,6 +69,7 @@ function Figure({ def, lay, sk, refs, testId, label, onToggle, running }: {
   const reg = (key: string) => (el: Element | null) => { if (refs) refs.current[key] = el; };
   const cable = def.cable ? { x: anchorAt.x + def.cable.x, y: anchorAt.y + def.cable.y } : null;
   const implR = IMPLEMENT_R[def.implement ?? 'none'];
+  const seat = def.prop === 'rower' && lay.propRect ? rowerSeat(sk.hip.x, lay.propRect.y) : null;
   return (
     <svg
       class="pose"
@@ -72,6 +81,7 @@ function Figure({ def, lay, sk, refs, testId, label, onToggle, running }: {
       onClick={onToggle}
     >
       <Prop def={def} lay={lay} />
+      {seat && <line class="prop" ref={reg('seat')} x1={r1(seat[0].x)} y1={r1(seat[0].y)} x2={r1(seat[1].x)} y2={r1(seat[1].y)} />}
       {cable && <line class="prop" ref={reg('cable')} x1={r1(cable.x)} y1={r1(cable.y)} x2={r1(sk.wristN.x)} y2={r1(sk.wristN.y)} />}
       {SEGMENTS.map((s) => (
         <line key={s.key} class={s.far ? 'bone far' : 'bone'} ref={reg(s.key)} x1={r1(sk[s.a].x)} y1={r1(sk[s.a].y)} x2={r1(sk[s.b].x)} y2={r1(sk[s.b].y)} />
@@ -112,6 +122,7 @@ export function StickFigure({ def, label, testId, running }: { def: PoseDef; lab
       const r = refs.current;
       for (const s of SEGMENTS) setLine(r[s.key] ?? null, sk[s.a], sk[s.b]);
       if (r.cable) setLine(r.cable, { x: lay.anchorAt.x + (def.cable?.x ?? 0), y: lay.anchorAt.y + (def.cable?.y ?? 0) }, sk.wristN);
+      if (r.seat && lay.propRect) setLine(r.seat, ...rowerSeat(sk.hip.x, lay.propRect.y));
       r.head?.setAttribute('cx', String(r1(sk.head.x)));
       r.head?.setAttribute('cy', String(r1(sk.head.y)));
       r.impl?.setAttribute('cx', String(r1(sk.wristN.x)));

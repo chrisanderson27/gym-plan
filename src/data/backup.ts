@@ -2,9 +2,10 @@ import type { GymDb } from './db';
 import { ImportError } from './errors';
 import { validateRows } from './validate';
 import { migrateExport, type ExportFile } from './migrations';
+import { reconcileMixedSets } from './mixedSets';
 import { SCHEMA_VERSION } from './schema';
 import { STORE_NAMES, USER_STORES, type StoreName } from './stores';
-import type { Settings } from './types';
+import type { Session, Settings } from './types';
 
 /** "Identical user-store contents" excludes exactly this field: importing stamps a fresh backupAt. */
 export const ROUND_TRIP_EXCLUDE = [['settings', 'backupAt']] as const;
@@ -90,11 +91,19 @@ const maxIso = (...xs: (string | null | undefined)[]): string | null =>
 export async function importExport(db: GymDb, file: ExportFile): Promise<{ written: Record<string, number> }> {
   const written: Record<string, number> = {};
   await db.transaction('rw', STORE_NAMES.map((n) => db.table(n)), async () => {
+    const byId = new Map(((file.stores.sessions ?? []) as Session[]).map((session) => [session.id, session]));
+    const mixed = [...byId.values()].filter((session) => session.mixed);
+    const previous = await db.sessions.bulkGet(mixed.map((session) => session.id));
     for (const name of STORE_NAMES) {
       if (name === 'settings') continue;
       const rows = file.stores[name] ?? [];
       if (rows.length) await db.table(name).bulkPut(rows);
       written[name] = rows.length;
+    }
+    for (const [i, incomingSession] of mixed.entries()) {
+      const rows = await db.sets.where('sessionId').equals(incomingSession.id).toArray();
+      const session = structuredClone(incomingSession);
+      if (reconcileMixedSets(session, rows, previous[i])) await db.sessions.put(session);
     }
     const incoming = (file.stores.settings?.[0] as Settings | undefined) ?? undefined;
     const local = await db.settings.get('settings');

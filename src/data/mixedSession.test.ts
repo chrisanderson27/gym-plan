@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { buildExport, importExport, parseExport } from './backup';
+import { exerciseById } from '../content';
 import type { GymDb } from './db';
 import { loadSessionPRs } from './history';
 import { findOpenLiftSession, findStaleOpenLifts } from './lift';
@@ -25,6 +26,17 @@ const current = async (id: string) => (await db.sessions.get(id))!;
 const action = async (id: string, next: Parameters<typeof updateMixedSession>[3], ms = 0) =>
   updateMixedSession(db, id, (await current(id)).mixed!.cursor, next, at(ms));
 
+async function logCurrentSet(id: string, weight: number) {
+  const { strength, cursor } = (await current(id)).mixed!;
+  const accepted = strength[cursor.blockId]!;
+  return action(id, { type: 'set', weight, reps: 10, expectedExerciseId: accepted.exerciseId, expectedEquipmentId: accepted.equipmentId });
+}
+
+async function startBlocks(...blocks: NonNullable<typeof MIXED_TEMPLATE.ordered>['blocks']) {
+  await db.templates.put({ ...MIXED_TEMPLATE, blocks: [], ordered: { name: 'Test workout', blocks } });
+  return startMixedSession(db, source, at());
+}
+
 async function roundTrip(id: string) {
   const snapshot = JSON.stringify(await current(id));
   const portable = parseExport(JSON.stringify(await buildExport(db, MIXED_AT, 'test'))).file;
@@ -33,7 +45,7 @@ async function roundTrip(id: string) {
     await importExport(restored, portable);
     expect(JSON.stringify(await restored.sessions.get(id))).toBe(snapshot);
     expect(await restored.sets.toArray()).toEqual(await db.sets.toArray());
-    expect(await restored.templates.get(source.templateId)).toEqual(MIXED_TEMPLATE);
+    expect(await restored.templates.get(source.templateId)).toEqual(await db.templates.get(source.templateId));
   } finally {
     await restored.delete();
   }
@@ -71,18 +83,18 @@ test('clock, actuals, swaps, failure retry, repeat and optional effort survive b
   await Promise.all([0, 1].map(() => updateMixedSession(db, id, mixed.cursor, { type: 'continue' }, at(350_000))));
   expect((await current(id)).mixed!.cursor.blockId).toBe('press');
 
+  mixed = (await current(id)).mixed!;
+  const set = { type: 'set', weight: 140, reps: 10, expectedExerciseId: 'leg-press', expectedEquipmentId: mixed.strength.press?.equipmentId } as const;
   const failSet = (changes: object) => { if (Object.keys(changes).some((key) => key.startsWith('mixed'))) throw new Error('write failed'); };
   db.sessions.hook('updating').subscribe(failSet);
-  await expect(action(id, { type: 'set', weight: 140, reps: 10 }, 351_000)).rejects.toThrow('write failed');
+  await expect(action(id, set, 351_000)).rejects.toThrow('write failed');
   db.sessions.hook('updating').unsubscribe(failSet);
   expect(await db.sets.where({ sessionId: id }).count()).toBe(0);
-  mixed = (await current(id)).mixed!;
-  const set = { type: 'set', weight: 140, reps: 10 } as const;
   await Promise.all([0, 1].map(() => updateMixedSession(db, id, mixed.cursor, set, at(351_000))));
   expect(await db.sets.where({ sessionId: id }).count()).toBe(1);
   await action(id, set, 352_000);
   await action(id, { type: 'continue' }, 353_000);
-  await action(id, { ...set, weight: 95 }, 354_000);
+  await action(id, { ...set, weight: 95, expectedExerciseId: 'hip-thrust', expectedEquipmentId: 'barbell-olympic' }, 354_000);
   await action(id, { type: 'continue' }, 355_000);
   mixed = (await current(id)).mixed!;
   const circuit = mixed.prescription.blocks[3]!;
@@ -170,4 +182,118 @@ test('a concurrent round retry counts once and replacement is rechecked before w
   await Promise.all([0, 1].map(() => updateMixedSession(db, id, mixed.cursor, { type: 'round', expectedTapped: 0 }, at(1_000))));
   expect((await current(id)).mixed!.drafts.circuit).toMatchObject({ tapped: 1, rounds: 1 });
   expect((await current(id)).mixed!.stations.circuit?.[0]?.exerciseId).toBe('reverse-lunge');
+});
+
+test('restoring an older entry keeps newer sets and resumes each strength block at its next slot', async () => {
+  const press = MIXED_TEMPLATE.ordered!.blocks[1]!;
+  const thrust = MIXED_TEMPLATE.ordered!.blocks[2]!;
+  const id = await startBlocks(press, thrust);
+  const older = parseExport(JSON.stringify(await buildExport(db, at(), 'test'))).file;
+  await logCurrentSet(id, 140);
+  const newer = parseExport(JSON.stringify(await buildExport(db, at(), 'test'))).file;
+  await logCurrentSet(id, 145);
+  await action(id, { type: 'continue' });
+  await logCurrentSet(id, 95);
+  const rows = await db.sets.where({ sessionId: id }).toArray();
+
+  await importExport(db, older);
+  expect((await current(id)).mixed!.cursor).toEqual({ blockId: 'press', stage: 'review', setSlot: 2 });
+  await action(id, { type: 'continue' });
+  expect((await current(id)).mixed!.cursor).toEqual({ blockId: 'thrust', stage: 'review', setSlot: 1 });
+  expect(await db.sets.where({ sessionId: id }).toArray()).toEqual(rows);
+
+  const fresh = openTestDb();
+  try {
+    await importExport(fresh, newer);
+    await importExport(fresh, older);
+    expect((await fresh.sessions.get(id))!.mixed!.cursor).toEqual({ blockId: 'press', stage: 'active', setSlot: 1 });
+    expect(await fresh.sets.where({ sessionId: id }).count()).toBe(1);
+  } finally {
+    await fresh.delete();
+  }
+});
+
+const calf = { id: 'calf', kind: 'strength', exerciseId: 'calf-raise', equipmentId: 'pin-stack', sets: 2, repMin: 8, repMax: 12 } as const;
+
+test('retained sets recover the replacement prescription from an older strength restore', async () => {
+  const id = await startBlocks(calf);
+  const beforeSwap = await current(id);
+  const backup = parseExport(JSON.stringify(await buildExport(db, at(), 'test'))).file;
+  await action(id, { type: 'swap-strength', expectedExerciseId: calf.exerciseId, exerciseId: 'reverse-lunge' });
+  const afterSwap = await current(id);
+  await logCurrentSet(id, 20);
+  await importExport(db, backup);
+  expect((await current(id)).blocks).toEqual(afterSwap.blocks);
+  expect((await current(id)).mixed!.cursor).toEqual({ blockId: 'calf', stage: 'active', setSlot: 1 });
+
+  // Recover a device that already restored this backup before cursor reconciliation was added.
+  await db.sessions.put(beforeSwap);
+  await logCurrentSet(id, 999);
+  expect(await db.sets.where({ sessionId: id }).toArray()).toMatchObject([{ exerciseId: 'reverse-lunge', weight: 20 }]);
+  await logCurrentSet(id, 25);
+  expect(await db.sets.where({ sessionId: id }).toArray()).toMatchObject([
+    { exerciseId: 'reverse-lunge', weight: 20 }, { exerciseId: 'reverse-lunge', weight: 25 },
+  ]);
+});
+
+test('an old strength form cannot write to the replacement exercise or equipment', async () => {
+  const id = await startBlocks(calf);
+  const { cursor, strength } = (await current(id)).mixed!;
+  const form = { type: 'set', weight: 80, reps: 10, expectedExerciseId: calf.exerciseId, expectedEquipmentId: strength.calf!.equipmentId! } as const;
+  await action(id, { type: 'swap-strength', expectedExerciseId: calf.exerciseId, exerciseId: 'reverse-lunge' });
+  await expect(updateMixedSession(db, id, cursor, form, at())).rejects.toThrow('changed');
+  await expect(action(id, { ...form, expectedExerciseId: 'reverse-lunge' })).rejects.toThrow('changed');
+  expect(await db.sets.where({ sessionId: id }).count()).toBe(0);
+  expect((await current(id)).mixed!.cursor).toEqual(cursor);
+  await action(id, { ...form, expectedExerciseId: 'reverse-lunge', expectedEquipmentId: 'dumbbells' });
+  expect(await db.sets.where({ sessionId: id }).first()).toMatchObject({ exerciseId: 'reverse-lunge', equipmentId: 'dumbbells' });
+});
+
+test('a strength swap reserves later accepted working sets under the weekly ceiling', async () => {
+  await db.sessions.add(PRIOR_LIFT);
+  await db.sets.bulkAdd(Array.from({ length: 17 }, (_, idx) => ({ ...PRIOR_SET, id: `prior-${idx}`, idx })));
+  const lastWeek = { ...PRIOR_LIFT, id: 'last-week', date: '2026-11-13T15:00:00Z', endedAt: '2026-11-13T16:00:00Z' };
+  await db.sessions.add(lastWeek);
+  await db.sets.add({ ...PRIOR_SET, id: 'prior-lunge', sessionId: lastWeek.id, exerciseId: 'reverse-lunge', equipmentId: 'dumbbells' });
+  const id = await startBlocks(calf, MIXED_TEMPLATE.ordered!.blocks[1]!);
+  await action(id, { type: 'swap-strength', expectedExerciseId: calf.exerciseId, exerciseId: 'reverse-lunge' });
+  expect((await current(id)).mixed!.strength).toMatchObject({ calf: { exerciseId: 'reverse-lunge', sets: 1 }, press: { sets: 2 } });
+  await logCurrentSet(id, 20);
+  await action(id, { type: 'continue' });
+  await logCurrentSet(id, 140);
+  await logCurrentSet(id, 145);
+  expect(await db.sets.where('sessionId').anyOf([id, PRIOR_LIFT.id]).filter((row) => row.setKind === 'working' || !row.setKind).count()).toBe(20);
+});
+
+test('station changes preserve tapped rounds across restore without changing the timer', async () => {
+  const id = await startBlocks(MIXED_TEMPLATE.ordered!.blocks[3]!);
+  await action(id, { type: 'start' });
+  await action(id, { type: 'round', expectedTapped: 0 }, 1_000);
+  await action(id, { type: 'swap-station', slotId: 'lunge', exerciseId: 'step-up', expectedExerciseId: 'reverse-lunge' }, 2_000);
+  await action(id, { type: 'round', expectedTapped: 1 }, 3_000);
+  await action(id, { type: 'swap-station', slotId: 'lunge', exerciseId: null, expectedExerciseId: 'step-up' }, 4_000);
+  await roundTrip(id);
+  await action(id, { type: 'finish' }, 5_000);
+  await action(id, { type: 'continue', rounds: 3 });
+  const result = (await current(id)).mixed!.results.circuit!;
+  expect(result.stations?.[0]).toMatchObject({ exerciseId: 'step-up', skipped: true });
+  expect(result).toMatchObject({
+    rounds: 3, elapsedMs: 5_000,
+    stationChanges: [
+      { afterRound: 1, stations: expect.arrayContaining([expect.objectContaining({ slotId: 'lunge', exerciseId: 'reverse-lunge' })]) },
+      { afterRound: 2, stations: expect.arrayContaining([expect.objectContaining({ slotId: 'lunge', exerciseId: 'step-up' })]) },
+    ],
+  });
+  await roundTrip(id);
+});
+
+test('a restored machine from a different exercise does not enable the leg press demo or logging', async () => {
+  const machine = { id: 'legacy-chest-press', name: `${exerciseById.get('chest-press-machine')!.name} — Plate-loaded machine`, kind: 'machine', steps: [100] };
+  const press = { ...MIXED_TEMPLATE.ordered!.blocks[1]!, equipmentId: machine.id };
+  if (press.kind !== 'strength') throw new Error('Expected strength fixture');
+  await importExport(db, parseExport(JSON.stringify({ schemaVersion: 2, stores: { equipment: [machine] } })).file);
+  const id = await startBlocks(press);
+  const { mixed } = await current(id);
+  expect(await mixedOptions(db, press, mixed!, at())).toMatchObject({ ready: false, poseId: undefined });
+  expect(mixed!.strength.press?.equipmentId).toBeUndefined();
 });

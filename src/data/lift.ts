@@ -73,7 +73,7 @@ export async function loadLiftSnapshot(db: GymDb, now = new Date()): Promise<Lif
 }
 
 /** Preferred → equipment of the latest logged set → seed for the tag. Read-only. */
-export function resolveEquipmentId(snapshot: LiftSnapshot, ex: Exercise, weekIdx: number): string {
+export function resolveEquipmentId(snapshot: LiftSnapshot, ex: Exercise, weekIdx: number, fallback?: string): string {
   const pref = snapshot.overrides.get(ex.id)?.preferredEquipmentId;
   if (pref && snapshot.equipment.has(pref)) return pref;
   let latest: SetRow | undefined;
@@ -86,7 +86,7 @@ export function resolveEquipmentId(snapshot: LiftSnapshot, ex: Exercise, weekIdx
   if (latest) return latest.equipmentId;
   const tags = ex.equipment;
   const tag = (weekIdx <= JOINT_FRIENDLY_WEEKS ? tags.find((t) => t !== 'barbell') : undefined) ?? tags[0]!;
-  return defaultEquipmentFor(tag);
+  return fallback ?? defaultEquipmentFor(tag);
 }
 
 /** Sync plan builder used by the Lift screen preview and by session start. */

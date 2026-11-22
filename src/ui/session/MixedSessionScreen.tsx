@@ -13,7 +13,7 @@ import { exerciseName, mixedBlockName } from '../labels';
 import { MoreMenu } from '../MoreMenu';
 import { navigate } from '../router';
 import { Sheet } from '../Sheet';
-import { PoseView } from '../slots/PoseView';
+import { PosePlaybackButton, PoseView } from '../slots/PoseView';
 import './mixed.css';
 
 type Action = Parameters<typeof updateMixedSession>[3];
@@ -170,7 +170,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
       ) : strength ? (
         <>
           <p>{ready ? `${strength.sets} sets · ${strength.repMin}–${strength.repMax} reps` : options ? 'Movement unavailable' : 'Checking equipment…'}</p>
-          <PoseView exerciseId={strength.exerciseId} poseId={options?.poseId || undefined} />
+          <MixedDemo key={`${strength.exerciseId}:${strength.equipmentId}`} exerciseId={strength.exerciseId} poseId={options?.poseId || undefined} />
           {ready && <StrengthSet key={`${strength.exerciseId}:${strength.equipmentId}:${setSlot}`} strength={strength} slot={setSlot} busy={busy} submit={submit} />}
           <div class="actions">
             {stage === 'entry' && <button type="button" disabled={busy || !options?.strength?.length} onClick={() => setSwap('strength')}>Swap exercise</button>}
@@ -195,14 +195,14 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
                     poseId={options?.available?.has(station.slotId) ? station.poseId : undefined} index={i}
                     target={stationTargetLine(station.exerciseId, station.target.amount, station.target.unit, station.load)}
                     playing={playing === station.slotId} onPlay={() => setPlaying(playing === station.slotId ? null : station.slotId)}
-                    onSwap={() => setSwap({ slotId: station.slotId })} disabled={busy || !!draft?.tapped}
+                    onSwap={() => setSwap({ slotId: station.slotId })} disabled={busy}
                     status={station.skipped ? 'Skipped' : options && !options.available?.has(station.slotId) ? 'Movement unavailable' : undefined} />
                 ))}
               </div>
             </>
           ) : block.kind !== 'strength' && <>
             <p>{block.instructions}</p>
-            {block.exerciseId && <PoseView exerciseId={block.exerciseId} poseId={options?.poseId || undefined} />}
+            {block.exerciseId && <MixedDemo exerciseId={block.exerciseId} poseId={options?.poseId || undefined} />}
             {options && !ready && <p>Movement unavailable</p>}
           </>}
           <div class="mixed-live-actions actions">
@@ -234,6 +234,14 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
   );
 }
 
+function MixedDemo({ exerciseId, poseId }: { exerciseId: string; poseId?: string }) {
+  const [playing, setPlaying] = useState(false);
+  return <div class="mixed-demo">
+    <PoseView exerciseId={exerciseId} poseId={poseId} running={playing} />
+    {poseId && <PosePlaybackButton name={exerciseName(exerciseId)} playing={playing} onPlay={() => setPlaying(!playing)} />}
+  </div>;
+}
+
 function formatClock(seconds: number) {
   return [Math.floor(seconds / 60), seconds % 60].map((n) => String(n).padStart(2, '0')).join(':');
 }
@@ -247,7 +255,11 @@ function StrengthSet({ strength, slot, busy, submit }: { strength: AcceptedStren
   const [weight, setWeight] = useState(String(strength.targetWeight ?? ''));
   const [reps, setReps] = useState(String(strength.repMin));
   return (
-    <form class="mixed-fields" onSubmit={(event) => { event.preventDefault(); void submit({ type: 'set', weight: Number(weight), reps: Number(reps) }); }}>
+    <form class="mixed-fields" onSubmit={(event) => {
+      event.preventDefault();
+      void submit({ type: 'set', weight: Number(weight), reps: Number(reps),
+        expectedExerciseId: strength.exerciseId, expectedEquipmentId: strength.equipmentId });
+    }}>
       <h2>Set {slot + 1} of {strength.sets}</h2>
       <label>Weight (lb)<input type="number" inputMode="decimal" min="0" step="any" required value={weight} onInput={(e) => setWeight(e.currentTarget.value)} /></label>
       <label>Reps<input type="number" inputMode="numeric" min="1" step="1" required value={reps} onInput={(e) => setReps(e.currentTarget.value)} /></label>

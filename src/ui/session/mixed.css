@@ -11,7 +11,7 @@
 }
 .mixed-live-top {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   text-align: center;
   min-height: 51px;
@@ -36,22 +36,19 @@
   font-weight: 800;
   color: var(--mixed-link);
 }
-.mixed-live-top .more {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-}
 .mixed-live .mixed-live-top button[aria-label="Sound cues"] {
-  width: 56px;
-  min-width: 56px;
-  padding: 0;
+  padding: 0 var(--space-2);
   border: 0;
   margin: 0;
   border-radius: 12px;
-  color: transparent;
-  background: var(--mixed-sound) center / 19px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 19 19' fill='none' stroke='%23e4ebe0' stroke-width='1.6'%3E%3Cpath d='M3 7h3l4-3v11l-4-3H3zM13 7.5a3 3 0 0 1 0 4'/%3E%3C/svg%3E");
+  font-size: var(--text-14);
+  background: var(--mixed-sound);
+}
+.mixed-demo .pose, .mixed-demo .cues { color: var(--shell-gym-target); }
+.mixed-demo .pose .prop { stroke: var(--shell-gym-muted); }
+.mixed-demo:has(> .pose) > .cues { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .mixed-demo .block-icon { display: none; }
 }
 .mixed-eyebrow {
   color: var(--shell-lime);

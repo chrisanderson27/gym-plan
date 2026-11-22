@@ -257,10 +257,13 @@ export const POSES: Record<string, PoseDef> = {
     ],
   },
   rower: {
-    view: 'side', anchor: 'hip', prop: 'seat', implement: 'handle',
+    view: 'side', anchor: 'feet', prop: 'rower', implement: 'handle', cable: { x: 50, y: -17 },
     frames: [
-      { angles: { torso: 100, head: 110, ...legs(90, 10), ...arms(70, 70) } },
-      { angles: { torso: 130, head: 140, ...legs(15, 0), ...arms(200, 160) }, ms: 1100, holdMs: 200 },
+      // Catch, leg drive, finish, then hands away and body forward before the knees bend.
+      { angles: { torso: 160, head: 170, ...legs(143, 15), ...arms(72, 72), footN: 140, footF: 140 }, ms: 850 },
+      { angles: { ...legs(90, 83), ...arms(81, 81) }, ms: 450 },
+      { angles: { torso: 195, head: 177, ...arms(290, 88) }, ms: 350, holdMs: 150 },
+      { angles: { torso: 160, head: 170, ...arms(81, 81) }, ms: 450 },
     ],
   },
   'farmer-carry': {

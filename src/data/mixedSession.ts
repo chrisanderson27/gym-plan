@@ -1,6 +1,6 @@
 import { exerciseById } from '../content';
 import { EQUIPMENT_PREFS } from '../content/equipment-prefs';
-import { PHASE3_EXERCISE_IDS, phase3Pose } from '../content/stationDemos';
+import { PHASE3_EXERCISE_IDS, phase3EquipmentId, phase3Pose } from '../content/stationDemos';
 import { finishClock, pauseClock, reconcileClock, resumeClock, startClock } from '../engine/block/session';
 import { stationUnits } from '../engine/block/progression';
 import { FINISH_RPE, PRIMARY_SET_WEIGHT, SECONDARY_SET_WEIGHT } from '../engine/config';
@@ -15,6 +15,7 @@ import type { GymDb } from './db';
 import { newId } from './ids';
 import { blockPrescriptionPatch, ensureEquipmentInstance, LIFT_EXERCISES, loadLiftSnapshot, resolveEquipmentId } from './lift';
 import { toBlockExercise } from './liftday';
+import { loggedMixedSets, mixedSetId, reconcileMixedSets, resumeMixedStrength } from './mixedSets';
 import { loadRunnable, orderedStrengthBlocks, replayLiftFlags } from './templates';
 import type { EffectiveStation, LiftBlock, MixedCursor, MixedDraft, MixedExecution, MixedResult, MixedTimer,
   OrderedBlock, OrderedStation, OrderedStrengthBlock, Session, SetRow } from './types';
@@ -27,7 +28,7 @@ type Action = { type: 'start' | 'pause' | 'resume' | 'expire' | 'finish' | 'skip
   | { type: 'swap-station'; slotId: string; exerciseId: string | null; expectedExerciseId: string }
   | { type: 'swap-strength'; exerciseId: string; expectedExerciseId: string }
   | { type: 'review' | 'continue'; rounds?: number | null; partial?: MixedDraft['partial'] | null }
-  | { type: 'set'; reps: number; weight: number };
+  | { type: 'set'; reps: number; weight: number; expectedExerciseId: string; expectedEquipmentId?: string };
 
 const PHASE_LIFTS = new Map([...LIFT_EXERCISES].filter(([id, lift]) => lift.repMin > 0 && PHASE3_EXERCISE_IDS.some((known) => known === id)));
 const required = new Map([
@@ -50,12 +51,10 @@ function availableDemo(g: Gym, exerciseId: string, preferred?: string) {
   const exercise = exerciseById.get(exerciseId);
   if (!exercise || exercise.retired || required.get(exerciseId)?.some((id) => g.unavailable.has(id))
     || !exerciseAllowed({ id: exerciseId, tags: exercise.equipment }, g.excluded, g.snapshot.checklistBlocked ?? new Set(), g.blockedTags)) return null;
-  const equipmentId = preferred ?? (exerciseId === 'rower' ? 'rower' : resolveEquipmentId(g.snapshot, exercise, g.week));
+  const equipmentId = preferred ?? resolveEquipmentId(g.snapshot, exercise, g.week, phase3EquipmentId(exerciseId));
   const equipment = g.snapshot.equipment.get(equipmentId);
-  if (!equipment || (equipment.kind === 'cardio' && equipmentId !== exerciseId) || equipmentId === 'smith-machine'
-    || (equipment.kind === 'barbell' && equipmentId !== 'barbell-olympic')
-    || g.blockedTags.has(equipment.kind)) return null;
-  const poseId = phase3Pose(exerciseId, equipment.kind);
+  if (!equipment || g.blockedTags.has(equipment.kind)) return null;
+  const poseId = phase3Pose(exerciseId, equipment);
   return poseId ? { equipmentId, poseId } : null;
 }
 
@@ -85,15 +84,23 @@ function strengthChoices(g: Gym, block: OrderedStrengthBlock, current: string) {
     .filter((id) => (id !== current || id === block.exerciseId) && compatible.has(id));
 }
 
-function strengthCapacity(g: Gym, exerciseId: string, done: Map<string, number>, count: number) {
+function strengthWeights(exerciseId: string) {
   const ex = LIFT_EXERCISES.get(exerciseId);
-  if (!ex) return 0;
   const weights = new Map<string, number>();
-  for (const muscle of ex.primary) weights.set(muscle, PRIMARY_SET_WEIGHT);
-  for (const muscle of ex.secondary) weights.set(muscle, (weights.get(muscle) ?? 0) + SECONDARY_SET_WEIGHT);
+  for (const muscle of ex?.primary ?? []) weights.set(muscle, PRIMARY_SET_WEIGHT);
+  for (const muscle of ex?.secondary ?? []) weights.set(muscle, (weights.get(muscle) ?? 0) + SECONDARY_SET_WEIGHT);
+  return weights;
+}
+
+function countStrengthSets(done: Map<string, number>, weights: Map<string, number>, sets: number) {
+  for (const [muscle, weight] of weights) done.set(muscle, (done.get(muscle) ?? 0) + sets * weight);
+}
+
+function strengthCapacity(g: Gym, exerciseId: string, done: Map<string, number>, count: number) {
+  const weights = strengthWeights(exerciseId);
   const limit = weeklyTarget(g.week).ceiling;
   const sets = Math.max(0, Math.min(count, ...[...weights].map(([muscle, weight]) => Math.floor((limit - (done.get(muscle) ?? 0)) / weight))));
-  for (const [muscle, weight] of weights) done.set(muscle, (done.get(muscle) ?? 0) + sets * weight);
+  countStrengthSets(done, weights, sets);
   return sets;
 }
 
@@ -203,6 +210,14 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
     const index = m.prescription.blocks.findIndex((b) => b.id === blockId);
     const b = m.prescription.blocks[index];
     if (!b || b.kind === 'coached') return session;
+    if (b.kind === 'strength' && stage !== 'review' && await db.sets.get(mixedSetId(id, blockId, setSlot))) {
+      // Repair a cursor restored by an older version before accepting another strength action.
+      const rows = await db.sets.where('sessionId').equals(id).toArray();
+      if (reconcileMixedSets(session, rows)) {
+        await db.sessions.put(session);
+        return session;
+      }
+    }
     const nowMs = now.getTime();
     const clock = get(m.timers, blockId);
     const draft = get(m.drafts, blockId);
@@ -262,10 +277,14 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         const original = b.stations.find((s) => s.slotId === action.slotId);
         const current = stations.find((s) => s.slotId === action.slotId);
         if (!original || !current || current.exerciseId !== action.expectedExerciseId) return session;
-        if (draft.tapped > 0 || draft.partial?.slotId === current.slotId) throw new MixedInputError('This station already has recorded work.');
+        if (draft.partial?.slotId === current.slotId) throw new MixedInputError('This station already has partial work recorded.');
         const next = action.exerciseId === null ? { ...current, skipped: true }
           : stationChoices(await gym(db, now), original, current).find((s) => s.exerciseId === action.exerciseId);
         if (!next) throw new MixedInputError('That replacement is unavailable. Choose another movement.');
+        const changes = draft.stationChanges ?? [];
+        if (draft.tapped > (changes.at(-1)?.afterRound ?? 0)) {
+          saveDraft({ ...draft, stationChanges: [...changes, { afterRound: draft.tapped, stations }] });
+        }
         m.stations = { ...m.stations, [blockId]: stations.map((s) => s.slotId !== next.slotId ? s : {
           ...next, swappedFromExerciseId: next.exerciseId !== original.exerciseId ? original.exerciseId : undefined,
         }) };
@@ -276,7 +295,15 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         const g = await gym(db, now);
         if (!strengthChoices(g, b, strength.exerciseId).includes(action.exerciseId)) throw new MixedInputError('That replacement is unavailable.');
         const flags = { ...replayLiftFlags(g.snapshot, now), deload: !!session.flags?.deload };
-        const next = await acceptStrength(db, g, b, action.exerciseId, flags, weekFractionalSets(g.snapshot, LIFT_EXERCISES));
+        const volume = weekFractionalSets(g.snapshot, LIFT_EXERCISES);
+        const rows = await db.sets.where('sessionId').equals(id).toArray();
+        for (const later of m.prescription.blocks.slice(index + 1)) {
+          const accepted = get(m.strength, later.id);
+          if (!accepted?.equipmentId || accepted.label === 'Calibration') continue;
+          const remaining = accepted.sets - loggedMixedSets(id, later.id, rows).length;
+          countStrengthSets(volume, strengthWeights(accepted.exerciseId), remaining);
+        }
+        const next = await acceptStrength(db, g, b, action.exerciseId, flags, volume);
         if (!next) throw new MixedInputError('No strength sets available for that movement.');
         m.strength = { ...m.strength, [blockId]: next };
         session.blocks = session.blocks.map((row) => row.id === blockId ? next : row);
@@ -284,11 +311,14 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         break;
       }
       case 'set': {
+        if (strength && (strength.exerciseId !== action.expectedExerciseId || strength.equipmentId !== action.expectedEquipmentId)) {
+          throw new MixedInputError('This movement changed. Check the current exercise before logging a set.');
+        }
         if (!strength?.equipmentId || stage === 'review' || setSlot >= strength.sets) return session;
         if (!(await mixedOptions(db, b, m, now)).ready) throw new MixedInputError('This movement is unavailable. Swap or finish the block.');
         if (!nonnegative(action.weight) || !Number.isSafeInteger(action.reps) || action.reps < 1) throw new MixedInputError('Enter a weight and a positive whole number of reps.');
         const row: SetRow = {
-          id: JSON.stringify([id, blockId, setSlot]), sessionId: id, exerciseId: strength.exerciseId,
+          id: mixedSetId(id, blockId, setSlot), sessionId: id, exerciseId: strength.exerciseId,
           equipmentId: strength.equipmentId, idx: setSlot, targetWeight: strength.targetWeight ?? 0, targetReps: strength.repMin,
           weight: action.weight, reps: action.reps, painFlag: false, ts: now.toISOString(),
           setKind: strength.label === 'Calibration' ? 'calibration' : 'working',
@@ -306,11 +336,16 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         checkActual(partial, stations ?? []);
         if (draft && (action.rounds !== undefined || action.partial !== undefined)) saveDraft({ ...draft, rounds: rounds ?? null, partial });
         const result: MixedResult = { status, elapsedMs: clock?.frozenElapsedMs ?? 0,
-          ...(draft ? { rounds: rounds ?? null, partial, stations } : {}) };
+          ...(draft ? { rounds: rounds ?? null, partial, stations, stationChanges: draft.stationChanges } : {}) };
         m.results = { ...m.results, [blockId]: result };
         const next = m.prescription.blocks[index + 1];
-        if (next) m.cursor = { blockId: next.id, stage: 'entry', setSlot: 0 };
-        else {
+        if (next) {
+          m.cursor = { blockId: next.id, stage: 'entry', setSlot: 0 };
+          if (next.kind === 'strength') {
+            const rows = await db.sets.where('sessionId').equals(id).toArray();
+            m.cursor = resumeMixedStrength(m, m.cursor, loggedMixedSets(id, next.id, rows));
+          }
+        } else {
           const sets = await db.sets.where('sessionId').equals(id).toArray();
           const lifts = session.blocks.filter((row): row is LiftBlock => row.kind === 'lift');
           const { fatigue } = summarizeLiftSession(lifts, sets);

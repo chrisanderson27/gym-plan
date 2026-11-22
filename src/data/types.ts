@@ -264,6 +264,8 @@ export interface MixedDraft {
   rounds: number | null;
   tapped: number;
   partial?: { slotId: string; unit: StationUnit; count: number };
+  /** The previous lineup through this tapped round, saved before a live swap or skip. */
+  stationChanges?: { afterRound: number; stations: EffectiveStation[] }[];
 }
 export interface MixedResult {
   status: 'completed' | 'skipped';
@@ -271,6 +273,7 @@ export interface MixedResult {
   rounds?: number | null;
   partial?: MixedDraft['partial'];
   stations?: EffectiveStation[];
+  stationChanges?: MixedDraft['stationChanges'];
 }
 export interface MixedCursor {
   blockId: string;

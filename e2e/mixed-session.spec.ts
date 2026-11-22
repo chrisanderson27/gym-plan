@@ -37,6 +37,50 @@ async function logSet(page: Page, weight: number, reps = 10) {
   await page.getByRole('button', { name: 'Log set' }).click();
 }
 
+test('live header exposes workout feedback and distinguishes the sound states', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await startSaved(page);
+  const more = page.getByRole('button', { name: 'More' });
+  const box = (await more.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(56);
+  expect(box.height).toBeGreaterThanOrEqual(56);
+  await expect(more).toHaveCSS('clip', 'auto');
+  expect(await pageWidth(page)).toBe(320);
+  await more.tap();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Feedback' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+
+  const sound = page.getByRole('button', { name: 'Sound cues' });
+  await expect(sound).toHaveText('Sound');
+  await expect(sound).toHaveCSS('background-image', 'none');
+  await expect(sound).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await sound.tap();
+  await expect(sound).toHaveText('Muted');
+  await expect(sound).toHaveAttribute('aria-pressed', 'false');
+  await page.reload();
+  await expect(sound).toHaveText('Muted');
+});
+
+test('preparation and strength demos use keyboard controls and show static cues in reduced motion', async ({ page }) => {
+  await startSaved(page);
+  const play = page.getByRole('button', { name: /^Play / });
+  const pause = page.getByRole('button', { name: /^Pause / });
+  for (const [id, instruction] of [['calf-raise', 'Full stretch at the bottom'], ['leg-press', 'Do not lock out the knees']] as const) {
+    const pose = page.getByTestId(`pose-${id}`);
+    await expect(pose).toHaveAttribute('data-running', 'false');
+    await play.press('Enter');
+    await expect(pose).toHaveAttribute('data-running', 'true');
+    await pause.press('Enter');
+    await expect(pose).toHaveAttribute('data-running', 'false');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect(pose).toHaveAttribute('data-static', 'true');
+    await expect(page.getByText(instruction)).toBeVisible();
+    await expect(play).toHaveCount(0);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    if (id === 'calf-raise') await finishTimed(page);
+  }
+});
+
 test('saved mixed session runs offline, resumes a live swap and can reopen and rate the same finish', async ({ page, context }, info) => {
   // Move wall time while leaving IndexedDB, rendering, and timer callbacks responsive.
   let now = MIXED_AT.getTime();

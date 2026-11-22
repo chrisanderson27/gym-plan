@@ -1,4 +1,5 @@
 import { exerciseById } from './index';
+import { SEED_EQUIPMENT } from './equipment';
 import { POSES } from './poses';
 
 /**
@@ -21,20 +22,14 @@ export const PHASE3_EXERCISE_IDS = [
   'plank',
 ] as const;
 
-const EQUIPMENT_KINDS: Record<string, readonly string[]> = {
-  'calf-raise': ['machine'],
-  'leg-press': ['machine'],
-  'hip-thrust': ['barbell'],
-  'reverse-lunge': ['db'],
-  'step-up': ['db'],
-  'bulgarian-split-squat': ['db'],
-  'push-up': ['bodyweight'],
-  'chest-press-machine': ['machine'],
-  'rower': ['cardio'],
-  'dead-bug': ['bodyweight'],
-  'farmer-carry': ['db'],
-  'plank': ['bodyweight'],
-};
+const VERIFIED_EQUIPMENT = new Map<string, string>([
+  ['calf-raise', 'pin-stack'], ['leg-press', 'plate-loaded'], ['hip-thrust', 'barbell-olympic'],
+  ['reverse-lunge', 'dumbbells'], ['step-up', 'dumbbells'], ['bulgarian-split-squat', 'dumbbells'],
+  ['push-up', 'bodyweight'], ['chest-press-machine', 'pin-stack'], ['rower', 'rower'],
+  ['dead-bug', 'bodyweight'], ['farmer-carry', 'dumbbells'], ['plank', 'bodyweight'],
+]);
+
+export const phase3EquipmentId = (exerciseId: string) => VERIFIED_EQUIPMENT.get(exerciseId);
 
 /** Pose plus cues. The block picker uses this and keeps every illustrated exercise. */
 export function stationDemo(exercise: { poseId?: string; cues: readonly string[] }): { poseId: string } | null {
@@ -42,11 +37,12 @@ export function stationDemo(exercise: { poseId?: string; cues: readonly string[]
   return POSES[exercise.poseId] ? { poseId: exercise.poseId } : null;
 }
 
-/** Verified pose for a live station or swap. Unknown ids and unverified equipment kinds return undefined. */
-export function phase3Pose(exerciseId: string, equipmentKind?: string): string | undefined {
-  const kinds = EQUIPMENT_KINDS[exerciseId];
-  if (!kinds) return undefined;
-  if (equipmentKind && !kinds.includes(equipmentKind)) return undefined;
+/** Verified pose for a live station or swap, including exercise-specific instances of the seed machine. */
+export function phase3Pose(exerciseId: string, equipment: { id: string; kind: string; name: string }): string | undefined {
   const exercise = exerciseById.get(exerciseId);
-  return exercise ? stationDemo(exercise)?.poseId : undefined;
+  const seed = SEED_EQUIPMENT.find((row) => row.id === phase3EquipmentId(exerciseId));
+  if (!exercise || !seed || equipment.kind !== seed.kind) return undefined;
+  // Existing per-exercise machines have generated IDs and a name derived from their exercise and seed.
+  const instance = seed.kind === 'machine' && equipment.name === `${exercise.name} — ${seed.name}`;
+  return equipment.id === seed.id || instance ? stationDemo(exercise)?.poseId : undefined;
 }

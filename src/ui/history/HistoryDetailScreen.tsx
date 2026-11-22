@@ -100,6 +100,11 @@ export function HistoryDetailScreen({ id }: { id: string }) {
             <p>{result.status === 'skipped' ? 'Skipped' : 'Completed'}{block.kind !== 'strength' && ` · ${Math.floor(result.elapsedMs / 1000)} sec`}</p>
             {result.rounds !== undefined && <p>{result.rounds === null ? 'Rounds unreported' : `${result.rounds} rounds`}</p>}
             {result.partial && partial && <p>Partial · {exerciseName(partial.exerciseId)} · {result.partial.count} {result.partial.unit}</p>}
+            {result.stationChanges?.map((change, i, changes) => {
+              const first = (changes[i - 1]?.afterRound ?? 0) + 1;
+              const label = first === change.afterRound ? `Tapped round ${first}` : `Tapped rounds ${first}–${change.afterRound}`;
+              return <p key={change.afterRound}>{label} · {change.stations.filter((s) => !s.skipped).map((s) => exerciseName(s.exerciseId)).join(', ')}</p>;
+            })}
             {result.stations && <ul class="plan">{result.stations.map((s) => <li key={s.slotId}>
               <span>{s.swappedFromExerciseId && `${exerciseName(s.swappedFromExerciseId)} → `}{exerciseName(s.exerciseId)}</span>
               <span>{s.skipped ? 'Skipped' : stationTargetLine(s.exerciseId, s.target.amount, s.target.unit, s.load)}</span>

@@ -129,7 +129,7 @@ const keyed = (key: string, min: number, max: number, check: Check): Check => (v
   && v.every((item) => isRec(item) && id(item[key]) && check(item))
   && new Set(v.map((item: Rec) => item[key])).size === v.length;
 const dict = (check: Check): Check => (v) => isRec(v) && Object.entries(v).every(([key, item]) => id(key) && check(item));
-const noActuals = (v: Rec) => ['log', 'result', 'skipped', 'swappedFromExerciseId', 'poseId', 'rounds', 'partial']
+const noActuals = (v: Rec) => ['log', 'result', 'skipped', 'swappedFromExerciseId', 'poseId', 'rounds', 'partial', 'stationChanges']
   .every((key) => !Object.hasOwn(v, key));
 const orderedStation: Check = (v) => isRec(v) && noActuals(v) && opt(id)(v.equipmentId) && libraryStation(v);
 const effectiveStation = shape({ slotId: id, equipmentId: opt(id), poseId: opt(id), skipped: opt(bool), swappedFromExerciseId: opt(id) });
@@ -148,12 +148,13 @@ const orderedBlock: Check = (v) => {
 };
 const ordered = shape({ name: id, blocks: keyed('id', 1, 30, orderedBlock) });
 const stations = keyed('slotId', 1, 6, (v) => isRec(v) && effectiveStation(v) && libraryStation(v));
+const stationChanges = arr(shape({ afterRound: integer, stations }));
 const partial = shape({ slotId: id, unit: stationUnit, count: nonnegative });
 const timer = shape({ startedAt: nullable(num), pausedAt: nullable(num), pausedMs: nonnegative, durationMs: nonnegative, frozenElapsedMs: opt(nonnegative) });
-const draft = shape({ rounds: nullable(integer), tapped: integer, partial: opt(partial) });
+const draft = shape({ rounds: nullable(integer), tapped: integer, partial: opt(partial), stationChanges: opt(stationChanges) });
 const mixedResult = shape({
   status: oneOf('completed', 'skipped'), elapsedMs: nonnegative, rounds: opt(nullable(integer)),
-  partial: opt(partial), stations: opt(stations),
+  partial: opt(partial), stations: opt(stations), stationChanges: opt(stationChanges),
 });
 const mixedShape = shape({
   kind: oneOf('ordered'), sourceId: id, prescription: ordered,
@@ -181,7 +182,7 @@ function validMixed(row: Rec): boolean {
     if (!!r !== (i < current || (i === current && !!row.endedAt))) return false;
     if ((i === current && m.cursor.setSlot > (accepted?.sets ?? 0)) || (i > current && t)) return false;
     if (b.kind === 'strength') {
-      if (!accepted || effective || d || t || r?.stations || r?.partial || r?.rounds !== undefined || (r && r.elapsedMs !== 0)) return false;
+      if (!accepted || effective || d || t || r?.stations || r?.partial || r?.stationChanges || r?.rounds !== undefined || (r && r.elapsedMs !== 0)) return false;
       if (i === current && r && (r.status === 'skipped') !== (m.cursor.setSlot === 0)) return false;
       return i !== current || (m.cursor.stage === 'entry' ? m.cursor.setSlot === 0 : m.cursor.stage === 'review' || (m.cursor.setSlot > 0 && m.cursor.setSlot < accepted.sets));
     }
@@ -192,13 +193,15 @@ function validMixed(row: Rec): boolean {
     if (t && (t.durationMs !== b.durationSec * 1000 || (t.pausedAt !== null && (t.startedAt === null || t.pausedAt < t.startedAt))
       || (t.frozenElapsedMs !== undefined && t.frozenElapsedMs > t.durationMs))) return false;
     if (r && (r.elapsedMs !== t?.frozenElapsedMs || (r.status === 'skipped') !== (t.startedAt === null))) return false;
-    if (b.kind !== 'self-paced') return !effective && !d && !r?.stations && !r?.partial && r?.rounds === undefined;
+    if (b.kind !== 'self-paced') return !effective && !d && !r?.stations && !r?.partial && !r?.stationChanges && r?.rounds === undefined;
     const matches = (list: EffectiveStation[] | undefined) =>
       list?.length === b.stations.length && list.every((s, k) => s.slotId === b.stations[k]?.slotId);
     const validPartial = (value: MixedDraft['partial'], list: EffectiveStation[] | undefined) =>
       !value || list?.some((s) => !s.skipped && s.slotId === value.slotId && s.target.unit === value.unit);
-    return matches(effective) && !!d && validPartial(d.partial, effective)
-      && (!r || (r.rounds !== undefined && matches(r.stations) && validPartial(r.partial, r.stations)));
+    const validChanges = (changes: MixedDraft['stationChanges']) => !changes || changes.every((change, k) =>
+      change.afterRound > (changes[k - 1]?.afterRound ?? 0) && change.afterRound <= (d?.tapped ?? 0) && matches(change.stations));
+    return matches(effective) && !!d && validPartial(d.partial, effective) && validChanges(d.stationChanges)
+      && (!r || (r.rounds !== undefined && matches(r.stations) && validPartial(r.partial, r.stations) && validChanges(r.stationChanges)));
   });
 }
 

@@ -30,7 +30,7 @@ export interface PoseDef {
   anchor: 'feet' | 'hands' | 'hip';
   frames: Keyframe[];
   implement?: 'bar' | 'db' | 'kb' | 'handle' | 'none';
-  prop?: 'bench' | 'shoulder-bench' | 'box' | 'incline' | 'seat' | 'floor' | 'none';
+  prop?: 'bench' | 'shoulder-bench' | 'box' | 'incline' | 'seat' | 'floor' | 'rower' | 'none';
   cable?: { x: number; y: number };
 }
 export interface Pt { x: number; y: number }
@@ -180,6 +180,10 @@ export function layout(def: PoseDef): Layout {
   let propRect: Layout['propRect'];
   if (def.prop === 'box') propRect = { x: anchorAt.x - 10, y: anchorAt.y, w: 32, h: 27 };
   if (def.prop === 'shoulder-bench') propRect = { x: raw0.neck.x - 32, y: raw0.neck.y + 4.5, w: 30, h: 8 };
+  if (def.prop === 'rower') {
+    const x = Math.min(...frames.map((f) => skeleton(f, def.anchor, anchorAt).hip.x)) - 16;
+    propRect = { x, y: hip0.y + 11, w: anchorAt.x + 66 - x, h: 6 };
+  }
   const pts: Pt[] = [];
   const collect = (a: FullAngles) => pts.push(...Object.values(skeleton(a, def.anchor, anchorAt)));
   frames.forEach((f, i) => {

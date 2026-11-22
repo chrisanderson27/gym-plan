@@ -1,9 +1,8 @@
 import { exerciseById } from '../../content';
 import { POSES } from '../../content/poses';
 import { exerciseName } from '../labels';
-import { PauseIcon, PlayIcon, SwapIcon } from '../icons';
-import { StickFigure } from '../pose/StickFigure';
-import { PoseView } from '../slots/PoseView';
+import { SwapIcon } from '../icons';
+import { PosePlaybackButton, PoseView } from '../slots/PoseView';
 import { stationGearLabel } from './gearLabel';
 
 const PER_SIDE = new Set(['reverse-lunge', 'step-up', 'bulgarian-split-squat', 'dead-bug']);
@@ -35,17 +34,12 @@ export function StationCard({ exerciseId, equipmentId, poseId, index, target, pl
         <p class="gym-idx">{String(index + 1).padStart(2, '0')}</p>
         {onSwap && <button type="button" class="station-swap" aria-label={`Swap ${name}`} disabled={disabled} onClick={onSwap}><SwapIcon /></button>}
       </div>
-      {pose && <StickFigure key={`${exerciseId}:${equipmentId}:${poseId}`} def={pose} label={name} testId={`pose-${exerciseId}`} running={playing} />}
-      <PoseView exerciseId={exerciseId} />
+      <PoseView key={`${exerciseId}:${equipmentId}:${poseId}`} exerciseId={exerciseId} poseId={poseId} running={playing} />
       <h3>{name}</h3>
       <p class="gym-meta">{gear}</p>
       <p class="gym-target">{target}</p>
       {status && <p class="gym-meta">{status}</p>}
-      {pose && (
-        <button type="button" class="block-icon" aria-label={playing ? `Pause ${name}` : `Play ${name}`} aria-pressed={playing} onClick={onPlay}>
-          {playing ? <PauseIcon /> : <PlayIcon />}
-        </button>
-      )}
+      {pose && <PosePlaybackButton name={name} playing={playing} onPlay={onPlay} />}
     </article>
   );
 }
