@@ -90,6 +90,7 @@ it('rejects a bad library row and leaves the database unchanged', async () => {
     selfPaced({ stations: [{ exerciseId: 'leg-press', target: { unit: 'sec', amount: 30 } }] }),
     selfPaced({ name: '' }),
     selfPaced({ durationSec: 59 }),
+    selfPaced({ durationSec: 480.5 }),
     selfPaced({ durationSec: 3660 }),
     selfPaced({ stations: [{ exerciseId: 'leg-press', target: { unit: 'reps', amount: 10 }, load: -1 }] }),
     { ...selfPaced(), kind: 'coached' as const, restSec: 0, transitionSec: 10 },
@@ -98,12 +99,22 @@ it('rejects a bad library row and leaves the database unchanged', async () => {
   expect(await db.libraryBlocks.toArray()).toEqual(before);
 });
 
-it.each([
-  ['a non-whole-minute duration', selfPaced({ durationSec: 481 })],
-  ['duplicate exercises', selfPaced({ stations: [...selfPaced().stations, ...selfPaced().stations] })],
-  ['a whitespace-only name', selfPaced({ name: '   ' })],
-])('rejects importing a block with %s', (_, row) => {
-  expect(() => parseExport(file({ libraryBlocks: [row] }))).toThrow(ImportError);
+it('restores a backup containing a block accepted by the original schema 2 validator', async () => {
+  const station = selfPaced().stations[0]!;
+  const legacy = [
+    selfPaced({ durationSec: 481 }),
+    selfPaced({ id: 'duplicate', stations: [station, station] }),
+    selfPaced({ id: 'blank-name', name: '   ' }),
+  ];
+  const src = open();
+  await importExport(src, parseExport(file({ settings: [settings], libraryBlocks: [...legacy, coached()] })).file);
+  const text = JSON.stringify(await buildExport(src, new Date('2026-11-21T00:00:00.000Z'), 'test'));
+
+  const dst = open();
+  await importExport(dst, parseExport(text).file);
+  for (const row of legacy) expect(await dst.libraryBlocks.get(row.id)).toEqual(row);
+  expect(await dst.libraryBlocks.get('lb2')).toEqual(coached());
+  expect(await dst.settings.get('settings')).toMatchObject({ goalWeightLb: settings.goalWeightLb });
 });
 
 it('imports a coached row and an unknown exercise id', async () => {

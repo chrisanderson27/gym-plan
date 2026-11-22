@@ -12,8 +12,8 @@
  * `ms + holdMs`.
  *
  * `PoseDef` is mirrored structurally in content/types.ts (the eslint fence keeps content and engine
- * from importing each other). Prop and cable coordinates are offsets in the view box from frame 0's
- * hip (props) or the anchor point (cable), x right, y down.
+ * from importing each other). Props are positioned from frame 0. Cable coordinates are offsets
+ * from the anchor point, x right, y down.
  */
 export type Bone =
   | 'torso' | 'head'
@@ -160,8 +160,9 @@ export function skeleton(angles: FullAngles, anchor: PoseDef['anchor'], anchorAt
 
 export interface Layout {
   anchorAt: Pt;
-  /** Frame 0's hip: props are drawn relative to it. */
+  /** Frame 0's hip. */
   hip0: Pt;
+  propRect?: { x: number; y: number; w: number; h: number };
   viewBox: { x: number; y: number; w: number; h: number };
 }
 
@@ -176,6 +177,9 @@ export function layout(def: PoseDef): Layout {
   const raw0 = place(frames[0]!);
   const anchorAt = anchorPoint(raw0, def.anchor);
   const hip0 = raw0.hip;
+  let propRect: Layout['propRect'];
+  if (def.prop === 'box') propRect = { x: anchorAt.x - 10, y: anchorAt.y, w: 32, h: 27 };
+  if (def.prop === 'shoulder-bench') propRect = { x: raw0.neck.x - 32, y: raw0.neck.y + 4.5, w: 30, h: 8 };
   const pts: Pt[] = [];
   const collect = (a: FullAngles) => pts.push(...Object.values(skeleton(a, def.anchor, anchorAt)));
   frames.forEach((f, i) => {
@@ -185,6 +189,7 @@ export function layout(def: PoseDef): Layout {
   });
   if (def.cable) pts.push({ x: anchorAt.x + def.cable.x, y: anchorAt.y + def.cable.y });
   if (def.prop && def.prop !== 'none') pts.push({ x: hip0.x - 50, y: hip0.y + 8 }, { x: hip0.x + 50, y: hip0.y - 50 });
+  if (propRect) pts.push({ x: propRect.x, y: propRect.y }, { x: propRect.x + propRect.w, y: propRect.y + propRect.h });
   const xs = pts.map((p) => p.x);
   const ys = pts.map((p) => p.y);
   let minX = Math.min(...xs) - PAD;
@@ -199,5 +204,5 @@ export function layout(def: PoseDef): Layout {
   const h = maxY - minY;
   if (w / h < VIEW_ASPECT) { const grow = h * VIEW_ASPECT - w; minX -= grow / 2; maxX += grow / 2; }
   else { const grow = w / VIEW_ASPECT - h; minY -= grow / 2; maxY += grow / 2; }
-  return { anchorAt, hip0, viewBox: { x: minX, y: minY, w: maxX - minX, h: maxY - minY } };
+  return { anchorAt, hip0, propRect, viewBox: { x: minX, y: minY, w: maxX - minX, h: maxY - minY } };
 }

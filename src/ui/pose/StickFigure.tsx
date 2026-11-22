@@ -18,16 +18,15 @@ const SEGMENTS: { key: string; a: Joint; b: Joint; far?: boolean }[] = [
 const IMPLEMENT_R = { bar: 5, db: 4, kb: 5, handle: 3, none: 0 } as const;
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
-/** Static furniture, drawn relative to frame 0's hip (and across the whole view box for the floor). */
+/** Static furniture positioned from frame 0. */
 function Prop({ def, lay }: { def: PoseDef; lay: Layout }) {
-  const { hip0: h, viewBox: v } = lay;
+  const { hip0: h, propRect, viewBox: v } = lay;
+  if (propRect) {
+    return <rect class="prop" x={r1(propRect.x)} y={r1(propRect.y)} width={propRect.w} height={propRect.h} fill="none" />;
+  }
   switch (def.prop) {
     case 'bench':
       return <line class="prop" x1={r1(h.x - 55)} y1={r1(h.y + 8)} x2={r1(h.x + 15)} y2={r1(h.y + 8)} />;
-    case 'shoulder-bench':
-      return <rect class="prop" x={r1(h.x - 64)} y={r1(h.y - 24)} width="40" height="8" fill="none" />;
-    case 'box':
-      return <rect class="prop" x={r1(lay.anchorAt.x - 10)} y={r1(lay.anchorAt.y)} width="32" height="27" fill="none" />;
     case 'seat':
       return (
         <>

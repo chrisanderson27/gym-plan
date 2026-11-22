@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anglesAt, cycleMs, layout, skeleton } from '../engine/pose';
+import { anglesAt, cycleMs, HEAD_RADIUS, layout, skeleton } from '../engine/pose';
 import { EXERCISES } from './exercises';
 import { LIFT_TEMPLATES } from './lift-templates';
 import { POSES } from './poses';
@@ -49,6 +49,38 @@ describe('poses', () => {
       for (const v of Object.values(viewBox)) expect(Number.isFinite(v), id).toBe(true);
       expect(viewBox.w, id).toBeGreaterThan(0);
       expect(viewBox.h, id).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps the step-up trailing foot behind the box throughout the rep', () => {
+    const def = POSES['step-up']!;
+    const { anchorAt, propRect: box } = layout(def);
+    for (let t = 0; t < cycleMs(def); t += 10) {
+      const { ankleF, toeF } = skeleton(anglesAt(def, t), def.anchor, anchorAt);
+      // The foot and box outlines extend 2 and 1.5 SVG units, respectively.
+      expect(Math.max(ankleF.x, toeF.x) + 3.5, `foot @${t}ms`).toBeLessThan(box!.x);
+    }
+  });
+
+  it('keeps the hip-thrust bench under the shoulders and clear of the head and torso', () => {
+    const def = POSES['hip-thrust']!;
+    const { anchorAt, propRect } = layout(def);
+    const { x, y, w, h } = propRect!;
+    const distanceToBench = (px: number, py: number) =>
+      Math.hypot(Math.max(x - px, 0, px - x - w), Math.max(y - py, 0, py - y - h));
+    for (let t = 0; t < cycleMs(def); t += 10) {
+      const { hip, neck, head } = skeleton(anglesAt(def, t), def.anchor, anchorAt);
+      expect(neck.y, `shoulders @${t}ms`).toBeLessThan(y);
+      expect(distanceToBench(neck.x, neck.y), `shoulder support @${t}ms`).toBeLessThan(6);
+      expect(distanceToBench(head.x, head.y), `head @${t}ms`).toBeGreaterThan(HEAD_RADIUS + 3);
+      let torsoClearance = Infinity;
+      for (let i = 0; i <= 100; i++) {
+        const fraction = i / 100;
+        torsoClearance = Math.min(torsoClearance, distanceToBench(
+          neck.x + (hip.x - neck.x) * fraction, neck.y + (hip.y - neck.y) * fraction,
+        ));
+      }
+      expect(torsoClearance, `torso @${t}ms`).toBeGreaterThan(3.5);
     }
   });
 

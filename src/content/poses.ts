@@ -60,8 +60,8 @@ export const POSES: Record<string, PoseDef> = {
   'hip-thrust': {
     view: 'side', anchor: 'feet', implement: 'bar', prop: 'shoulder-bench',
     frames: [
-      { angles: { torso: 235, head: 235, ...legs(120, 0), ...arms(60, 90) } },
-      { angles: { torso: 265, head: 265, ...legs(85, 0) }, ms: 900, holdMs: 400 },
+      { angles: { torso: 235, head: 190, ...legs(120, 0), ...arms(60, 90) } },
+      { angles: { torso: 265, ...legs(80, 339) }, ms: 900, holdMs: 400 },
     ],
   },
   'pull-through': {
@@ -82,7 +82,7 @@ export const POSES: Record<string, PoseDef> = {
     view: 'side', anchor: 'feet', implement: 'db', prop: 'box',
     frames: [
       { angles: { torso: 175, head: 180, thighN: 70, shinN: 350, thighF: 0, shinF: 0, ...arms(0, 0) } },
-      { angles: { torso: 180, thighN: 0, shinN: 0, thighF: 80, shinF: 10 }, ms: 900, holdMs: 300 },
+      { angles: { torso: 180, thighN: 0, shinN: 0, thighF: 350, shinF: 325 }, ms: 900, holdMs: 300 },
     ],
   },
   'calf-raise': {
