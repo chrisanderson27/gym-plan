@@ -18,6 +18,7 @@ import { ProgressScreen } from './ui/ProgressScreen';
 import { showTabs, TabBar } from './ui/TabBar';
 import { useRoute } from './ui/router';
 import { SettingsScreen } from './ui/Settings';
+import { setCuesEnabled } from './platform/audio';
 import { applyAppearance } from './ui/theme';
 import { UpdatePrompt } from './ui/UpdatePrompt';
 
@@ -34,6 +35,9 @@ export function App() {
   useEffect(() => {
     if (appearance) applyAppearance(appearance);
   }, [appearance]);
+  useEffect(() => {
+    if (settings) setCuesEnabled(settings.soundCues !== false);
+  }, [settings]);
 
   let body;
   if (settings === undefined) {

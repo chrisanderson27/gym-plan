@@ -31,3 +31,11 @@ session_prefix = "gym-plan-e2e"
 
 [worker]
 allow = ["npm install", "npm ci", "npm run", "npm test", "npx playwright", "npx vite", "npx tsc", "npx vitest"]
+
+[figma]
+checks     = "per-phase"
+enabled    = true
+file_key   = "YSNUOtf7qxvINzYofFDdDp"
+bundle_dir = ".agents/figma"
+token_env  = "FIGMA_TOKEN"
+

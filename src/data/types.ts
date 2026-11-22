@@ -289,4 +289,8 @@ export interface Settings {
   updatedAt: ISODateTime;
   /** UI theme preference; absent = 'light'. */
   appearance?: Appearance;
+  /** Absent means sound cues play. */
+  soundCues?: boolean;
+  /** Checklist ids the gym does not have. Absent or empty means every row is available. */
+  unavailableEquipment?: string[];
 }

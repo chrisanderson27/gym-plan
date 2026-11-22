@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { EXERCISES } from '../../content';
+import { blockedExerciseIds } from '../../content/equipment-prefs';
 import type { Equipment, ExerciseOverride } from '../../data/types';
 import { generateLift, pickSubstitute } from './generator';
 import type { LiftExercise, LiftSnapshot } from './types';
@@ -35,6 +37,12 @@ describe('generateLift', () => {
   });
   it('notAtMyGym on leg-press picks hack-squat', () => {
     const p = gen(snap('2026-01-01', [{ exerciseId: 'leg-press', notAtMyGym: true }]));
+    expect(ids(p)[0]).toBe('hack-squat');
+  });
+  it('checklist-blocked leg-press substitutes hack-squat', () => {
+    const blocked = blockedExerciseIds(EXERCISES, ['leg-press']);
+    expect([...blocked].sort()).toEqual(['leg-press']);
+    const p = gen(snap('2026-01-01', [...blocked].map((exerciseId) => ({ exerciseId, notAtMyGym: true }))));
     expect(ids(p)[0]).toBe('hack-squat');
   });
   it('weeks 1–4 skip non-joint-friendly exercises', () => {

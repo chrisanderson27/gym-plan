@@ -34,6 +34,8 @@ describe('settings', () => {
     expect(s).not.toHaveProperty('poolLength');
     expect(s).not.toHaveProperty('poolUnit');
     expect(s?.backupAt).toBeNull();
+    expect(s).not.toHaveProperty('soundCues');
+    expect(s).not.toHaveProperty('unavailableEquipment');
     expect(s?.onboardedAt).toBe(now.toISOString());
     expect(await db.bodyLogs.get('2026-11-17')).toEqual({ date: '2026-11-17', weightLb: 247.2, protein: false });
   });
@@ -46,5 +48,15 @@ describe('settings', () => {
     const s = await getSettings(db);
     expect(s?.goalWeightLb).toBe(185);
     expect(s?.updatedAt).toBe(later.toISOString());
+  });
+
+  it('saveSettings stores sound cues and unavailable equipment', async () => {
+    const db = openTestDb();
+    dbs.push(db);
+    await completeOnboarding(db, { bodyweightLb: 200, goalWeightLb: 190, goalDirection: 'lose', activities: ['lift'] }, new Date(2026, 10, 1));
+    await saveSettings(db, { soundCues: false, unavailableEquipment: ['dumbbells'] }, new Date(2026, 10, 2));
+    const s = await getSettings(db);
+    expect(s?.soundCues).toBe(false);
+    expect(s?.unavailableEquipment).toEqual(['dumbbells']);
   });
 });

@@ -1,4 +1,5 @@
 import { EXERCISES, HOME_GYM, LIFT_TEMPLATES, defaultEquipmentFor, exerciseById, type EquipmentTag, type Exercise, type GymProfile } from '../content';
+import { blockedExerciseIds } from '../content/equipment-prefs';
 import { generateLiftDay, type LiftDayInput } from '../engine/block/generate';
 import { seedFrom } from '../engine/block/rng';
 import { localDate } from '../engine/dates';
@@ -6,6 +7,7 @@ import type { BlockExerciseShape } from '../engine/block/rules';
 import type { LiftSnapshot } from '../engine/lift/types';
 import type { GymDb } from './db';
 import { findOpenLiftSession, loadLiftSnapshot, resolveEquipmentId, toLiftExercise, writeLiftSession } from './lift';
+import { getSettings } from './settings';
 import type { LiftVariant, LocalDate } from './types';
 
 export function toBlockExercise(e: Exercise): BlockExerciseShape {
@@ -60,7 +62,11 @@ export function liftDayInputFrom(
 
 export async function planLiftDay(db: GymDb, variant: LiftVariant, budgetMin: number, seed: number, now = new Date()) {
   const snapshot = await loadLiftSnapshot(db, now);
-  return generateLiftDay(liftDayInputFrom(snapshot, variant, budgetMin, seed));
+  const settings = await getSettings(db);
+  return generateLiftDay({
+    ...liftDayInputFrom(snapshot, variant, budgetMin, seed),
+    notAtMyGym: blockedExerciseIds(EXERCISES, settings?.unavailableEquipment ?? []),
+  });
 }
 
 export function liftDaySeed(day: LocalDate, variant: LiftVariant, budgetMin: number): number {

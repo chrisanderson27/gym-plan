@@ -217,4 +217,50 @@ describe('export/import', () => {
     const raw = JSON.stringify({ schemaVersion: 1, exportedAt: '2026-11-12T00:00:00.000Z', appVersion: 't', stores: { sessions: [ok], bodyLogs: [{ date: '2024-02-29', protein: true }] } });
     expect(() => parseExport(raw)).not.toThrow();
   });
+
+  it('round-trips sound cues, equipment, goal, appearance and activities', async () => {
+    const src = open();
+    await src.settings.put(settings({
+      soundCues: false, unavailableEquipment: ['dumbbells', 'lap-pool'], goalWeightLb: 210, appearance: 'dark', activities: ['lift', 'run'],
+    }));
+    const backup = await buildExport(src, new Date('2026-11-20T00:00:00.000Z'), 'test');
+    const dst = open();
+    await importExport(dst, parseExport(JSON.stringify(backup)).file);
+    expect(await dst.settings.get('settings')).toMatchObject({
+      soundCues: false, unavailableEquipment: ['dumbbells', 'lap-pool'], goalWeightLb: 210, appearance: 'dark', activities: ['lift', 'run'],
+    });
+  });
+
+  it('a backup missing the new fields leaves cues on and the checklist empty', async () => {
+    const src = open();
+    await src.settings.put(settings());
+    const backup = await buildExport(src, new Date(), 'test');
+    const dst = open();
+    await importExport(dst, parseExport(JSON.stringify(backup)).file);
+    const saved = await dst.settings.get('settings');
+    expect(saved?.soundCues).toBeUndefined();
+    expect(saved?.soundCues !== false).toBe(true);
+    expect(saved?.unavailableEquipment ?? []).toEqual([]);
+  });
+
+  it('rejects an unknown equipment id', async () => {
+    const src = open();
+    await src.settings.put(settings());
+    const backup = await buildExport(src, new Date(), 'test');
+    const bad = { ...backup, stores: { ...backup.stores, settings: [{ ...settings(), unavailableEquipment: ['not-a-row'] }] } };
+    expect(() => parseExport(JSON.stringify(bad))).toThrow(ImportError);
+  });
+
+  it('an older file does not clobber a newer local checklist', async () => {
+    const db = open();
+    await db.settings.put(settings({ unavailableEquipment: ['dumbbells'], soundCues: true, updatedAt: '2026-11-11T00:00:00.000Z' }));
+    const file = {
+      schemaVersion: 1, exportedAt: '2026-11-12T00:00:00.000Z', appVersion: 't',
+      stores: { settings: [settings({ unavailableEquipment: ['rower'], soundCues: false, updatedAt: '2026-11-01T00:00:00.000Z' })] },
+    };
+    await importExport(db, parseExport(JSON.stringify(file)).file);
+    const row = await db.settings.get('settings');
+    expect(row?.unavailableEquipment).toEqual(['dumbbells']);
+    expect(row?.soundCues).toBe(true);
+  });
 });

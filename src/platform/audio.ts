@@ -4,6 +4,12 @@ interface AudioSessionLike {
 type Ctor = typeof AudioContext;
 
 let ctx: AudioContext | null = null;
+let cuesEnabled = true;
+
+/** Absent preference means on. Callers of beep do not read settings themselves. */
+export function setCuesEnabled(on: boolean): void {
+  cuesEnabled = on;
+}
 
 /** Call from a user tap: iOS only lets audio start inside a gesture. Never throws. */
 export function unlockAudio(): void {
@@ -23,6 +29,7 @@ export function unlockAudio(): void {
 }
 
 export function beep(kind: 'tick' | 'go'): void {
+  if (!cuesEnabled) return;
   try {
     if (!ctx) return;
     const freq = kind === 'tick' ? 880 : 1320;

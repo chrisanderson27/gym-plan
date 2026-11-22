@@ -1,4 +1,5 @@
-import { HOME_GYM, type GymProfile } from '../content';
+import { EXERCISES, HOME_GYM, type GymProfile } from '../content';
+import { blockedExerciseIds } from '../content/equipment-prefs';
 import { BURN_TEMPLATES, type BurnTemplate } from '../content/burn-templates';
 import { estimateBurnMinutes, generateBurn, nextBurnTemplate, type BurnInput } from '../engine/burn';
 import { BURN_DEFAULT_MIN, RESUME_WINDOW_HOURS } from '../engine/config';
@@ -9,17 +10,22 @@ import { weekIndex } from '../engine/week';
 import type { GymDb } from './db';
 import { newId } from './ids';
 import { findOpenLiftSession, findStaleOpenLifts, loadLiftSnapshot } from './lift';
+import { getSettings } from './settings';
 import { BLOCK_EXERCISES, BODYWEIGHT_IDS, blockEquipmentResolver } from './liftday';
 
 type BurnOptions = { templateId?: string; budgetMin?: number };
 
 export function burnInputFrom(
   snapshot: LiftSnapshot, template: BurnTemplate, budgetMin: number, profile: GymProfile = HOME_GYM,
+  blocked: ReadonlySet<string> = new Set(),
 ): BurnInput {
   let i = 0;
   return {
     template, budgetMin, profile, exercises: BLOCK_EXERCISES, bodyweightIds: BODYWEIGHT_IDS,
-    notAtMyGym: new Set([...snapshot.overrides.values()].filter((o) => o.notAtMyGym).map((o) => o.exerciseId)),
+    notAtMyGym: new Set([
+      ...[...snapshot.overrides.values()].filter((o) => o.notAtMyGym).map((o) => o.exerciseId),
+      ...blocked,
+    ]),
     history: snapshot.history, equipment: snapshot.equipment, resolveEquipmentId: blockEquipmentResolver(snapshot),
     weekIdx: weekIndex(localDate(new Date(snapshot.now)), snapshot.programStart),
     makeId: () => `b${i++}`,
@@ -37,10 +43,12 @@ function lastBurnDone(snapshot: LiftSnapshot): Record<string, string> {
 
 export async function planBurn(db: GymDb, { templateId, budgetMin = BURN_DEFAULT_MIN }: BurnOptions = {}, now = new Date()) {
   const snapshot = await loadLiftSnapshot(db, now);
+  const settings = await getSettings(db);
+  const blocked = blockedExerciseIds(EXERCISES, settings?.unavailableEquipment ?? []);
   const id = BURN_TEMPLATES.some((t) => t.id === templateId)
     ? templateId : nextBurnTemplate(BURN_TEMPLATES.map((t) => t.id), lastBurnDone(snapshot));
   const template = BURN_TEMPLATES.find((t) => t.id === id)!;
-  return { template, ...generateBurn(burnInputFrom(snapshot, template, budgetMin)) };
+  return { template, ...generateBurn(burnInputFrom(snapshot, template, budgetMin, HOME_GYM, blocked)) };
 }
 
 export function startOrResumeBurn(db: GymDb, options: BurnOptions = {}, now = new Date()): Promise<string> {

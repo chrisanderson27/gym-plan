@@ -55,7 +55,33 @@
   --scrim: rgba(0, 0, 0, 0.5);
   --white-a30: rgba(255, 255, 255, 0.3);
 
-  --font-sans: -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  --font-sans: Manrope, -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  /* Root-only: the dark theme block must not override these, so Preferences and the tab bar stay light. */
+  --shell-bg: #fcfdf8;
+  --shell-canvas: #f5f6ef;
+  --shell-ink: #172019;
+  --shell-secondary: #596657;
+  --shell-lime: #d2f587;
+  /* #d2f587 is 1.2:1 on the surface, under the 3:1 non-text floor, so the action fill is this hue darkened until ink and the surface both pass. */
+  --shell-action: #7e9351;
+  --shell-action-hover: #7c9150;
+  --shell-action-active: #7a8e4e;
+  --shell-eyebrow: #52633d;
+  --shell-week: #506047;
+  --shell-tab: #667162;
+  --shell-tab-on: #375228;
+  --shell-tab-wash: #e6efd3;
+  --shell-check: #698539;
+  --shell-line: #e3e7da;
+  --shell-header: rgba(252, 253, 248, 0.75);
+  --shell-peach: #f7e9df;
+  --shell-peach-ink: #98502f;
+  --shell-mint: #e4eee3;
+  --shell-mint-ink: #39714b;
+  --shell-exclude: #506939;
+  --shell-week-icon: #6b804b;
+  --shell-dot: #77953a;
   --text-12: 0.75rem;
   --text-14: 0.875rem;
   --text-16: 1rem;
@@ -95,6 +121,42 @@
   --timer-primary-text: var(--gray-100);
 }
 
+@font-face {
+  font-family: Manrope;
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/manrope-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: Manrope;
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./fonts/manrope-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: Manrope;
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/manrope-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: Manrope;
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('./fonts/manrope-800.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/ibm-plex-mono-700.woff2') format('woff2');
+}
+
 :root, [data-theme='light'], [data-theme='system'] {
   color-scheme: light;
   --act-lift: #4f46e5;
@@ -107,17 +169,17 @@
   --on-act-swim: var(--gray-0);
   --act-hybrid: var(--act-lift);
   --on-act-hybrid: var(--on-act-lift);
-  --color-canvas: var(--gray-10);
-  --color-surface: var(--gray-0);
+  --color-canvas: var(--shell-canvas);
+  --color-surface: var(--shell-bg);
   --color-surface-hover: var(--gray-10-hover);
   --color-border-subtle: var(--gray-20);
   --color-border-strong: var(--gray-50);
-  --color-text-primary: var(--gray-100);
-  --color-text-secondary: var(--gray-70);
-  --color-action: var(--blue-60);
-  --color-action-hover: var(--blue-60-hover);
-  --color-action-active: var(--blue-80);
-  --color-on-action: var(--gray-0);
+  --color-text-primary: var(--shell-ink);
+  --color-text-secondary: var(--shell-secondary);
+  --color-action: var(--shell-action);
+  --color-action-hover: var(--shell-action-hover);
+  --color-action-active: var(--shell-action-active);
+  --color-on-action: var(--shell-ink);
   --color-link: var(--blue-60);
   --color-focus: var(--blue-60);
   --color-success-text: var(--green-60);
@@ -238,6 +300,41 @@
     --color-selected-text: var(--blue-40);
     --pose-implement: var(--blue-40);
   }
+}
+
+/* Drawn Preferences frame stays on the light shell when Appearance is dark. */
+.preferences {
+  color-scheme: light;
+  --color-canvas: var(--shell-canvas);
+  --color-surface: var(--shell-bg);
+  --color-surface-hover: var(--gray-10-hover);
+  --color-text-primary: var(--shell-ink);
+  --color-text-secondary: var(--shell-secondary);
+  --color-border-subtle: var(--gray-20);
+  --color-border-strong: var(--gray-50);
+  --color-action: var(--shell-action);
+  --color-action-hover: var(--shell-action-hover);
+  --color-action-active: var(--shell-action-active);
+  --color-on-action: var(--shell-ink);
+  --color-link: var(--blue-60);
+  --color-focus: var(--blue-60);
+  --color-selected-bg: var(--blue-10);
+  --color-selected-text: var(--blue-60);
+  --color-success-text: var(--green-60);
+  --color-success-tint: var(--green-10);
+  --color-danger: var(--red-60);
+  --color-danger-text: var(--red-60);
+  --color-danger-tint: var(--red-10);
+  --color-on-danger: var(--gray-0);
+  --color-warning-text: var(--yellow-70);
+  --color-warning-tint: var(--yellow-10);
+  --color-warning-accent: var(--yellow-30);
+}
+
+/* Live workout palette from frame 2:1126. Nothing sets data-surface in this phase. */
+[data-surface='live'] {
+  --color-canvas: #151d17;
+  --color-surface: #202923;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -22,11 +22,12 @@ export interface CardProps {
   onEquipment: () => void;
   onNotAtMyGym: () => void;
   onSwapTo: (exerciseId: string) => void;
+  blocked: Set<string>;
 }
 
 const RIRS = [{ v: 0, label: '0' }, { v: 1, label: '1–2' }, { v: 3, label: '3+' }] as const;
 
-export function FocusLift({ block, sets, snapshot, session, flags, onSwapTo, onLogged, primary }: CardProps & {
+export function FocusLift({ block, sets, snapshot, session, flags, onSwapTo, onLogged, primary, blocked }: CardProps & {
   onLogged: (row: SetRow) => void;
   primary: boolean;
 }) {
@@ -104,7 +105,7 @@ export function FocusLift({ block, sets, snapshot, session, flags, onSwapTo, onL
   const { weight, reps } = view();
   const delta = lastTime && weight - lastTime.weight;
   const sub = painSwapOffer(block.exerciseId, snapshot.history, sets, new Date().toISOString())
-    ? pickSubstitute(block.exerciseId, LIFT_EXERCISES, snapshot.overrides, { jointFriendlyOnly: true })
+    ? pickSubstitute(block.exerciseId, LIFT_EXERCISES, snapshot.overrides, { jointFriendlyOnly: true, exclude: blocked })
     : null;
 
   return (

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'preact/hooks';
-import { LIFT_TEMPLATES, exerciseById } from '../../content';
+import { EXERCISES, LIFT_TEMPLATES, exerciseById } from '../../content';
+import { blockedExerciseIds } from '../../content/equipment-prefs';
 import { db } from '../../data/db';
 import {
   LIFT_EXERCISES, changeBlockEquipment, loadLiftSnapshot, prescribeExercise,
   saveCircuitLog, setNotAtMyGym, setPainFlag, swapBlockExercise, undoLastSet,
 } from '../../data/lift';
 import { useLiveQuery } from '../../data/live';
+import { getSettings } from '../../data/settings';
 import type { CircuitBlock, CircuitLog, LiftBlock, RunBlock, SetRow } from '../../data/types';
 import { estimateLiftDayMinutes } from '../../engine/block/generate';
 import { REST_DEFAULT_SEC } from '../../engine/config';
@@ -61,9 +63,14 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
     const session = await db.sessions.get(sessionId);
     const sets = await db.sets.where('sessionId').equals(sessionId).toArray();
     const full = await loadLiftSnapshot(db);
+    const settings = await getSettings(db);
     const template = session?.type === 'custom' && session.templateId ? await db.templates.get(session.templateId) : undefined;
     // Progression reads history only: the session being logged must not feed its own prescription.
-    return { session, sets, templateName: template?.name, snapshot: { ...full, history: full.history.filter((h) => h.session.id !== sessionId) } };
+    return {
+      session, sets, templateName: template?.name,
+      snapshot: { ...full, history: full.history.filter((h) => h.session.id !== sessionId) },
+      blocked: blockedExerciseIds(EXERCISES, settings?.unavailableEquipment ?? []),
+    };
   }, [sessionId]);
   const [sheet, setSheet] = useState<ChangeSheet>(null);
   const [prompt, setPrompt] = useState<'finish' | 'discard' | null>(null);
@@ -82,7 +89,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
   }, [data, i, index]);
 
   if (!data) return <main class="screen"><h1>Session</h1></main>;
-  const { session, sets, snapshot, templateName } = data;
+  const { session, sets, snapshot, templateName, blocked } = data;
   if (!session) {
     return <main class="screen"><h1>Session not found</h1><a class="btn" href="#/lift">Back to Lift</a></main>;
   }
@@ -97,6 +104,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
   const weekIdx = weekIndex(localDate(new Date(session.date)), snapshot.programStart);
   const flags = { deload: !!session.flags?.deload, rampIn: isRampInWeek(weekIdx) };
   const planned = new Set(session.blocks.flatMap((b) => b.kind === 'lift' && !b.warmup ? [b.exerciseId] : []));
+  const exclude = new Set<string>([...planned, ...blocked]);
   const history = snapshot.history.filter((h) => h.session.endedAt && h.session.date <= session.date);
   const rowsFor = (block: LiftBlock) => sets.filter((row) => row.exerciseId === block.exerciseId && row.equipmentId === (block.equipmentId ?? ''));
   const done = (block: LiftBlock) => stepDone({ kind: 'lift', blocks: [block] }, sets);
@@ -131,7 +139,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
   const notAtMyGym = (block: LiftBlock) => act(async () => {
     await setNotAtMyGym(db, block.exerciseId, true);
     const overrides = new Map(snapshot.overrides).set(block.exerciseId, { exerciseId: block.exerciseId, notAtMyGym: true });
-    const substitute = pickSubstitute(block.exerciseId, LIFT_EXERCISES, overrides, { exclude: planned });
+    const substitute = pickSubstitute(block.exerciseId, LIFT_EXERCISES, overrides, { exclude });
     if (substitute) await swapTo(block, substitute);
   });
   const logged = (block: LiftBlock, row: SetRow) => {
@@ -158,7 +166,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
   const calibrationAdvance = cards.filter(({ calibrating }) => calibrating).at(-1);
   const cardFor = ({ block, mine, calibrating }: (typeof cards)[number]) => {
     const props = {
-      session, block, sets: mine, snapshot, flags,
+      session, block, sets: mine, snapshot, flags, blocked,
       onSwap: () => setSheet({ kind: 'swap', block }),
       onEquipment: () => setSheet({ kind: 'equip', block }),
       onNotAtMyGym: () => notAtMyGym(block),
@@ -279,7 +287,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
       )}
 
       {sheet?.kind === 'swap' && (
-        <SwapSheet exerciseId={sheet.block.exerciseId} overrides={snapshot.overrides} exclude={planned}
+        <SwapSheet exerciseId={sheet.block.exerciseId} overrides={snapshot.overrides} exclude={exclude}
           onPick={(id) => swapTo(sheet.block, id)} onClose={() => setSheet(null)} />
       )}
       {sheet?.kind === 'equip' && (

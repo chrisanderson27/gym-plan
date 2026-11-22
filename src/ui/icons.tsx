@@ -17,6 +17,8 @@ export const BurnIcon = icon(<path d="m13 2-9 12h7l-1 8 10-12h-7z" />);
 export const RunIcon = icon(<><circle cx="16" cy="4" r="2" /><path d="m6 8 5-1 5 5 4-1m-7-2-3 6 5 3v4M3 20l4-1 3-4" /></>);
 export const SwimIcon = icon(<><circle cx="17" cy="8" r="2" /><path d="m4 13 5-4 5 4m-12 3c3 0 3-2 5-2s3 2 5 2 3-2 5-2 3 2 5 2M2 21c3 0 3-2 5-2s3 2 5 2 3-2 5-2 3 2 5 2" /></>);
 export const TodayIcon = icon(<path d="m3 10 9-7 9 7v10H3zm7 10v-6h4v6" />);
+export const WorkoutsIcon = icon(<path d="M6 9v6M18 9v6M3 10v4m18-4v4M6 12h12" />);
+export const BlocksIcon = icon(<path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z" />);
 export const ProgressIcon = icon(<path d="M3 3v18h18M8 16v-4m5 4V8m5 8V4" />);
 export const SettingsIcon = icon(<><path d="M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6m-6 0v6" /></>);
 export const MoreIcon = icon(<><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>);
@@ -32,6 +34,8 @@ export const RingIcon = icon(<path d="M12 3a9 9 0 1 0 9 9h-9z" />);
 export const FlameIcon = icon(<path d="M12 2c1 6 7 7 7 13a7 7 0 0 1-14 0c0-3 2-5 4-7 0 2 1 3 2 3 2-3 1-6 1-9Z" />);
 export const ScaleIcon = icon(<path d="M4 4h16v16H4zm4 7a4 4 0 0 1 8 0m-4-1 1-2" />);
 export const HistoryIcon = icon(<path d="M3 12a9 9 0 1 1 3 7M3 6v6h6m3-5v5l4 2" />);
+export const CalendarIcon = icon(<><rect x="4" y="5" width="16" height="14" rx="2" /><path d="M8 3v4m8-4v4M4 10h16" /></>);
+export const PersonIcon = icon(<><circle cx="12" cy="8" r="3" /><path d="M6 19c1.2-3 3.2-4.5 6-4.5s4.8 1.5 6 4.5" /></>);
 
 const ACTIVITY_ICONS = { lift: LiftIcon, burn: BurnIcon, run: RunIcon, swim: SwimIcon };
 

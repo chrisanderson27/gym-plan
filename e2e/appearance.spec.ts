@@ -2,7 +2,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { onboard } from './helpers';
 
 const canvas = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-const LIGHT = 'rgb(244, 244, 244)';
+const LIGHT = 'rgb(245, 246, 239)';
+const SHELL = 'rgb(245, 246, 239)';
 const DARK = 'rgb(22, 22, 22)';
 
 test('appearance: light default, dark persists across reload, system follows OS', async ({ page }) => {
@@ -13,6 +14,10 @@ test('appearance: light default, dark persists across reload, system follows OS'
   await page.getByRole('link', { name: 'Settings' }).click();
   await page.getByLabel('Appearance').selectOption('dark');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('main')).toHaveCSS('background-color', SHELL);
+  await page.getByRole('link', { name: 'Today' }).click();
+  expect(await canvas(page)).toBe(DARK);
+  await page.getByRole('link', { name: 'Settings' }).click();
   expect(await canvas(page)).toBe(DARK);
 
   await page.addInitScript(() =>

@@ -1,3 +1,4 @@
+import { EQUIPMENT_PREF_IDS } from '../content/equipment-prefs';
 import { ACTIVITIES } from '../engine/plan/activities';
 import { ImportError } from './errors';
 import type { StoreName } from './stores';
@@ -129,6 +130,7 @@ const ROW_SHAPES: Record<StoreName, Check> = {
     goalDirection: opt(oneOf(...GOAL_DIRECTIONS)),
     weightUnit: oneOf('lb'), distanceUnit: oneOf('mi'), programStart: localDate, onboardedAt: iso,
     backupAt: nullable(iso), updatedAt: iso, startWeightLb: opt(num), appearance: opt(oneOf(...APPEARANCES)),
+    soundCues: opt(bool), unavailableEquipment: opt(arr(oneOf(...EQUIPMENT_PREF_IDS))),
   }),
 };
 

@@ -30,7 +30,7 @@ export function CalibrationCard(p: CardProps & { advance?: { label: string; onCl
   const [weight, setWeight] = useState<number | null>(null);
   const w = weight ?? nextWeight;
   const sub = painSwapOffer(block.exerciseId, snapshot.history, p.sets, new Date().toISOString())
-    ? pickSubstitute(block.exerciseId, LIFT_EXERCISES, snapshot.overrides, { jointFriendlyOnly: true })
+    ? pickSubstitute(block.exerciseId, LIFT_EXERCISES, snapshot.overrides, { jointFriendlyOnly: true, exclude: p.blocked })
     : null;
   const awaitingAnswer = !!last && last.rir === undefined;
   const stopped = !!last && last.rir !== undefined && !heavier;

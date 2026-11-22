@@ -1,15 +1,23 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { EXERCISES, exerciseById } from '../content';
+import { EQUIPMENT_PREFS } from '../content/equipment-prefs';
 import { buildExport, ImportError, importExport, markBackedUp, parseExport } from '../data/backup';
 import { db } from '../data/db';
+import { setNotAtMyGym } from '../data/lift';
+import { useLiveQuery } from '../data/live';
 import { enabledActivities, poolOf, saveSettings } from '../data/settings';
 import type { Appearance, PoolUnit, Settings as SettingsRow } from '../data/types';
 import { daysBetween, localDate } from '../engine/dates';
+import type { Activity } from '../engine/plan/activities';
+import { weekIndex } from '../engine/week';
 import { isStandalone } from '../platform/display';
 import { deliverFile, backupFileName } from '../platform/share';
 import { isPersisted } from '../platform/storage';
 import { FeedbackList } from './feedback/FeedbackList';
+import { CalendarIcon, ChevronIcon, PersonIcon, PlusIcon, WorkoutsIcon } from './icons';
 import { ActivityChoices, DirectionChoices } from './Onboarding';
 import { PoolSheet } from './PoolSheet';
+import { Sheet } from './Sheet';
 
 declare const __APP_VERSION__: string;
 
@@ -18,6 +26,26 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
   const [message, setMessage] = useState('');
   const [activityError, setActivityError] = useState(false);
   const [showPool, setShowPool] = useState(false);
+  const [excludeOpen, setExcludeOpen] = useState(false);
+  const overrides = useLiveQuery(() => db.exerciseOverrides.toArray(), []);
+  const excluded = (overrides ?? []).filter((row) => row.notAtMyGym);
+  const excludedIds = new Set(excluded.map((row) => row.exerciseId));
+  const unavailable = new Set(settings.unavailableEquipment ?? []);
+  const activities = enabledActivities(settings);
+  const week = weekIndex(localDate(new Date()), settings.programStart);
+  const toggleActivity = (activity: Activity, on: boolean) => {
+    const next = on ? [...new Set([...activities, activity])] : activities.filter((item) => item !== activity);
+    setActivityError(!next.length);
+    if (next.length) void saveSettings(db, { activities: next });
+  };
+  const toggleEquipment = (id: string, available: boolean) => {
+    const off = new Set(unavailable);
+    if (available) off.delete(id);
+    else off.add(id);
+    const unavailableEquipment = EQUIPMENT_PREFS.map((row) => row.id).filter((rowId) => off.has(rowId));
+    void saveSettings(db, { unavailableEquipment });
+  };
+  const choices = EXERCISES.filter((exercise) => !exercise.retired && !excludedIds.has(exercise.id));
   const pool = poolOf(settings);
   // Backup result sits next to the backup controls; feedback results stay under the feedback section.
   const [backupMsg, setBackupMsg] = useState<{ text: string; error?: boolean } | null>(null);
@@ -66,8 +94,95 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
   };
 
   return (
-    <main class="screen">
-      <header class="bar"><h1>Settings</h1></header>
+    <main class="screen preferences">
+      <header class="pref-top">
+        <div class="pref-brand">
+          <span class="pref-mark" aria-hidden="true"><svg width="16" height="19" viewBox="0 0 16 19" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9 0 0 11.4H7L6 19 16 7.6H9Z" /></svg></span>
+          <p class="wordmark">Gym Plan.</p>
+        </div>
+        <p class="week-chip"><CalendarIcon />Week {week}</p>
+      </header>
+      <p class="pref-eyebrow"><svg class="pref-dot" width="6" height="6" viewBox="0 0 6 6" aria-hidden="true" focusable="false"><circle cx="3" cy="3" r="3" fill="currentColor" /></svg>Make it yours</p>
+      <h1>Preferences</h1>
+      <p class="pref-lead">These settings shape future recommendations, not just today.</p>
+
+      <section class="card">
+        <div class="pref-head">
+          <span class="pref-tile pref-tile-peach" aria-hidden="true"><PersonIcon /></span>
+          <div>
+            <h2>Excluded exercises</h2>
+            <p class="pref-support">We won’t recommend these or offer them as swaps.</p>
+          </div>
+        </div>
+        {excluded.length === 0 ? <p class="pref-empty">No exercises excluded.</p> : excluded.map((row) => {
+          const name = exerciseById.get(row.exerciseId)?.name ?? row.exerciseId;
+          return (
+            <p key={row.exerciseId} class="pref-copy">
+              <span>{name}</span>
+              <button type="button" onClick={() => { void setNotAtMyGym(db, row.exerciseId, false); }}>Remove {name}</button>
+            </p>
+          );
+        })}
+        <button type="button" class="pref-exclude" onClick={() => setExcludeOpen(true)}><PlusIcon />Exclude an exercise</button>
+      </section>
+
+      <section class="card">
+        <div class="pref-head">
+          <span class="pref-tile pref-tile-mint" aria-hidden="true"><WorkoutsIcon /></span>
+          <div>
+            <h2>Available equipment</h2>
+            <p class="pref-support">We’ll favor movements you can do in your gym.</p>
+          </div>
+        </div>
+        <div class="pref-equip-head">
+          <span>Equipment checklist</span>
+          <ChevronIcon />
+        </div>
+        {EQUIPMENT_PREFS.map((row) => (
+          <label key={row.id} class="check pref-equip">
+            <input type="checkbox" checked={!unavailable.has(row.id)} onChange={(e) => toggleEquipment(row.id, e.currentTarget.checked)} />
+            <span>{row.label}</span>
+          </label>
+        ))}
+      </section>
+
+      <section class="card">
+        <h2>Workout cues & activities</h2>
+        <label class="check pref-cue">
+          <span class="pref-copy">
+            <span class="pref-cue-title">Sound cues</span>
+            <span class="pref-cue-sub">Chime at station changes and block finishes.</span>
+          </span>
+          <input type="checkbox" checked={settings.soundCues !== false} onChange={(e) => { void saveSettings(db, { soundCues: e.currentTarget.checked }); }} />
+        </label>
+        <label class="check pref-cue">
+          <span class="pref-copy">
+            <span class="pref-cue-title">Running</span>
+            <span class="pref-cue-sub">Show easy run plans in your workout choices.</span>
+          </span>
+          <input type="checkbox" checked={activities.includes('run')} onChange={(e) => toggleActivity('run', e.currentTarget.checked)} />
+        </label>
+        <label class="check pref-cue">
+          <span class="pref-copy">
+            <span class="pref-cue-title">Swimming</span>
+            <span class="pref-cue-sub">Show simple lap-pool sessions.</span>
+          </span>
+          <input type="checkbox" checked={activities.includes('swim')} onChange={(e) => toggleActivity('swim', e.currentTarget.checked)} />
+        </label>
+        {activityError && <p role="status">Keep at least one activity enabled.</p>}
+      </section>
+
+      {excludeOpen && (
+        <Sheet label="Exclude an exercise" onClose={() => setExcludeOpen(false)}>
+          <h2>Exclude an exercise</h2>
+          <div class="sheet-options">
+            {choices.map((exercise) => (
+              <button key={exercise.id} type="button" onClick={() => { void setNotAtMyGym(db, exercise.id, true); setExcludeOpen(false); }}>{exercise.name}</button>
+            ))}
+          </div>
+        </Sheet>
+      )}
+
       <h2>Appearance</h2>
       <label>
         Appearance
