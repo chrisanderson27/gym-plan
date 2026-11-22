@@ -381,7 +381,7 @@ main.screen { overflow-wrap: break-word; }
 .tab-bar a[aria-current='page'] { color: var(--shell-tab-on); background: transparent; font-weight: 800; }
 .tab-bar a[aria-current='page'] .tab-glyph { background: var(--shell-tab-wash); }
 .tab-bar button:disabled { background: transparent; color: var(--shell-tab); border: none; cursor: not-allowed; }
-.tab-bar a:focus-visible, .tab-bar button:focus-visible { outline-offset: -3px; }
+.tab-bar a:focus-visible, .tab-bar button:focus-visible { outline-color: var(--shell-ink); outline-offset: -3px; }
 .tab-bar + .update-bar { bottom: calc(var(--tab-height) + env(safe-area-inset-bottom)); z-index: 7; }
 .today-screen.has-start + .tab-bar + .update-bar { bottom: calc(var(--tab-height) + var(--s-8) + var(--s-2) + env(safe-area-inset-bottom)); }
 .today-screen { display: grid; gap: var(--s-2); }

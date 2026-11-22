@@ -30,6 +30,8 @@ export interface LiftSnapshot {
   history: HistorySession[];
   overrides: Map<string, ExerciseOverride>;
   equipment: Map<string, Equipment>;
+  /** Exercise ids the equipment checklist blocks. Absent means the checklist was not applied. */
+  checklistBlocked?: ReadonlySet<string>;
 }
 
 export interface Prescription {

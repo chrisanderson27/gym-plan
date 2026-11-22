@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { completeOnboarding, enabledActivities, getSettings, poolOf, saveSettings } from './settings';
+import { completeOnboarding, enabledActivities, getSettings, poolOf, saveSettings, toggleUnavailableEquipment } from './settings';
 import { openTestDb } from './test-utils';
 
 const dbs: ReturnType<typeof openTestDb>[] = [];
@@ -58,5 +58,17 @@ describe('settings', () => {
     const s = await getSettings(db);
     expect(s?.soundCues).toBe(false);
     expect(s?.unavailableEquipment).toEqual(['dumbbells']);
+  });
+
+  it('overlapping checklist toggles both persist', async () => {
+    const db = openTestDb();
+    dbs.push(db);
+    const now = new Date(2026, 10, 2);
+    await completeOnboarding(db, { bodyweightLb: 200, goalWeightLb: 190, goalDirection: 'lose', activities: ['lift'] }, new Date(2026, 10, 1));
+    await Promise.all([
+      toggleUnavailableEquipment(db, 'dumbbells', true, now),
+      toggleUnavailableEquipment(db, 'leg-press', true, now),
+    ]);
+    expect((await getSettings(db))?.unavailableEquipment).toEqual(['dumbbells', 'leg-press']);
   });
 });

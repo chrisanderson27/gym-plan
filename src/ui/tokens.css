@@ -329,6 +329,29 @@
   --color-warning-text: var(--yellow-70);
   --color-warning-tint: var(--yellow-10);
   --color-warning-accent: var(--yellow-30);
+  /* Aliases are substituted on the theme element, so redeclare them here or a dark --input-bg stays resolved. */
+  --tile-bg: var(--color-surface);
+  --tile-border: var(--color-border-subtle);
+  --chip-bg: var(--color-surface);
+  --chip-border: var(--color-border-strong);
+  --chip-on-bg: var(--color-selected-bg);
+  --chip-on-text: var(--color-selected-text);
+  --chip-on-border: var(--color-selected-text);
+  --chip-danger-on-bg: var(--color-danger-tint);
+  --chip-danger-on-text: var(--color-danger-text);
+  --chip-danger-on-border: var(--color-danger);
+  --tick-on-bg: var(--color-success-tint);
+  --tick-on-text: var(--color-success-text);
+  --tick-on-border: var(--color-success-text);
+  --button-bg: var(--color-surface);
+  --button-border: var(--color-border-strong);
+  --button-text: var(--color-text-primary);
+  --input-bg: var(--color-surface);
+  --input-border: var(--color-border-strong);
+  --disabled-bg: var(--color-canvas);
+  --disabled-text: var(--color-border-strong);
+  --disabled-border: var(--color-border-subtle);
+  --app-bar-bg: var(--color-surface);
 }
 
 /* Live workout palette from frame 2:1126. Nothing sets data-surface in this phase. */

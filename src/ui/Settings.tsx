@@ -5,7 +5,7 @@ import { buildExport, ImportError, importExport, markBackedUp, parseExport } fro
 import { db } from '../data/db';
 import { setNotAtMyGym } from '../data/lift';
 import { useLiveQuery } from '../data/live';
-import { enabledActivities, poolOf, saveSettings } from '../data/settings';
+import { enabledActivities, poolOf, saveSettings, toggleUnavailableEquipment } from '../data/settings';
 import type { Appearance, PoolUnit, Settings as SettingsRow } from '../data/types';
 import { daysBetween, localDate } from '../engine/dates';
 import type { Activity } from '../engine/plan/activities';
@@ -39,11 +39,7 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
     if (next.length) void saveSettings(db, { activities: next });
   };
   const toggleEquipment = (id: string, available: boolean) => {
-    const off = new Set(unavailable);
-    if (available) off.delete(id);
-    else off.add(id);
-    const unavailableEquipment = EQUIPMENT_PREFS.map((row) => row.id).filter((rowId) => off.has(rowId));
-    void saveSettings(db, { unavailableEquipment });
+    void toggleUnavailableEquipment(db, id, !available);
   };
   const choices = EXERCISES.filter((exercise) => !exercise.retired && !excludedIds.has(exercise.id));
   const pool = poolOf(settings);

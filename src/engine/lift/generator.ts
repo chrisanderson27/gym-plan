@@ -89,6 +89,8 @@ export function generateLift(input: {
   const { deload } = deloadState(snapshot);
 
   const jfOnly = weekIdx <= JOINT_FRIENDLY_WEEKS;
+  const blocked = snapshot.checklistBlocked;
+  const excluded = (id: string) => !!snapshot.overrides.get(id)?.notAtMyGym || !!blocked?.has(id);
   const chosen = new Set<string>();
   const dropped: string[] = [];
   const entries: Entry[] = [];
@@ -96,11 +98,13 @@ export function generateLift(input: {
   for (const slot of template.slots) {
     const usable = (id: string) => {
       const e = exercises.get(id);
-      return !!e && !chosen.has(id) && !snapshot.overrides.get(id)?.notAtMyGym && (!jfOnly || e.jointFriendly);
+      return !!e && !chosen.has(id) && !excluded(id) && (!jfOnly || e.jointFriendly);
     };
     let id = slot.candidates.find(usable);
     if (!id && slot.candidates[0]) {
-      id = pickSubstitute(slot.candidates[0], exercises, snapshot.overrides, { jointFriendlyOnly: jfOnly, exclude: chosen }) ?? undefined;
+      const exclude = new Set<string>(chosen);
+      blocked?.forEach((blockedId) => exclude.add(blockedId));
+      id = pickSubstitute(slot.candidates[0], exercises, snapshot.overrides, { jointFriendlyOnly: jfOnly, exclude }) ?? undefined;
     }
     const ex = id ? exercises.get(id) : undefined;
     const eq = ex ? snapshot.equipment.get(resolveEquipmentId(ex.id)) : undefined;
@@ -163,7 +167,7 @@ export function generateLift(input: {
     }
   }
 
-  const warm = WARMUP_MACHINES.find((id) => exercises.has(id) && !snapshot.overrides.get(id)?.notAtMyGym) ?? WARMUP_MACHINES[0]!;
+  const warm = WARMUP_MACHINES.find((id) => exercises.has(id) && !excluded(id)) ?? WARMUP_MACHINES[0]!;
   const warmBlock: LiftBlock = {
     id: 'b0',
     kind: 'lift',

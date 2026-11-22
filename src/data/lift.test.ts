@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { exerciseById } from '../content';
 import { buildExport, importExport } from './backup';
+import { saveSettings } from './settings';
 import type { GymDb } from './db';
 import {
   blockPrescriptionPatch,
@@ -153,6 +154,17 @@ describe('lift data layer', () => {
     await discardLiftSession(db, 'open');
     expect(await logWorkingSet(db, row)).toBe('unchanged');
     expect(await db.sets.count()).toBe(0);
+  });
+
+  it('first-run calibration skips a checklist-blocked leg press', async () => {
+    const db = open();
+    await seedSettings(db);
+    await saveSettings(db, { unavailableEquipment: ['leg-press'] }, NOW);
+    const plan = buildLiftPlan(await loadLiftSnapshot(db, NOW), 'lower-a', 60, true);
+    const work = plan.blocks.filter((b) => !b.warmup);
+    expect(work.map((b) => b.exerciseId)).not.toContain('leg-press');
+    expect(work[0]).toMatchObject({ exerciseId: 'hack-squat', label: 'Calibration' });
+    expect(plan.prescriptions.get(work[0]!.id)?.mode).toBe('calibrate');
   });
 
   it('start → log → rir → finish records flags, hard and endedAt', async () => {

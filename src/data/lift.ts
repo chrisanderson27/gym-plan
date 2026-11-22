@@ -1,4 +1,5 @@
 import { LIFT_TEMPLATES } from '../content/lift-templates';
+import { blockedExerciseIds } from '../content/equipment-prefs';
 import { defaultEquipmentFor, exerciseById } from '../content';
 import type { Exercise } from '../content';
 import { HISTORY_WINDOW_DAYS, JOINT_FRIENDLY_WEEKS, RESUME_WINDOW_HOURS } from '../engine/config';
@@ -67,6 +68,7 @@ export async function loadLiftSnapshot(db: GymDb, now = new Date()): Promise<Lif
     history,
     overrides: new Map(overrides.map((o) => [o.exerciseId, o])),
     equipment: new Map(equipment.map((e) => [e.id, e])),
+    checklistBlocked: blockedExerciseIds([...exerciseById.values()], settings?.unavailableEquipment ?? []),
   };
 }
 

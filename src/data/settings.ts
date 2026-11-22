@@ -1,3 +1,4 @@
+import { EQUIPMENT_PREFS } from '../content/equipment-prefs';
 import { localDate } from '../engine/dates';
 import { enabled, type Activity } from '../engine/plan/activities';
 import type { GymDb } from './db';
@@ -20,6 +21,24 @@ export async function saveSettings(
   now = new Date(),
 ): Promise<void> {
   await db.settings.update('settings', { ...patch, updatedAt: now.toISOString() });
+}
+
+/** One checklist id, read and written inside the settings transaction so overlapping toggles both stick. */
+export async function toggleUnavailableEquipment(
+  db: GymDb,
+  id: string,
+  unavailable: boolean,
+  now = new Date(),
+): Promise<void> {
+  await db.transaction('rw', db.settings, async () => {
+    const cur = await db.settings.get('settings');
+    if (!cur) return;
+    const off = new Set(cur.unavailableEquipment ?? []);
+    if (unavailable) off.add(id);
+    else off.delete(id);
+    const unavailableEquipment = EQUIPMENT_PREFS.map((row) => row.id).filter((rowId) => off.has(rowId));
+    await saveSettings(db, { unavailableEquipment }, now);
+  });
 }
 
 export interface OnboardingInput {

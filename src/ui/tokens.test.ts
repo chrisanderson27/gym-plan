@@ -43,6 +43,21 @@ function ratio(a: string, b: string): number {
   return (hi! + 0.05) / (lo! + 0.05);
 }
 
+function computed(map: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of Object.keys(map)) out[key] = resolve(map, key.slice(2));
+  return out;
+}
+
+/** Inherited custom properties stay as computed on the parent. Redeclared ones resolve on the element. */
+function painted(parent: Record<string, string>, local: Record<string, string>): Record<string, string> {
+  const inherited = computed(parent);
+  const map = { ...inherited, ...local };
+  const out = { ...inherited };
+  for (const key of Object.keys(local)) out[key] = resolve(map, key.slice(2));
+  return out;
+}
+
 const BODY = 4.5;
 const NONTEXT = 3;
 const PAIRS: [string, string, number][] = [
@@ -112,6 +127,14 @@ describe('design tokens: WCAG contrast', () => {
     const r = ratio(resolve(themes.light, fg), resolve(themes.light, bg));
     expect(r, `timer: ${fg} on ${bg} = ${r.toFixed(2)} (need ${min})`).toBeGreaterThanOrEqual(min);
   });
+  it('preferences goal weight stays AA when appearance is dark', () => {
+    const prefs = decls(block('.preferences'));
+    for (const [name, parent] of [['dark', themes.dark], ['system-dark', { ...themes.light, ...systemDark }]] as const) {
+      const face = painted(parent, prefs);
+      const r = ratio(face['--color-text-primary']!, face['--input-bg']!);
+      expect(r, `${name}: goal weight ${r.toFixed(2)}`).toBeGreaterThanOrEqual(BODY);
+    }
+  });
 });
 
 describe('design tokens: structure', () => {
@@ -142,6 +165,14 @@ describe('stylesheet contracts', () => {
     expect(css).toMatch(/--chip-on-bg:\s*var\(--color-selected-bg\)/);
     expect(resolve(themes.light, 'chip-on-bg')).not.toBe(resolve(themes.light, 'color-action'));
     expect(resolve(themes.dark, 'chip-on-bg')).not.toBe(resolve(themes.dark, 'color-action'));
+  });
+  it('tab bar focus outline clears the non-text floor on the light bar', () => {
+    const rule = styles.match(/\.tab-bar a:focus-visible, \.tab-bar button:focus-visible\s*\{([^}]*)\}/);
+    expect(rule).not.toBeNull();
+    const token = rule![1]!.match(/outline-color:\s*var\(--(shell-[\w-]+)\)/);
+    expect(token).not.toBeNull();
+    const r = ratio(resolve(root, token![1]!), resolve(root, 'shell-bg'));
+    expect(r).toBeGreaterThanOrEqual(NONTEXT);
   });
   it('every link and button style keeps a 56 px minimum height', () => {
     expect(styles).toMatch(/button, input, select, a, \.gear\s*\{[^}]*min-height:\s*var\(--tap\)/);
