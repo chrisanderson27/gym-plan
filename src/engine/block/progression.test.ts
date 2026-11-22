@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import type { CircuitBlock, Equipment } from '../../data/types';
 import type { HistorySession } from '../lift/types';
-import { prescribeBlock, slotKeyOf } from './progression';
+import { defaultStationTarget, prescribeBlock, slotKeyOf, stationTarget, stationUnits } from './progression';
 import type { BlockExerciseShape } from './rules';
 
 const eq: Equipment = { id: 'bells', name: 'Bells', kind: 'kb', steps: [10, 15, 20, 25, 30, 35, 40, 45, 50] };
@@ -100,4 +100,17 @@ it('keeps progression in the Burn template slot and uses a supported target unit
   (a.session.blocks[0] as CircuitBlock).log!.stations[0]!.actualLoad = 40;
   expect(recipe([b])).toEqual(recipe([]));
   expect(recipe([a, b])).toMatchObject({ targetRounds: 3, stations: [{ load: 45 }, {}, { target: { unit: 'm' } }] });
+});
+
+it('offers the normal-lane default and the exercise target units', () => {
+  const reps = (id: string, min: number, max: number): BlockExerciseShape => ({
+    ...squat, id, unitMin: min, unitMax: max, repMin: min, repMax: max,
+  });
+  expect(defaultStationTarget(reps('leg-press', 8, 12))).toEqual({ unit: 'reps', amount: 10 });
+  expect(defaultStationTarget(reps('goblet-squat', 6, 10))).toEqual({ unit: 'reps', amount: 8 });
+  expect(defaultStationTarget(reps('step-up', 6, 10))).toEqual({ unit: 'reps', amount: 8 });
+  expect(defaultStationTarget(reps('dead-bug', 8, 8))).toEqual({ unit: 'reps', amount: 8 });
+  expect(stationUnits(rower)).toEqual(['cal', 'm', 'sec']);
+  expect(stationUnits({ ...squat, unit: 'steps', targets: undefined })).toEqual(['reps']);
+  expect(stationTarget(rower, 'm')).toEqual({ unit: 'm', amount: 250 });
 });

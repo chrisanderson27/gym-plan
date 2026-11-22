@@ -11,6 +11,7 @@ export const USER_STORES = {
   templates: 'id',
   feedback: 'id',
   settings: 'id',
+  libraryBlocks: 'id',
 } as const;
 
 export type StoreName = keyof typeof USER_STORES;

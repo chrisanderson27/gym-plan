@@ -48,10 +48,11 @@ function setLine(el: Element | null, a: { x: number; y: number }, b: { x: number
   el.setAttribute('y2', String(r1(b.y)));
 }
 
-function Figure({ def, lay, sk, refs, testId, label, onToggle }: {
+function Figure({ def, lay, sk, refs, testId, label, onToggle, running }: {
   def: PoseDef; lay: Layout; sk: Skeleton;
   refs?: { current: Record<string, Element | null> };
   testId?: string; label: string; onToggle?: () => void;
+  running?: boolean;
 }) {
   const { viewBox: v, anchorAt } = lay;
   const reg = (key: string) => (el: Element | null) => { if (refs) refs.current[key] = el; };
@@ -64,6 +65,7 @@ function Figure({ def, lay, sk, refs, testId, label, onToggle }: {
       role="img"
       aria-label={label}
       data-testid={testId}
+      data-running={running === undefined ? undefined : running ? 'true' : 'false'}
       onClick={onToggle}
     >
       <Prop def={def} lay={lay} />
@@ -80,8 +82,8 @@ function Figure({ def, lay, sk, refs, testId, label, onToggle }: {
 const REDUCED = '(prefers-reduced-motion: reduce)';
 const prefersReduced = () => typeof matchMedia === 'function' && matchMedia(REDUCED).matches;
 
-/** Looped stick-figure demo; a static filmstrip when reduced motion is on. Tap to pause. */
-export function StickFigure({ def, label, testId }: { def: PoseDef; label: string; testId: string }) {
+/** Looped stick-figure demo; a static filmstrip when reduced motion is on. Tap to pause. `running` false holds frame 0 so a preview can play one figure. */
+export function StickFigure({ def, label, testId, running = true }: { def: PoseDef; label: string; testId: string; running?: boolean }) {
   const lay = useMemo(() => layout(def), [def]);
   const [reduced, setReduced] = useState(prefersReduced);
   const paused = useRef(false);
@@ -96,7 +98,7 @@ export function StickFigure({ def, label, testId }: { def: PoseDef; label: strin
   }, []);
 
   useEffect(() => {
-    if (reduced) return;
+    if (reduced || !running) return;
     let raf = 0;
     let last = performance.now();
     let elapsed = 0;
@@ -115,7 +117,7 @@ export function StickFigure({ def, label, testId }: { def: PoseDef; label: strin
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [def, lay, reduced]);
+  }, [def, lay, reduced, running]);
 
   const aria = `${label} demonstration`;
   if (reduced) {
@@ -131,6 +133,7 @@ export function StickFigure({ def, label, testId }: { def: PoseDef; label: strin
   return (
     <Figure
       def={def} lay={lay} sk={skeleton(anglesAt(def, 0), def.anchor, lay.anchorAt)} refs={refs} testId={testId} label={aria}
+      running={running}
       onToggle={() => { paused.current = !paused.current; }}
     />
   );

@@ -19,6 +19,7 @@ export const SwimIcon = icon(<><circle cx="17" cy="8" r="2" /><path d="m4 13 5-4
 export const TodayIcon = icon(<path d="m3 10 9-7 9 7v10H3zm7 10v-6h4v6" />);
 export const WorkoutsIcon = icon(<path d="M6 9v6M18 9v6M3 10v4m18-4v4M6 12h12" />);
 export const BlocksIcon = icon(<path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z" />);
+export const LayersIcon = icon(<path d="m12 3 9 5-9 5L3 8zm-9 9 9 5 9-5M3 17l9 5 9-5" />);
 export const ProgressIcon = icon(<path d="M3 3v18h18M8 16v-4m5 4V8m5 8V4" />);
 export const SettingsIcon = icon(<><path d="M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6m-6 0v6" /></>);
 export const MoreIcon = icon(<><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>);
@@ -27,9 +28,11 @@ export const SwapIcon = icon(<path d="M3 8h17m-4-4 4 4-4 4M21 16H4m4-4-4 4 4 4" 
 export const TimerIcon = icon(<><circle cx="12" cy="14" r="7" /><path d="M10 2h4m-2 5V2m0 9v4l2 1" /></>);
 export const CheckIcon = icon(<path d="m5 12 4 4L19 6" />);
 export const PlayIcon = icon(<path d="m8 5 11 7-11 7z" />);
+export const PauseIcon = icon(<path d="M8 5v14M16 5v14" />);
 export const ChevronIcon = icon(<path d="m9 6 6 6-6 6" />);
 export const CloseIcon = icon(<path d="m6 6 12 12M18 6 6 18" />);
 export const PlusIcon = icon(<path d="M12 5v14M5 12h14" />);
+export const EyeIcon = icon(<><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="2.5" /></>);
 export const RingIcon = icon(<path d="M12 3a9 9 0 1 0 9 9h-9z" />);
 export const FlameIcon = icon(<path d="M12 2c1 6 7 7 7 13a7 7 0 0 1-14 0c0-3 2-5 4-7 0 2 1 3 2 3 2-3 1-6 1-9Z" />);
 export const ScaleIcon = icon(<path d="M4 4h16v16H4zm4 7a4 4 0 0 1 8 0m-4-1 1-2" />);

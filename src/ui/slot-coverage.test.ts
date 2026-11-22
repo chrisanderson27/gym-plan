@@ -7,6 +7,7 @@ const NO_FEEDBACK = [
   'GymScreen.tsx', // equipment/gym settings editor, not a workout
   'VolumeScreen.tsx', // read-only weekly volume table
   'CssTestScreen.tsx', // one-off test entry form, not a workout
+  'BlocksScreen.tsx', // saved-block library, not a workout
 ];
 
 describe('feedback slot coverage (PRD §5: screen-level feedback via More)', () => {

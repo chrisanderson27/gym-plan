@@ -40,6 +40,21 @@ function targetOf(ex: BlockExerciseShape, role: CircuitBlock['role'], requestedU
   return { unit, amount };
 }
 
+/** Units the builder may offer. An empty `targets` list falls through to the unit `targetOf` would pick. */
+export function stationUnits(ex: BlockExerciseShape): StationUnit[] {
+  if (ex.targets && ex.targets.length > 0) return [...ex.targets];
+  return [ex.unit === 'amrap' || ex.unit === 'steps' ? 'reps' : ex.unit];
+}
+
+/** Normal lane, optionally for one offered unit. The finisher short lane stays out of the builder. */
+export function stationTarget(ex: BlockExerciseShape, requestedUnit?: StationUnit): StationTarget {
+  return targetOf(ex, 'block', requestedUnit);
+}
+
+export function defaultStationTarget(ex: BlockExerciseShape): StationTarget {
+  return targetOf(ex, 'block');
+}
+
 function roundDownToStep(steps: number[], weight: number): number {
   const nearest = nearestStep(steps, weight);
   return nearest > weight ? stepBy(steps, nearest, -1) : nearest;

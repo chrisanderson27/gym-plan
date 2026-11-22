@@ -2,6 +2,8 @@ import { useEffect } from 'preact/hooks';
 import { db } from './data/db';
 import { useLiveQuery } from './data/live';
 import { getSettings } from './data/settings';
+import { BlockBuilder } from './ui/blocks/BlockBuilder';
+import { BlocksScreen } from './ui/blocks/BlocksScreen';
 import { BodyScreen } from './ui/body/BodyScreen';
 import { BuilderScreen } from './ui/builder/BuilderScreen';
 import { CardioRoutes } from './ui/cardio/CardioRoutes';
@@ -72,6 +74,10 @@ export function App() {
     body = <TemplateRunScreen templateId={route.split('/')[2]!} />;
   } else if (route.startsWith('/again/')) {
     body = <TemplateRunScreen sessionId={route.split('/')[2]!} />;
+  } else if (route === '/blocks') {
+    body = <BlocksScreen settings={settings} />;
+  } else if (route.startsWith('/blocks/')) {
+    body = <BlockBuilder key={route} route={route} settings={settings} />;
   } else {
     body = <Home settings={settings} />;
   }

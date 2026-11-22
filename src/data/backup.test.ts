@@ -168,7 +168,7 @@ describe('export/import', () => {
     await seed(db);
     const before = await dump(db);
     expect(() => parseExport('not json')).toThrow(ImportError);
-    expect(() => parseExport(JSON.stringify({ schemaVersion: 2, exportedAt: 'x', appVersion: 'x', stores: {} }))).toThrow(/newer app/);
+    expect(() => parseExport(JSON.stringify({ schemaVersion: 3, exportedAt: 'x', appVersion: 'x', stores: {} }))).toThrow(/newer app/);
     expect(() => parseExport(JSON.stringify({ schemaVersion: 1, exportedAt: 'x', appVersion: 'x', stores: { sessions: [{ date: 'x' }] } }))).toThrow(/missing its "id"/);
     // Atomic: a failure mid-import writes nothing.
     const bad = { schemaVersion: 1, exportedAt: 'x', appVersion: 'x', stores: { sessions: [session('new')], sets: [{ id: 'x1', bad: true }], settings: [{ id: 'settings', updatedAt: 'zzz' }] } };
@@ -181,7 +181,7 @@ describe('export/import', () => {
   it('ignores unknown stores with a warning and accepts an empty stores object', () => {
     const r = parseExport(JSON.stringify({ schemaVersion: 1, exportedAt: 'x', appVersion: 'x', stores: { mystery: [{ id: 'a' }] } }));
     expect(r.warnings.join(' ')).toMatch(/mystery/);
-    expect(r.file.stores).toEqual({});
+    expect(r.file.stores).toEqual({ libraryBlocks: [] });
     expect(parseExport(JSON.stringify({ schemaVersion: 1, exportedAt: 'x', appVersion: 'x', stores: {} })).warnings).toEqual([]);
   });
 

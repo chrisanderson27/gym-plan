@@ -162,6 +162,28 @@ export interface CircuitBlock extends BlockBase {
 }
 export type Block = IntervalBlock | LiftBlock | SwimSetBlock | RunBlock | CircuitBlock;
 
+/** A saved station. Not a session circuit: no pod, log, or round target. */
+export interface LibraryStation {
+  exerciseId: string;
+  target: StationTarget;
+  load?: number;
+}
+export interface LibraryBlock {
+  id: string;
+  name: string;
+  kind: 'self-paced' | 'coached';
+  /** Whole block clock. Minutes in the builder times 60. */
+  durationSec: number;
+  stations: LibraryStation[];
+  /** Coached only. Shared work window when a station target is not `sec`. */
+  workSec?: number;
+  restSec?: number;
+  transitionSec?: number;
+  recommend: boolean;
+  createdAt: ISODateTime;
+  updatedAt: ISODateTime;
+}
+
 // ---- rows ----
 export interface ExerciseOverride {
   exerciseId: string;

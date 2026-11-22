@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /**
  * v1 is frozen once shipped. To change an index, add `this.version(2).stores(...).upgrade(...)` in db.ts
@@ -17,4 +17,10 @@ export const V1_STORES = {
   templates: 'id, type, source',
   feedback: 'id, ts, kind',
   settings: 'id',
+} as const;
+
+/** Version 2 repeats every v1 store. Dropping one here drops its data on upgrade. */
+export const V2_STORES = {
+  ...V1_STORES,
+  libraryBlocks: 'id',
 } as const;

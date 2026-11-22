@@ -1,6 +1,9 @@
+import { EXERCISES } from '../content';
 import { EQUIPMENT_PREF_IDS } from '../content/equipment-prefs';
+import { stationUnits } from '../engine/block/progression';
 import { ACTIVITIES } from '../engine/plan/activities';
 import { ImportError } from './errors';
+import { toBlockExercise } from './liftday';
 import type { StoreName } from './stores';
 import { APPEARANCES, FEEDBACK_TAGS, GOAL_DIRECTIONS, STATION_UNITS } from './types';
 
@@ -87,6 +90,33 @@ const block: Check = (v) => {
   }
 };
 
+const CATALOG = new Map(EXERCISES.map((exercise) => [exercise.id, exercise]));
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const stationUnit = (v: unknown): v is string => typeof v === 'string' && (STATION_UNITS as readonly string[]).includes(v);
+
+/** `shape()` lets extra keys through, so self-paced timing fields have to be rejected here. */
+const libraryStation: Check = (v) => {
+  if (!isRec(v) || typeof v.exerciseId !== 'string') return false;
+  const target = v.target;
+  if (!isRec(target) || !stationUnit(target.unit) || !finite(target.amount) || target.amount <= 0) return false;
+  if (v.load !== undefined && (!finite(v.load) || v.load < 0)) return false;
+  const exercise = CATALOG.get(v.exerciseId);
+  // An id the catalog no longer knows stays readable. The picker, not the backup, requires a pose.
+  if (!exercise) return true;
+  const unit = target.unit;
+  return stationUnits(toBlockExercise(exercise)).some((allowed) => allowed === unit);
+};
+const libraryBlock: Check = (v) => {
+  if (!isRec(v) || typeof v.id !== 'string' || v.id === '') return false;
+  if (typeof v.name !== 'string' || v.name.length === 0) return false;
+  if (v.kind !== 'self-paced' && v.kind !== 'coached') return false;
+  if (!finite(v.durationSec) || !Number.isInteger(v.durationSec) || v.durationSec < 60 || v.durationSec > 3600) return false;
+  if (!Array.isArray(v.stations) || v.stations.length < 1 || v.stations.length > 6 || !v.stations.every(libraryStation)) return false;
+  if (typeof v.recommend !== 'boolean' || !iso(v.createdAt) || !iso(v.updatedAt)) return false;
+  if (v.kind === 'self-paced') return v.workSec === undefined && v.restSec === undefined && v.transitionSec === undefined;
+  return finite(v.workSec) && v.workSec > 0 && finite(v.restSec) && v.restSec >= 0 && finite(v.transitionSec) && v.transitionSec >= 0;
+};
+
 const ROW_SHAPES: Record<StoreName, Check> = {
   exerciseOverrides: shape({ exerciseId: str, notAtMyGym: bool, preferredEquipmentId: opt(str) }),
   equipment: shape({
@@ -132,6 +162,7 @@ const ROW_SHAPES: Record<StoreName, Check> = {
     backupAt: nullable(iso), updatedAt: iso, startWeightLb: opt(num), appearance: opt(oneOf(...APPEARANCES)),
     soundCues: opt(bool), unavailableEquipment: opt(arr(oneOf(...EQUIPMENT_PREF_IDS))),
   }),
+  libraryBlocks: libraryBlock,
 };
 
 function oneOf0(...xs: number[]): Check {

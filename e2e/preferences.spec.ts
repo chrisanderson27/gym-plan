@@ -22,9 +22,8 @@ test('checklist and an exclusion survive reload', async ({ page }) => {
   await onboard(page);
   await page.getByRole('link', { name: 'Settings' }).click();
   const nav = page.getByRole('navigation', { name: 'Main' });
-  await expect(nav.getByRole('link')).toHaveText(['Today', 'Progress', 'Settings']);
+  await expect(nav.getByRole('link')).toHaveText(['Today', 'Blocks', 'Progress', 'Settings']);
   await expect(nav.getByRole('button', { name: 'Workouts' })).toBeDisabled();
-  await expect(nav.getByRole('button', { name: 'Blocks' })).toBeDisabled();
 
   const dumbbells = page.getByRole('checkbox', { name: 'Dumbbells' });
   await expect(dumbbells).toBeChecked();
@@ -38,4 +37,12 @@ test('checklist and an exclusion survive reload', async ({ page }) => {
   await page.reload();
   await expect(page.getByRole('checkbox', { name: 'Dumbbells' })).not.toBeChecked();
   await expect(page.getByRole('button', { name: 'Remove Leg press' })).toBeVisible();
+});
+
+test('blocks is the current tab on the library', async ({ page }) => {
+  await onboard(page);
+  await page.getByRole('link', { name: 'Blocks' }).click();
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  await expect(nav.getByRole('link', { name: 'Blocks' })).toHaveAttribute('aria-current', 'page');
+  await expect(nav.getByRole('link', { name: 'Progress' })).not.toHaveAttribute('aria-current');
 });

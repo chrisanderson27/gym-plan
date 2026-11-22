@@ -1,12 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 import { onboard } from './helpers';
 
-test('first run: onboarding then Today with a hero and three tabs', async ({ page }) => {
+test('first run: onboarding then Today with a hero and the tab bar', async ({ page }) => {
   await onboard(page);
   await expect(page.getByTestId('hero')).toContainText('Lower A (calibration)');
   await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'first-run');
   await expect(page.getByTestId('start')).toHaveAttribute('href', '#/lift/calibrate/lower-a');
-  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Today', 'Progress', 'Settings']);
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Today', 'Blocks', 'Progress', 'Settings']);
 });
 
 test('settings backup downloads and restores into a fresh context', async ({ page, browser }, testInfo) => {
