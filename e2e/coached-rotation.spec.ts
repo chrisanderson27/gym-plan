@@ -205,6 +205,7 @@ test('plays one fresh cue per foreground edge and only completion at the deadlin
   await page.addInitScript(() => {
     const frequencies: number[] = [];
     Object.defineProperty(window, 'AudioContext', { value: class {
+      state = 'running';
       currentTime = 0;
       resume() { return Promise.resolve(); }
       createOscillator() {

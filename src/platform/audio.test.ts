@@ -27,6 +27,7 @@ describe('beep', () => {
   it('does not start an oscillator when cues are off, even after unlock', () => {
     const start = vi.fn();
     class FakeContext {
+      state = 'running';
       currentTime = 0;
       destination = {};
       resume() { return Promise.resolve(); }
@@ -47,5 +48,39 @@ describe('beep', () => {
     setCuesEnabled(true);
     beep('go');
     expect(start).toHaveBeenCalledOnce();
+  });
+
+  it('drops cues while suspended or interrupted and plays fresh cues after recovery', async () => {
+    vi.resetModules();
+    const { beep, unlockAudio } = await import('./audio');
+    let state = 'suspended';
+    const start = vi.fn();
+    const createOscillator = vi.fn(() => ({
+      frequency: { value: 0, setValueAtTime() {} },
+      connect: (gain: unknown) => gain,
+      start,
+      stop() {},
+    }));
+    vi.stubGlobal('navigator', {});
+    vi.stubGlobal('window', { AudioContext: class {
+      get state() { return state; }
+      currentTime = 0;
+      resume() { return Promise.resolve(); }
+      createOscillator = createOscillator;
+      createGain() {
+        return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} };
+      }
+    } });
+    unlockAudio();
+    beep('go');
+    beep('complete');
+    state = 'interrupted';
+    beep('tick');
+    expect(createOscillator).not.toHaveBeenCalled();
+
+    state = 'running';
+    beep('go');
+    beep('complete');
+    expect(start).toHaveBeenCalledTimes(2);
   });
 });

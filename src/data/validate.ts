@@ -1,6 +1,7 @@
-import { EXERCISES } from '../content';
+import { EXERCISES, SEED_EQUIPMENT } from '../content';
 import { EQUIPMENT_PREF_IDS } from '../content/equipment-prefs';
 import { POSES } from '../content/poses';
+import { coachedPose } from '../content/stationDemos';
 import { coachedSchedule, phaseMs, sameCoachedPhase, projectCoached } from '../engine/block/coached';
 import { elapsedClamped } from '../engine/block/session';
 import { stationUnits } from '../engine/block/progression';
@@ -11,10 +12,14 @@ import type { StoreName } from './stores';
 import { APPEARANCES, FEEDBACK_TAGS, GOAL_DIRECTIONS, STATION_UNITS } from './types';
 
 import type { AcceptedStrength, EffectiveStation, MixedDraft, MixedExecution } from './types';
-import type { ExecutableCoachedBlock, MixedTimer } from './types';
+import type { Equipment, ExecutableCoachedBlock, MixedTimer } from './types';
 
 type Rec = Record<string, unknown>;
 type Check = (v: unknown) => boolean;
+interface BackupSnapshot {
+  exportedAt: unknown;
+  equipment: ReadonlyMap<string, Equipment>;
+}
 
 const isRec = (v: unknown): v is Rec => typeof v === 'object' && v !== null && !Array.isArray(v);
 const str: Check = (v) => typeof v === 'string';
@@ -30,7 +35,7 @@ const localDate: Check = (v) => {
   const dt = new Date(Date.UTC(y, m - 1, d));
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
 };
-const iso: Check = (v) =>
+const iso = (v: unknown): v is string =>
   typeof v === 'string' &&
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(v) &&
   localDate(v.slice(0, 10)) &&
@@ -185,7 +190,7 @@ const mixedShape = shape({
   cursor: shape({ blockId: id, stage: oneOf('entry', 'active', 'review'), setSlot: integer }),
 });
 
-function validCoachedClock(block: ExecutableCoachedBlock, effective: EffectiveStation[], t: MixedTimer, row: Rec) {
+function validCoachedClock(block: ExecutableCoachedBlock, effective: EffectiveStation[], t: MixedTimer, row: Rec, snapshotAt?: number) {
   const { coached: at, startedAt, pausedAt, pausedMs, frozenElapsedMs, durationMs } = t;
   if (!only(t as unknown as Rec, ['coached', 'startedAt', 'pausedAt', 'pausedMs', 'durationMs', 'frozenElapsedMs'])) return false;
   if (startedAt === null) return !at && pausedMs === 0 && frozenElapsedMs === 0;
@@ -195,6 +200,8 @@ function validCoachedClock(block: ExecutableCoachedBlock, effective: EffectiveSt
   const elapsedLimit = frozenElapsedMs ?? (pausedAt === null ? durationMs - 1 : elapsedClamped(t, pausedAt));
   if (startedAt < Date.parse(String(row.date)) || (row.endedAt && startedAt + pausedMs + elapsedLimit > Date.parse(String(row.endedAt)))) return false;
   if (at.phaseStartMs > elapsedLimit || at.rotations >= Number.MAX_SAFE_INTEGER - (durationMs - at.phaseStartMs)) return false;
+  if (snapshotAt !== undefined && (!Number.isFinite(snapshotAt) || (pausedAt ?? startedAt + pausedMs) > snapshotAt
+    || at.phaseStartMs > elapsedClamped(t, snapshotAt))) return false;
   if (pausedAt !== null && (elapsedLimit >= durationMs || (frozenElapsedMs !== undefined && frozenElapsedMs !== elapsedClamped({ ...t, frozenElapsedMs: undefined }, pausedAt)))) return false;
   const lineup = effective.filter((s) => !s.skipped);
   if (!lineup.every((s) => s.poseId && s.equipmentId)) return false;
@@ -209,7 +216,7 @@ function validCoachedClock(block: ExecutableCoachedBlock, effective: EffectiveSt
   return true;
 }
 
-function validMixed(row: Rec): boolean {
+function validMixed(row: Rec, backup?: BackupSnapshot): boolean {
   if (row.mixed === undefined) return true;
   if (row.type !== 'custom' || (!row.endedAt && row.rpe !== null) || !mixedShape(row.mixed)) return false;
   const m = row.mixed as MixedExecution;
@@ -264,7 +271,15 @@ function validMixed(row: Rec): boolean {
     if (!only(d as unknown as Rec, ['rounds', 'tapped', 'partial', 'stationChanges'])
       || (d.partial && !only(d.partial, ['slotId', 'unit', 'count']))
       || (r && !only(r as unknown as Rec, ['status', 'elapsedMs', 'rounds', 'partial', 'stations', 'stationChanges']))) return false;
-    if (t && (i < current && t.frozenElapsedMs === undefined || !validCoachedClock(b as ExecutableCoachedBlock, effective!, t, row))) return false;
+    const active = i === current && m.cursor.stage === 'active';
+    if (active && !effective!.every((s) => {
+      if (s.skipped) return true;
+      if (!s.equipmentId || !s.poseId) return false;
+      const equipment = backup?.equipment.get(s.equipmentId) ?? SEED_EQUIPMENT.find((e) => e.id === s.equipmentId);
+      return equipment && coachedPose(s.exerciseId, equipment) === s.poseId;
+    })) return false;
+    const snapshotAt = active && backup ? (iso(backup.exportedAt) ? Date.parse(backup.exportedAt) : NaN) : undefined;
+    if (t && (i < current && t.frozenElapsedMs === undefined || !validCoachedClock(b as ExecutableCoachedBlock, effective!, t, row, snapshotAt))) return false;
     if (d.tapped !== 0 || ((!t || t.startedAt === null || t.frozenElapsedMs === undefined) && (d.rounds !== null || d.partial))) return false;
     // The result is a portable copy of the final draft and lineup. Object key order is immaterial.
     const snapshot = (value: unknown): string => JSON.stringify(value, (_, item) => isRec(item)
@@ -273,12 +288,12 @@ function validMixed(row: Rec): boolean {
   });
 }
 
-const ROW_SHAPES: Record<StoreName, Check> = {
+const ROW_SHAPES: Record<StoreName, (v: unknown, snapshot?: BackupSnapshot) => boolean> = {
   exerciseOverrides: shape({ exerciseId: str, notAtMyGym: bool, preferredEquipmentId: opt(str) }),
   equipment: shape({
     id: str, name: str, kind: oneOf('machine', 'barbell', 'db', 'kb', 'cable', 'cardio', 'bodyweight'), steps: arr(num),
   }),
-  sessions: (v) => isRec(v) && validMixed(v) && shape({
+  sessions: (v, snapshot) => isRec(v) && validMixed(v, snapshot) && shape({
     id: str, date: iso, type: oneOf(...SESSION_TYPES), blocks: arr(block), hard: bool, hardCardio: bool,
     rpe: nullable(num), durationMin: num, notes: str, templateId: opt(str), endedAt: opt(iso),
     variant: opt(oneOf('upper-a', 'upper-b', 'lower-a', 'lower-b')),
@@ -326,9 +341,9 @@ function oneOf0(...xs: number[]): Check {
 }
 
 /** Throws ImportError naming the store and row index of the first malformed row. */
-export function validateRows(store: StoreName, rows: unknown[]): void {
+export function validateRows(store: StoreName, rows: unknown[], snapshot?: BackupSnapshot): void {
   const check = ROW_SHAPES[store];
   rows.forEach((row, i) => {
-    if (!check(row)) throw new ImportError(`Row ${i + 1} in "${store}" is malformed.`);
+    if (!check(row, snapshot)) throw new ImportError(`Row ${i + 1} in "${store}" is malformed.`);
   });
 }

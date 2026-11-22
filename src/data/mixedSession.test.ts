@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { buildExport, importExport, parseExport } from './backup';
+import { buildExport, ImportError, importExport, parseExport } from './backup';
 import { exerciseById } from '../content';
 import { coachedSchedule, initialCoached, projectCoached } from '../engine/block/coached';
 import type { GymDb } from './db';
@@ -45,9 +45,9 @@ async function startBlocks(...blocks: NonNullable<typeof MIXED_TEMPLATE.ordered>
   return startMixedSession(db, source, at());
 }
 
-async function roundTrip(id: string) {
+async function roundTrip(id: string, now = MIXED_AT) {
   const snapshot = JSON.stringify(await current(id));
-  const portable = parseExport(JSON.stringify(await buildExport(db, MIXED_AT, 'test'))).file;
+  const portable = parseExport(JSON.stringify(await buildExport(db, now, 'test'))).file;
   const restored = openTestDb();
   try {
     await importExport(restored, portable);
@@ -76,6 +76,7 @@ test('reconciles stale and duplicate Next, pause, expiry and Continue across bac
   await Promise.all([0, 1].map(() => updateMixedSession(db, id, active.cursor, { type: 'next', observed: initialCoached }, at(8_000))));
   let clock = (await current(id)).mixed!.timers.rotation!;
   expect(clock).toMatchObject({ startedAt: at().getTime(), pausedMs: 0, durationMs: 720_000, coached: { station: 1, phaseStartMs: 8000 } });
+  await roundTrip(id, at(8_000));
   const stale = { type: 'next', observed: clock.coached! } as const;
   await action(id, stale, 53_000);
   expect((await current(id)).mixed!.timers.rotation).toEqual(clock);
@@ -84,7 +85,7 @@ test('reconciles stale and duplicate Next, pause, expiry and Continue across bac
   clock = (await current(id)).mixed!.timers.rotation!;
   expect(clock.coached).toEqual(projectCoached(schedule, stale.observed, 53_000).at);
   await action(id, { type: 'expire' }, 900_000);
-  await roundTrip(id);
+  await roundTrip(id, at(900_000));
   await action(id, { type: 'resume' }, 900_000);
   const deadline = 720_000 + 900_000 - 53_000;
   await Promise.all([stale, { type: 'expire' } as const].map((incoming) => updateMixedSession(db, id, active.cursor, incoming, at(deadline))));
@@ -92,7 +93,7 @@ test('reconciles stale and duplicate Next, pause, expiry and Continue across bac
   expect(review.cursor.stage).toBe('review');
   expect(review.timers.rotation?.frozenElapsedMs).toBe(720_000);
   expect(review.drafts.rotation?.rounds).toBe(4);
-  await roundTrip(id);
+  await roundTrip(id, at(deadline));
   const partial = { slotId: 'cable', unit: 'reps' as const, count: 6 };
   await action(id, { type: 'review', rounds: 2, partial }, deadline + 1);
   const failWrite = () => { throw new Error('result write failed'); };
@@ -101,7 +102,7 @@ test('reconciles stale and duplicate Next, pause, expiry and Continue across bac
   db.sessions.hook('updating').unsubscribe(failWrite);
   await Promise.all([0, 1].map(() => updateMixedSession(db, id, review.cursor, { type: 'continue' }, at(deadline + 3))));
   expect((await current(id)).mixed!.results).toEqual({ rotation: expect.objectContaining({ status: 'completed', rounds: 2, partial, elapsedMs: 720_000 }) });
-  await roundTrip(id);
+  await roundTrip(id, at(deadline + 3));
   const restored = openTestDb();
   try {
     await importExport(restored, parseExport(JSON.stringify(await buildExport(db, at(deadline + 4), 'test'))).file);
@@ -133,11 +134,69 @@ test('keeps skipped slots, live replacement windows and completed lineup history
   expect(swapped.stations.rotation?.[2]).toMatchObject({ exerciseId: 'leg-press', target: { unit: 'reps', amount: 12 } });
   expect(swapped.timers.rotation?.coached).toMatchObject({ station: 0, phase: 'work', phaseStartMs: 135_000 });
   expect(swapped.timers.rotation?.durationMs).toBe(720_000);
-  await roundTrip(id);
+  await roundTrip(id, at(137_000));
   await action(id, { type: 'finish' }, 138_000);
   const saved = await action(id, { type: 'continue' }, 139_000);
   expect(saved?.mixed?.results.rotation).toMatchObject({ rounds: 1, stations: swapped.stations.rotation });
-  await roundTrip(id);
+  await roundTrip(id, at(139_000));
+});
+
+test('active coached imports verify seeded equipment and imported machine instances', async () => {
+  const block = coachedFixture();
+  const machine = {
+    id: 'legacy-leg-press', name: `${exerciseById.get('leg-press')!.name} — Plate-loaded machine`,
+    kind: 'machine' as const, steps: [100],
+  };
+  await db.equipment.add(machine);
+  const stations = block.stations.map((s) => s.slotId === 'squat' ? { ...s, exerciseId: 'leg-press', equipmentId: machine.id } : s);
+  const id = await startBlocks({ ...block, stations });
+  await action(id, { type: 'start' });
+  const session = await current(id);
+  const backup = await buildExport(db, at(1_000), 'test');
+  const parse = (row = session, equipment = [machine]) => parseExport(JSON.stringify({
+    ...backup, stores: { sessions: [row], equipment },
+  }));
+  expect(parse().file.stores.sessions).toEqual(JSON.parse(JSON.stringify([session])));
+  expect(() => parse(session, [{ ...machine, name: 'Other machine' }])).toThrow(ImportError);
+  expect(() => parse(session, [])).toThrow(ImportError);
+  const wrongBike = structuredClone(session);
+  wrongBike.mixed!.stations.rotation!.find((s) => s.slotId === 'bike')!.equipmentId = 'bodyweight';
+  expect(() => parse(wrongBike)).toThrow(ImportError);
+
+  await action(id, { type: 'finish' }, 8_000);
+  const finished = (await action(id, { type: 'continue' }, 8_000))!;
+  const historical = parse(finished, []).file.stores.sessions;
+  expect(historical).toEqual(JSON.parse(JSON.stringify([finished])));
+});
+
+test('active coached checkpoint must exist at export time and can catch up after import', async () => {
+  const id = await startBlocks(coachedFixture());
+  await action(id, { type: 'start' });
+  const backup = await buildExport(db, at(1_000), 'test');
+  const parse = (file: unknown) => parseExport(JSON.stringify(file));
+  const invalidClock = (mutate: (timer: MixedExecution['timers'][string]) => void) => {
+    const row = structuredClone(backup.stores.sessions![0]) as Awaited<ReturnType<typeof current>>;
+    mutate(row.mixed!.timers.rotation!);
+    expect(() => parse({ ...backup, stores: { sessions: [row] } })).toThrow(ImportError);
+  };
+  invalidClock((clock) => { clock.coached!.phaseStartMs = 600_000; });
+  invalidClock((clock) => { clock.startedAt = at(1_001).getTime(); });
+  invalidClock((clock) => { clock.pausedAt = at(1_001).getTime(); });
+  invalidClock((clock) => { clock.pausedMs = 1_001; });
+  for (const exportedAt of [undefined, '2026-11-22', '2026-11-31T16:00:01Z']) {
+    expect(() => parse({ ...backup, exportedAt })).toThrow(ImportError);
+  }
+  const restored = openTestDb();
+  try {
+    await importExport(restored, parse(backup).file);
+    const cursor = (await restored.sessions.get(id))!.mixed!.cursor;
+    const expired = await updateMixedSession(restored, id, cursor, { type: 'expire' }, at(900_000));
+    expect(expired?.mixed?.cursor.stage).toBe('review');
+    expect(expired?.mixed?.timers.rotation?.frozenElapsedMs).toBe(720_000);
+    expect(expired?.mixed?.drafts.rotation?.rounds).toBe(4);
+  } finally {
+    await restored.delete();
+  }
 });
 
 test('distinguishes early zero, skipped, and saved placeholders', async () => {
@@ -175,6 +234,7 @@ test('rejects hostile coached timing, result and lineup snapshots', async () => 
   invalid((m) => { m.stations.rotation![0]!.target = { unit: 'sec', amount: 46 }; });
   invalid((m) => { m.stations.rotation![0]!.poseId = 'goblet-squat'; });
   invalid((m) => { m.stations.rotation![0]!.poseId = 'constructor'; });
+  invalid((m) => { m.stations.rotation![3]!.equipmentId = 'bodyweight'; });
   invalid((m) => { m.drafts.rotation!.stationChanges = [{ afterRound: 1, stations: m.stations.rotation! }]; });
   invalid((m) => { m.results.rotation = { status: 'completed', elapsedMs: 0 }; });
 });

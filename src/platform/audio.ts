@@ -32,7 +32,7 @@ export function unlockAudio(enabled = cuesEnabled): void {
 export function beep(kind: 'tick' | 'go' | 'complete'): void {
   if (!cuesEnabled) return;
   try {
-    if (!ctx) return;
+    if (ctx?.state !== 'running') return;
     const freq = kind === 'tick' ? 880 : kind === 'go' ? 1320 : 660;
     const dur = kind === 'tick' ? 0.12 : kind === 'go' ? 0.3 : 0.55;
     const t = ctx.currentTime;

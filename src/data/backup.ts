@@ -5,7 +5,7 @@ import { migrateExport, type ExportFile } from './migrations';
 import { reconcileMixedSets } from './mixedSets';
 import { SCHEMA_VERSION } from './schema';
 import { STORE_NAMES, USER_STORES, type StoreName } from './stores';
-import type { Session, Settings } from './types';
+import type { Equipment, Session, Settings } from './types';
 
 /** "Identical user-store contents" excludes exactly this field: importing stamps a fresh backupAt. */
 export const ROUND_TRIP_EXCLUDE = [['settings', 'backupAt']] as const;
@@ -78,8 +78,12 @@ export function parseExport(text: string): { file: ExportFile; warnings: string[
       if (rows.length > 1) throw new ImportError('Settings may hold at most one row.');
       if (rows[0] && (rows[0] as Settings).id !== 'settings') throw new ImportError('Settings row has the wrong id.');
     }
-    validateRows(name as StoreName, rows);
+    if (name !== 'sessions') validateRows(name as StoreName, rows);
     stores[name] = rows;
+  }
+  if (stores.sessions) {
+    const equipment = (stores.equipment ?? []) as Equipment[];
+    validateRows('sessions', stores.sessions, { exportedAt: obj.exportedAt, equipment: new Map(equipment.map((row) => [row.id, row])) });
   }
   return { file: { ...file, stores }, warnings };
 }
