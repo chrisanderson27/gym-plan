@@ -15,7 +15,7 @@ import type { GymDb } from './db';
 import { newId } from './ids';
 import { blockPrescriptionPatch, ensureEquipmentInstance, LIFT_EXERCISES, loadLiftSnapshot, resolveEquipmentId } from './lift';
 import { toBlockExercise } from './liftday';
-import { loggedMixedSets, mixedSetId, reconcileMixedSets, resumeMixedStrength } from './mixedSets';
+import { loggedMixedSets, mixedSetId, reconcileMixedStrength } from './mixedSets';
 import { loadRunnable, orderedStrengthBlocks, replayLiftFlags } from './templates';
 import type { EffectiveStation, LiftBlock, MixedCursor, MixedDraft, MixedExecution, MixedResult, MixedTimer,
   OrderedBlock, OrderedStation, OrderedStrengthBlock, Session, SetRow } from './types';
@@ -24,7 +24,7 @@ export class MixedInputError extends Error {}
 
 type Source = { templateId: string } | { sessionId: string };
 type Action = { type: 'start' | 'pause' | 'resume' | 'expire' | 'finish' | 'skip' }
-  | { type: 'round'; expectedTapped: number }
+  | { type: 'round'; expectedTapped: number; expectedStations: EffectiveStation[] }
   | { type: 'swap-station'; slotId: string; exerciseId: string | null; expectedExerciseId: string }
   | { type: 'swap-strength'; exerciseId: string; expectedExerciseId: string }
   | { type: 'review' | 'continue'; rounds?: number | null; partial?: MixedDraft['partial'] | null }
@@ -200,6 +200,15 @@ function checkActual(partial: MixedDraft['partial'], stations: EffectiveStation[
   }
 }
 
+function sameLineup(stations: EffectiveStation[], expected: EffectiveStation[]) {
+  return stations.length === expected.length && stations.every((station, i) => {
+    const other = expected[i]!;
+    return station.slotId === other.slotId && station.exerciseId === other.exerciseId && station.equipmentId === other.equipmentId
+      && !!station.skipped === !!other.skipped && station.target.unit === other.target.unit
+      && station.target.amount === other.target.amount && station.load === other.load;
+  });
+}
+
 export async function updateMixedSession(db: GymDb, id: string, expected: MixedCursor, action: Action, now = new Date()): Promise<Session | undefined> {
   return db.transaction('rw', [db.sessions, db.sets, db.equipment, db.exerciseOverrides, db.settings], async () => {
     const session = await db.sessions.get(id);
@@ -210,13 +219,10 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
     const index = m.prescription.blocks.findIndex((b) => b.id === blockId);
     const b = m.prescription.blocks[index];
     if (!b || b.kind === 'coached') return session;
-    if (b.kind === 'strength' && stage !== 'review' && await db.sets.get(mixedSetId(id, blockId, setSlot))) {
-      // Repair a cursor restored by an older version before accepting another strength action.
-      const rows = await db.sets.where('sessionId').equals(id).toArray();
-      if (reconcileMixedSets(session, rows)) {
-        await db.sessions.put(session);
-        return session;
-      }
+    const strengthRows = b.kind === 'strength' ? await db.sets.where('sessionId').equals(id).toArray() : undefined;
+    if (strengthRows && reconcileMixedStrength(session, blockId, strengthRows)) {
+      await db.sessions.put(session);
+      return session;
     }
     const nowMs = now.getTime();
     const clock = get(m.timers, blockId);
@@ -249,7 +255,8 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
       case 'expire':
         return session;
       case 'round':
-        if (stage !== 'active' || !draft || !clock || clock.pausedAt !== null || draft.tapped !== action.expectedTapped) return session;
+        if (stage !== 'active' || !draft || !stations || !clock || clock.pausedAt !== null || draft.tapped !== action.expectedTapped) return session;
+        if (!sameLineup(stations, action.expectedStations)) throw new MixedInputError('The station lineup changed. Check the current stations before logging a round.');
         if (!(await mixedOptions(db, b, m, now)).ready) throw new MixedInputError('Replace or skip unavailable movements first.');
         saveDraft({ ...draft, tapped: draft.tapped + 1, rounds: draft.tapped + 1 });
         break;
@@ -296,11 +303,10 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         if (!strengthChoices(g, b, strength.exerciseId).includes(action.exerciseId)) throw new MixedInputError('That replacement is unavailable.');
         const flags = { ...replayLiftFlags(g.snapshot, now), deload: !!session.flags?.deload };
         const volume = weekFractionalSets(g.snapshot, LIFT_EXERCISES);
-        const rows = await db.sets.where('sessionId').equals(id).toArray();
         for (const later of m.prescription.blocks.slice(index + 1)) {
           const accepted = get(m.strength, later.id);
           if (!accepted?.equipmentId || accepted.label === 'Calibration') continue;
-          const remaining = accepted.sets - loggedMixedSets(id, later.id, rows).length;
+          const remaining = accepted.sets - loggedMixedSets(id, later.id, strengthRows!).length;
           countStrengthSets(volume, strengthWeights(accepted.exerciseId), remaining);
         }
         const next = await acceptStrength(db, g, b, action.exerciseId, flags, volume);
@@ -342,11 +348,11 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         if (next) {
           m.cursor = { blockId: next.id, stage: 'entry', setSlot: 0 };
           if (next.kind === 'strength') {
-            const rows = await db.sets.where('sessionId').equals(id).toArray();
-            m.cursor = resumeMixedStrength(m, m.cursor, loggedMixedSets(id, next.id, rows));
+            const rows = strengthRows ?? await db.sets.where('sessionId').equals(id).toArray();
+            reconcileMixedStrength(session, next.id, rows);
           }
         } else {
-          const sets = await db.sets.where('sessionId').equals(id).toArray();
+          const sets = strengthRows ?? await db.sets.where('sessionId').equals(id).toArray();
           const lifts = session.blocks.filter((row): row is LiftBlock => row.kind === 'lift');
           const { fatigue } = summarizeLiftSession(lifts, sets);
           Object.assign(session, {

@@ -211,7 +211,8 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
               <button type="button" disabled={busy} onClick={() => submit({ type: 'skip' })}>Skip block</button>
             </> : <>
               <button type="button" disabled={busy || remaining === 0} onClick={() => { if (paused) unlockAudio(); void submit({ type: paused ? 'resume' : 'pause' }); }}>{paused ? 'Resume' : 'Pause'}</button>
-              {circuit && <button type="button" class="primary" disabled={busy || paused || !ready || remaining === 0} onClick={() => submit({ type: 'round', expectedTapped: draft?.tapped ?? 0 })}>+1 round</button>}
+              {circuit && <button type="button" class="primary" disabled={busy || paused || !ready || remaining === 0}
+                onClick={() => submit({ type: 'round', expectedTapped: draft?.tapped ?? 0, expectedStations: stations })}>+1 round</button>}
               <button type="button" disabled={busy || remaining === 0} onClick={() => submit({ type: 'finish' })}>Finish block</button>
             </>}
           </div>

@@ -7,7 +7,7 @@ import { toBlockExercise } from './liftday';
 import type { StoreName } from './stores';
 import { APPEARANCES, FEEDBACK_TAGS, GOAL_DIRECTIONS, STATION_UNITS } from './types';
 
-import type { EffectiveStation, MixedDraft, MixedExecution } from './types';
+import type { AcceptedStrength, EffectiveStation, MixedDraft, MixedExecution } from './types';
 
 type Rec = Record<string, unknown>;
 type Check = (v: unknown) => boolean;
@@ -133,14 +133,16 @@ const noActuals = (v: Rec) => ['log', 'result', 'skipped', 'swappedFromExerciseI
   .every((key) => !Object.hasOwn(v, key));
 const orderedStation: Check = (v) => isRec(v) && noActuals(v) && opt(id)(v.equipmentId) && libraryStation(v);
 const effectiveStation = shape({ slotId: id, equipmentId: opt(id), poseId: opt(id), skipped: opt(bool), swappedFromExerciseId: opt(id) });
+export const validStrengthReps = bounded(1, 1000);
 const strengthFields = {
-  exerciseId: id, equipmentId: opt(id), sets: bounded(1, 30), repMin: bounded(1, 1000), repMax: bounded(1, 1000),
+  exerciseId: id, equipmentId: opt(id), sets: bounded(1, 30), repMin: validStrengthReps, repMax: validStrengthReps,
   targetWeight: opt(nonnegative), rirTarget: opt(nonnegative), label: opt(str),
 };
-const strength: Check = (v) => isRec(v) && shape(strengthFields)(v) && Number(v.repMin) <= Number(v.repMax);
+export const isAcceptedStrength = (v: unknown): v is AcceptedStrength =>
+  isRec(v) && shape(strengthFields)(v) && Number(v.repMin) <= Number(v.repMax);
 const orderedBlock: Check = (v) => {
   if (!isRec(v) || !noActuals(v)) return false;
-  if (v.kind === 'strength') return strength(v) && opt(nonnegative)(v.restSec);
+  if (v.kind === 'strength') return isAcceptedStrength(v) && opt(nonnegative)(v.restSec);
   if (!bounded(1, 3600)(v.durationSec)) return false;
   if (v.kind === 'preparation' || v.kind === 'recovery') return id(v.instructions) && opt(id)(v.exerciseId);
   if (v.kind === 'coached') return bounded(60, 3600)(v.durationSec) && id(v.name);
@@ -158,7 +160,7 @@ const mixedResult = shape({
 });
 const mixedShape = shape({
   kind: oneOf('ordered'), sourceId: id, prescription: ordered,
-  stations: dict(stations), strength: dict(strength), timers: dict(timer), drafts: dict(draft), results: dict(mixedResult),
+  stations: dict(stations), strength: dict(isAcceptedStrength), timers: dict(timer), drafts: dict(draft), results: dict(mixedResult),
   cursor: shape({ blockId: id, stage: oneOf('entry', 'active', 'review'), setSlot: integer }),
 });
 

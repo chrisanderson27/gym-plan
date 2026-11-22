@@ -10,6 +10,7 @@ import { settings } from './p4-test-utils';
 import { loadRingInput } from './plan';
 import { saveAsMine } from './templates';
 import { openTestDb } from './test-utils';
+import type { MixedExecution } from './types';
 import { weeklyGoal } from '../engine/plan/ring';
 
 const source = { templateId: MIXED_TEMPLATE.id };
@@ -25,6 +26,11 @@ afterEach(async () => { await db.delete(); });
 const current = async (id: string) => (await db.sessions.get(id))!;
 const action = async (id: string, next: Parameters<typeof updateMixedSession>[3], ms = 0) =>
   updateMixedSession(db, id, (await current(id)).mixed!.cursor, next, at(ms));
+const roundTap = (mixed: MixedExecution) => ({
+  type: 'round' as const,
+  expectedTapped: mixed.drafts.circuit!.tapped,
+  expectedStations: mixed.stations.circuit!,
+});
 
 async function logCurrentSet(id: string, weight: number) {
   const { strength, cursor } = (await current(id)).mixed!;
@@ -108,7 +114,7 @@ test('clock, actuals, swaps, failure retry, repeat and optional effort survive b
   expect(mixed.stations.circuit?.[0]).toMatchObject({ exerciseId: 'step-up', poseId: 'step-up', swappedFromExerciseId: 'reverse-lunge', target: { unit: 'reps', amount: 12 } });
   expect(mixed.timers.circuit?.startedAt).toBe(at(356_000).getTime());
   await roundTrip(id);
-  await action(id, { type: 'round', expectedTapped: 0 }, 836_000);
+  await action(id, roundTap(mixed), 836_000);
   mixed = (await current(id)).mixed!;
   expect(mixed.cursor).toMatchObject({ blockId: 'circuit', stage: 'review' });
   expect(mixed.drafts.circuit?.rounds).toBeNull();
@@ -179,7 +185,7 @@ test('a concurrent round retry counts once and replacement is rechecked before w
   expect((await mixedOptions(db, circuit, mixed, at())).stations?.lunge).toEqual(expect.arrayContaining([expect.objectContaining({ exerciseId: 'step-up' })]));
   await db.settings.update('settings', { unavailableEquipment: ['plyo-box'] });
   await expect(action(id, { type: 'swap-station', slotId: 'lunge', exerciseId: 'step-up', expectedExerciseId: 'reverse-lunge' })).rejects.toThrow('unavailable');
-  await Promise.all([0, 1].map(() => updateMixedSession(db, id, mixed.cursor, { type: 'round', expectedTapped: 0 }, at(1_000))));
+  await Promise.all([0, 1].map(() => updateMixedSession(db, id, mixed.cursor, roundTap(mixed), at(1_000))));
   expect((await current(id)).mixed!.drafts.circuit).toMatchObject({ tapped: 1, rounds: 1 });
   expect((await current(id)).mixed!.stations.circuit?.[0]?.exerciseId).toBe('reverse-lunge');
 });
@@ -236,6 +242,76 @@ test('retained sets recover the replacement prescription from an older strength 
   ]);
 });
 
+test.each([0, 1])('continuing from legacy block %s recovers the later strength prescription before exposing its next set', async (index) => {
+  const id = await startBlocks(MIXED_TEMPLATE.ordered!.blocks[index]!, calf);
+  if (index === 1) {
+    await logCurrentSet(id, 140);
+    await logCurrentSet(id, 145);
+  } else {
+    await action(id, { type: 'skip' });
+  }
+  const beforeSwap = await current(id);
+  await action(id, { type: 'continue' });
+  await action(id, { type: 'swap-strength', expectedExerciseId: calf.exerciseId, exerciseId: 'reverse-lunge' });
+  await logCurrentSet(id, 20);
+
+  await db.sessions.put(beforeSwap);
+  await action(id, { type: 'continue' });
+  const { mixed, blocks } = await current(id);
+  expect(mixed!.cursor).toEqual({ blockId: 'calf', stage: 'active', setSlot: 1 });
+  expect(mixed!.strength.calf).toMatchObject({ exerciseId: 'reverse-lunge', equipmentId: 'dumbbells' });
+  expect(blocks.find((block) => block.id === 'calf')).toMatchObject({ exerciseId: 'reverse-lunge', equipmentId: 'dumbbells' });
+  await logCurrentSet(id, 25);
+  expect(await db.sets.where({ sessionId: id }).filter((row) => row.exerciseId === 'reverse-lunge').sortBy('idx')).toMatchObject([
+    { exerciseId: 'reverse-lunge', weight: 20 }, { exerciseId: 'reverse-lunge', weight: 25 },
+  ]);
+});
+
+test('restoring divergent strength sets opens review and preserves each retained row', async () => {
+  const id = await startBlocks({ ...calf, sets: 3 });
+  const base = parseExport(JSON.stringify(await buildExport(db, at(), 'test'))).file;
+  const other = openTestDb();
+  try {
+    await importExport(other, base);
+    await logCurrentSet(id, 80);
+    const backup = parseExport(JSON.stringify(await buildExport(db, at(), 'test'))).file;
+    const incoming = (await db.sets.where({ sessionId: id }).first())!;
+    const apply = async (next: Parameters<typeof updateMixedSession>[3]) =>
+      updateMixedSession(other, id, (await other.sessions.get(id))!.mixed!.cursor, next, at());
+    await apply({ type: 'swap-strength', expectedExerciseId: calf.exerciseId, exerciseId: 'reverse-lunge' });
+    const lunge = { type: 'set', reps: 10, expectedExerciseId: 'reverse-lunge', expectedEquipmentId: 'dumbbells' } as const;
+    await apply({ ...lunge, weight: 20 });
+    await apply({ ...lunge, weight: 25 });
+    const retained = (await other.sets.where({ sessionId: id }).sortBy('idx'))[1]!;
+
+    await importExport(other, backup);
+    const { cursor, strength } = (await other.sessions.get(id))!.mixed!;
+    expect(cursor).toEqual({ blockId: 'calf', stage: 'review', setSlot: 2 });
+    await apply({ type: 'set', weight: 85, reps: 10, expectedExerciseId: strength.calf!.exerciseId,
+      expectedEquipmentId: strength.calf!.equipmentId });
+    expect(await other.sets.where({ sessionId: id }).sortBy('idx')).toEqual([incoming, retained]);
+    await apply({ type: 'continue' });
+    expect((await other.sessions.get(id))!.mixed!.results.calf?.status).toBe('completed');
+  } finally {
+    await other.delete();
+  }
+});
+
+test.each([0, 1.5, 1001])('restoring a retained set with target reps %s keeps the next export valid', async (targetReps) => {
+  const id = await startBlocks(calf);
+  const beforeSwap = await current(id);
+  await action(id, { type: 'swap-strength', expectedExerciseId: calf.exerciseId, exerciseId: 'reverse-lunge' });
+  await logCurrentSet(id, 20);
+  const row = (await db.sets.where({ sessionId: id }).first())!;
+  await db.sets.update(row.id, { targetReps, targetWeight: -1 });
+  // Only the row carries the replacement identity in a legacy restore.
+  await db.sessions.put(beforeSwap);
+  await importExport(db, parseExport(JSON.stringify(await buildExport(db, at(), 'test'))).file);
+
+  expect((await current(id)).mixed!.strength.calf).toMatchObject({ exerciseId: 'reverse-lunge', repMin: calf.repMin, repMax: calf.repMax });
+  await roundTrip(id);
+});
+
 test('an old strength form cannot write to the replacement exercise or equipment', async () => {
   const id = await startBlocks(calf);
   const { cursor, strength } = (await current(id)).mixed!;
@@ -268,9 +344,9 @@ test('a strength swap reserves later accepted working sets under the weekly ceil
 test('station changes preserve tapped rounds across restore without changing the timer', async () => {
   const id = await startBlocks(MIXED_TEMPLATE.ordered!.blocks[3]!);
   await action(id, { type: 'start' });
-  await action(id, { type: 'round', expectedTapped: 0 }, 1_000);
+  await action(id, roundTap((await current(id)).mixed!), 1_000);
   await action(id, { type: 'swap-station', slotId: 'lunge', exerciseId: 'step-up', expectedExerciseId: 'reverse-lunge' }, 2_000);
-  await action(id, { type: 'round', expectedTapped: 1 }, 3_000);
+  await action(id, roundTap((await current(id)).mixed!), 3_000);
   await action(id, { type: 'swap-station', slotId: 'lunge', exerciseId: null, expectedExerciseId: 'step-up' }, 4_000);
   await roundTrip(id);
   await action(id, { type: 'finish' }, 5_000);
@@ -285,6 +361,20 @@ test('station changes preserve tapped rounds across restore without changing the
     ],
   });
   await roundTrip(id);
+});
+
+test.each(['step-up', null])('a stale round tap is rejected after a station changes to %s', async (exerciseId) => {
+  const id = await startBlocks(MIXED_TEMPLATE.ordered!.blocks[3]!);
+  await action(id, { type: 'start' });
+  await action(id, roundTap((await current(id)).mixed!), 1_000);
+  const stale = (await current(id)).mixed!;
+  await action(id, { type: 'swap-station', slotId: 'lunge', exerciseId, expectedExerciseId: 'reverse-lunge' }, 2_000);
+
+  await expect(updateMixedSession(db, id, stale.cursor, roundTap(stale), at(3_000))).rejects.toThrow('lineup changed');
+  const fresh = (await current(id)).mixed!;
+  expect(fresh.drafts.circuit).toMatchObject({ tapped: 1, rounds: 1 });
+  await action(id, roundTap(fresh), 4_000);
+  expect((await current(id)).mixed!.drafts.circuit).toMatchObject({ tapped: 2, rounds: 2 });
 });
 
 test('a restored machine from a different exercise does not enable the leg press demo or logging', async () => {
