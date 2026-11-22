@@ -18,6 +18,8 @@ const exercises = new Map<string, LiftExercise>(
     mk('calf', { group: 'squat', primary: ['calves'], repClass: 'isolation' }),
     mk('lunge', { group: 'lunge', primary: ['glutes'], repClass: 'compound' }),
     mk('air-bike', { group: 'conditioning', primary: [] }),
+    mk('rower', { group: 'conditioning', primary: [] }),
+    mk('elliptical', { group: 'conditioning', primary: [] }),
   ].map((e) => [e.id, e]),
 );
 const pin: Equipment = { id: 'pin', name: 'Pin', kind: 'machine', steps: [10, 25, 40, 55] };
@@ -33,7 +35,25 @@ describe('generateLift', () => {
   it('starts with the warm-up block and has unique exercises', () => {
     const p = gen(snap('2026-01-01'));
     expect(p.blocks[0]).toMatchObject({ warmup: true, exerciseId: 'air-bike' });
+    expect(p.blocks[0]?.notes).toContain('easy bike');
+    expect(p.blocks[0]?.notes).not.toContain('rower');
     expect(new Set(ids(p)).size).toBe(ids(p).length);
+  });
+  it('names the warm-up machine that is still eligible', () => {
+    const p = gen({ ...snap('2026-01-01'), checklistBlocked: new Set(['air-bike', 'rower']) });
+    expect(p.blocks[0]).toMatchObject({
+      exerciseId: 'elliptical',
+      notes: "3–5 min easy elliptical, then hip airplane, world's greatest stretch, band pull-apart, glute bridge, cat-cow, ankle rocks",
+    });
+  });
+  it('uses an equipment-free warm-up when every cardio machine is excluded', () => {
+    const s = snap('2026-01-01', [{ exerciseId: 'elliptical', notAtMyGym: true }]);
+    s.checklistBlocked = new Set(['air-bike', 'rower']);
+    const p = gen(s);
+    expect(p.blocks[0]).toMatchObject({
+      exerciseId: '',
+      notes: "Easy walking in place for 3–5 min, then hip airplane, world's greatest stretch, band pull-apart, glute bridge, cat-cow, ankle rocks",
+    });
   });
   it('notAtMyGym on leg-press picks hack-squat', () => {
     const p = gen(snap('2026-01-01', [{ exerciseId: 'leg-press', notAtMyGym: true }]));

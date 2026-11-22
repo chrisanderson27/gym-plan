@@ -31,7 +31,9 @@ export interface SubOpts {
   exclude?: Set<string>;
 }
 
-const WARMUP_MACHINES = ['air-bike', 'rower', 'elliptical'];
+const WARMUP_MACHINES = ['air-bike', 'rower', 'elliptical'] as const;
+const WARMUP_CARDIO: Record<(typeof WARMUP_MACHINES)[number], string> = { 'air-bike': 'bike', rower: 'rower', elliptical: 'elliptical' };
+const WARMUP_MOBILITY = "hip airplane, world's greatest stretch, band pull-apart, glute bridge, cat-cow, ankle rocks";
 const CALIBRATION_EST_SETS = 4;
 const MAX_SWAP_CANDIDATES = 6;
 
@@ -167,17 +169,19 @@ export function generateLift(input: {
     }
   }
 
-  const warm = WARMUP_MACHINES.find((id) => exercises.has(id) && !excluded(id)) ?? WARMUP_MACHINES[0]!;
+  const warm = WARMUP_MACHINES.find((id) => exercises.has(id) && !excluded(id));
   const warmBlock: LiftBlock = {
     id: 'b0',
     kind: 'lift',
-    exerciseId: warm,
+    exerciseId: warm ?? '',
     sets: 1,
     repMin: 0,
     repMax: 0,
     warmup: true,
     label: 'Warm-up · 7 min',
-    notes: "3–5 min easy bike or rower, then hip airplane, world's greatest stretch, band pull-apart, glute bridge, cat-cow, ankle rocks",
+    notes: warm
+      ? `3–5 min easy ${WARMUP_CARDIO[warm]}, then ${WARMUP_MOBILITY}`
+      : `Easy walking in place for 3–5 min, then ${WARMUP_MOBILITY}`,
   };
   const blocks: LiftBlock[] = [warmBlock];
   const prescriptions = new Map<string, Prescription>();
