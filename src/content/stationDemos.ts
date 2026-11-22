@@ -31,6 +31,13 @@ const VERIFIED_EQUIPMENT = new Map<string, string>([
 
 export const phase3EquipmentId = (exerciseId: string) => VERIFIED_EQUIPMENT.get(exerciseId);
 
+const COACHED_EQUIPMENT = new Map([
+  ['box-step-up', 'bodyweight'], ['seated-cable-row', 'cable-stack'],
+  ['goblet-squat', 'dumbbells'], ['air-bike', 'air-bike'],
+]);
+export const COACHED_EXERCISE_IDS = [...COACHED_EQUIPMENT.keys(), ...PHASE3_EXERCISE_IDS];
+export const coachedEquipmentId = (exerciseId: string) => COACHED_EQUIPMENT.get(exerciseId) ?? phase3EquipmentId(exerciseId);
+
 /** Pose plus cues. The block picker uses this and keeps every illustrated exercise. */
 export function stationDemo(exercise: { poseId?: string; cues: readonly string[] }): { poseId: string } | null {
   if (!exercise.poseId || exercise.cues.length === 0) return null;
@@ -39,8 +46,16 @@ export function stationDemo(exercise: { poseId?: string; cues: readonly string[]
 
 /** Verified pose for a live station or swap, including exercise-specific instances of the seed machine. */
 export function phase3Pose(exerciseId: string, equipment: { id: string; kind: string; name: string }): string | undefined {
+  return verifiedPose(exerciseId, equipment, phase3EquipmentId(exerciseId));
+}
+
+export function coachedPose(exerciseId: string, equipment: { id: string; kind: string; name: string }): string | undefined {
+  return verifiedPose(exerciseId, equipment, coachedEquipmentId(exerciseId));
+}
+
+function verifiedPose(exerciseId: string, equipment: { id: string; kind: string; name: string }, seedId?: string) {
   const exercise = exerciseById.get(exerciseId);
-  const seed = SEED_EQUIPMENT.find((row) => row.id === phase3EquipmentId(exerciseId));
+  const seed = SEED_EQUIPMENT.find((row) => row.id === seedId);
   if (!exercise || !seed || equipment.kind !== seed.kind) return undefined;
   // Existing per-exercise machines have generated IDs and a name derived from their exercise and seed.
   const instance = seed.kind === 'machine' && equipment.name === `${exercise.name} — ${seed.name}`;

@@ -6,6 +6,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it('opens an audio context only when cues are enabled for the gesture', async () => {
+  vi.resetModules();
+  const { setCuesEnabled, unlockAudio } = await import('./audio');
+  const AudioContext = vi.fn(class {
+    resume() { return Promise.resolve(); }
+  });
+  vi.stubGlobal('navigator', {});
+  vi.stubGlobal('window', { AudioContext });
+
+  setCuesEnabled(false);
+  unlockAudio();
+
+  expect(AudioContext).not.toHaveBeenCalled();
+  unlockAudio(true);
+  expect(AudioContext).toHaveBeenCalledOnce();
+});
+
 describe('beep', () => {
   it('does not start an oscillator when cues are off, even after unlock', () => {
     const start = vi.fn();

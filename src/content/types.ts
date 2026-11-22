@@ -118,7 +118,8 @@ export interface PoseDef {
   view: 'side' | 'front';
   anchor: 'feet' | 'hands' | 'hip';
   frames: Keyframe[];
-  implement?: 'bar' | 'db' | 'kb' | 'handle' | 'none';
-  prop?: 'bench' | 'shoulder-bench' | 'box' | 'incline' | 'seat' | 'floor' | 'rower' | 'none';
+  idleFrame?: number;
+  implement?: 'bar' | 'db' | 'goblet-db' | 'kb' | 'handle' | 'none';
+  prop?: 'bench' | 'shoulder-bench' | 'box' | 'plyo-box' | 'incline' | 'seat' | 'floor' | 'rower' | 'cable-row' | 'air-bike' | 'none';
   cable?: { x: number; y: number };
 }

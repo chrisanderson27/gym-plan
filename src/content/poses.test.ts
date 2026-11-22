@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anglesAt, cycleMs, HEAD_RADIUS, layout, resolveFrames, skeleton } from '../engine/pose';
+import { anglesAt, cycleMs, gobletDumbbellBounds, HEAD_RADIUS, idleAngles, layout, resolveFrames, skeleton } from '../engine/pose';
 import { EXERCISES } from './exercises';
 import { LIFT_TEMPLATES } from './lift-templates';
 import { POSES } from './poses';
@@ -9,6 +9,83 @@ const BONES = new Set([
 ]);
 
 describe('poses', () => {
+  it('shows the squat and pulled row while their demos are idle', () => {
+    const squat = POSES['goblet-squat']!;
+    const crouched = skeleton(idleAngles(squat), squat.anchor, layout(squat).anchorAt);
+    expect(crouched.kneeN.x - crouched.hip.x).toBeGreaterThan(30);
+    expect(crouched.wristN.y).toBeLessThan((crouched.hip.y + crouched.neck.y) / 2);
+
+    const row = POSES['seated-cable-row']!;
+    const seated = skeleton(idleAngles(row), row.anchor);
+    const reach = skeleton(anglesAt(row, 0), row.anchor);
+    expect(seated.neck.x).toBeCloseTo(seated.hip.x);
+    expect(seated.ankleN.x - seated.hip.x).toBeGreaterThan(60);
+    expect(reach.wristN.x - seated.wristN.x).toBeGreaterThan(16);
+  });
+
+  it('keeps the goblet dumbbell visibly ahead of the fists at station-card size', () => {
+    const def = POSES['goblet-squat']!;
+    expect(def.implement).toBe('goblet-db');
+    const { anchorAt, viewBox } = layout(def);
+    const { wristN, wristF } = skeleton(idleAngles(def), def.anchor, anchorAt);
+    const weight = gobletDumbbellBounds(wristN);
+    const cardScale = 75 / viewBox.w;
+    const wristStrokeRadius = 1.25;
+    const gap = (weight.x - Math.max(wristN.x, wristF.x)) * cardScale - wristStrokeRadius;
+    expect(gap).toBeGreaterThan(2);
+    expect(weight.x + weight.w).toBeLessThan(viewBox.x + viewBox.w);
+  });
+
+  it('shows a side-on plyo box under the raised foot at rest', () => {
+    const def = POSES['box-step-up']!;
+    const { anchorAt, propRect: box } = layout(def);
+    const { ankleN, ankleF, toeN } = skeleton(anglesAt(def, 0), def.anchor, anchorAt);
+    expect(def.view).toBe('side');
+    expect(def.prop).toBe('plyo-box');
+    expect(ankleN.y).toBeLessThan(ankleF.y);
+    expect(ankleN.y - box!.y).toBeGreaterThan(0);
+    expect(box!.x + box!.w - toeN.x).toBeGreaterThan(25);
+    expect(box!.y + box!.h).toBeCloseTo(ankleF.y + 4);
+  });
+
+  it('keeps coached setup, action, return and equipment contact inside the compact drawing', () => {
+    for (const id of ['box-step-up', 'seated-cable-row', 'goblet-squat', 'air-bike']) {
+      const def = POSES[id]!;
+      const { anchorAt, propRect, viewBox } = layout(def);
+      const key = resolveFrames(def).map((angles) => skeleton(angles, def.anchor, anchorAt));
+      expect(key[0]).not.toEqual(key[1]);
+      expect(anglesAt(def, cycleMs(def))).toEqual(anglesAt(def, 0));
+      for (let t = 0; t < cycleMs(def); t += 10) {
+        const sk = skeleton(anglesAt(def, t), def.anchor, anchorAt);
+        for (const point of Object.values(sk)) {
+          expect(point.x, id).toBeGreaterThan(viewBox.x);
+          expect(point.x, id).toBeLessThan(viewBox.x + viewBox.w);
+          expect(point.y, id).toBeGreaterThan(viewBox.y);
+          expect(point.y, id).toBeLessThan(viewBox.y + viewBox.h);
+        }
+        if (id === 'box-step-up') {
+          expect(sk.ankleN.x).toBeCloseTo(anchorAt.x);
+          expect(sk.ankleN.y).toBeCloseTo(anchorAt.y);
+          expect(sk.toeN.x).toBeLessThan(propRect!.x + propRect!.w);
+          expect(Math.max(sk.ankleF.x, sk.toeF.x) + 3.5).toBeLessThan(propRect!.x);
+        }
+        if (id === 'goblet-squat') expect(sk.wristN.y).toBeLessThan((sk.hip.y + sk.neck.y) / 2);
+        if (id === 'seated-cable-row') {
+          expect(sk.ankleN).toEqual(key[0]!.ankleN);
+          expect(sk.wristN.x).toBeLessThan(def.cable!.x);
+        }
+      }
+      if (id === 'air-bike') {
+        for (const sk of key) {
+          expect((sk.ankleN.x + sk.ankleF.x) / 2).toBeCloseTo(35, 0);
+          expect((sk.ankleN.y + sk.ankleF.y) / 2).toBeCloseTo(56, 0);
+        }
+        expect(key[0]!.wristN.x).toBeLessThan(key[0]!.wristF.x);
+        expect(key[2]!.wristN.x).toBeGreaterThan(key[2]!.wristF.x);
+      }
+    }
+  });
+
   it('shows a rower sliding from catch to finish and recovering over fixed foot supports', () => {
     const def = POSES.rower!;
     const { anchorAt, propRect } = layout(def);

@@ -9,8 +9,9 @@ import { weeklyGoal } from '../../engine/plan/ring';
 import { weekIndex } from '../../engine/week';
 import { CalendarIcon, CheckIcon } from '../icons';
 import { MoreMenu } from '../MoreMenu';
-import { prLabel } from '../labels';
+import { mixedBlockName, prLabel } from '../labels';
 import { RING_ACTIVITY_LABELS } from '../home/Ring';
+import { MixedResultActuals } from './MixedResultActuals';
 import './mixed.css';
 
 const EFFORT = [['Easy', FINISH_RPE.easy], ['Right', FINISH_RPE.right], ['Hard', FINISH_RPE.hard]] as const;
@@ -83,6 +84,13 @@ export function MixedSummaryScreen({ id }: { id: string }) {
         <Trophy /><h2>New personal best</h2>
         <ul>{prs.map((pr) => <li key={pr.kind === 'block-work' ? pr.blockId : `${pr.kind}-${pr.exerciseId}-${pr.equipmentId}`}>{prLabel(pr)}</li>)}</ul>
       </section>}
+      {mixed.prescription.blocks.map((block) => {
+        const result = Object.hasOwn(mixed.results, block.id) ? mixed.results[block.id] : undefined;
+        return block.kind === 'coached' && result && <section class="mixed-summary-card" key={block.id} data-testid={`mixed-result-${block.id}`}>
+          <h2>{mixedBlockName(block)}</h2>
+          {result.status === 'skipped' ? <p>Skipped</p> : <MixedResultActuals result={result} coached />}
+        </section>;
+      })}
       <section class="mixed-summary-card">
         <h2>How did that feel?</h2>
         <p>A quick check-in, if you want it.</p>

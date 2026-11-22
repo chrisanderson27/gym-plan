@@ -29,8 +29,9 @@ export interface PoseDef {
   view: 'side' | 'front';
   anchor: 'feet' | 'hands' | 'hip';
   frames: Keyframe[];
-  implement?: 'bar' | 'db' | 'kb' | 'handle' | 'none';
-  prop?: 'bench' | 'shoulder-bench' | 'box' | 'incline' | 'seat' | 'floor' | 'rower' | 'none';
+  idleFrame?: number;
+  implement?: 'bar' | 'db' | 'goblet-db' | 'kb' | 'handle' | 'none';
+  prop?: 'bench' | 'shoulder-bench' | 'box' | 'plyo-box' | 'incline' | 'seat' | 'floor' | 'rower' | 'cable-row' | 'air-bike' | 'none';
   cable?: { x: number; y: number };
 }
 export interface Pt { x: number; y: number }
@@ -51,6 +52,10 @@ export const BONE_LENGTH: Record<Bone, number> = {
   torso: 50, head: 16, upperArmN: 28, forearmN: 26, upperArmF: 28, forearmF: 26, thighN: 40, shinN: 38, footN: 10, thighF: 40, shinF: 38, footF: 10,
 };
 export const HEAD_RADIUS = 8;
+
+export function gobletDumbbellBounds(wrist: Pt) {
+  return { x: wrist.x + 12, y: wrist.y - 14, w: 28, h: 20 };
+}
 
 const DEFAULT_MS = 800;
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -74,6 +79,11 @@ export function resolveFrames(def: PoseDef): FullAngles[] {
     prev = cur;
   }
   return out.length > 0 ? out : [{ ...STANDING }];
+}
+
+export function idleAngles(def: PoseDef): FullAngles {
+  const frames = resolveFrames(def);
+  return frames[def.idleFrame ?? 0] ?? frames[0]!;
 }
 
 /** Interpolates along the shortest arc, so 350 → 10 passes through 0. */
@@ -179,11 +189,17 @@ export function layout(def: PoseDef): Layout {
   const hip0 = raw0.hip;
   let propRect: Layout['propRect'];
   if (def.prop === 'box') propRect = { x: anchorAt.x - 10, y: anchorAt.y, w: 32, h: 27 };
+  if (def.prop === 'plyo-box') {
+    const y = anchorAt.y - 3;
+    propRect = { x: anchorAt.x - 20, y, w: 84, h: raw0.ankleF.y + 4 - y };
+  }
   if (def.prop === 'shoulder-bench') propRect = { x: raw0.neck.x - 32, y: raw0.neck.y + 4.5, w: 30, h: 8 };
   if (def.prop === 'rower') {
     const x = Math.min(...frames.map((f) => skeleton(f, def.anchor, anchorAt).hip.x)) - 16;
     propRect = { x, y: hip0.y + 11, w: anchorAt.x + 66 - x, h: 6 };
   }
+  if (def.prop === 'cable-row') propRect = { x: hip0.x - 18, y: hip0.y - 79, w: 134, h: 119 };
+  if (def.prop === 'air-bike') propRect = { x: hip0.x - 22, y: hip0.y - 3, w: 127, h: 84 };
   const pts: Pt[] = [];
   const collect = (a: FullAngles) => pts.push(...Object.values(skeleton(a, def.anchor, anchorAt)));
   frames.forEach((f, i) => {

@@ -12,7 +12,8 @@ export function setCuesEnabled(on: boolean): void {
 }
 
 /** Call from a user tap: iOS only lets audio start inside a gesture. Never throws. */
-export function unlockAudio(): void {
+export function unlockAudio(enabled = cuesEnabled): void {
+  if (!enabled) return;
   try {
     const nav = navigator as unknown as { audioSession?: AudioSessionLike };
     // 'playback' lets beeps through the silent switch; set before the context exists.
@@ -28,16 +29,17 @@ export function unlockAudio(): void {
   }
 }
 
-export function beep(kind: 'tick' | 'go'): void {
+export function beep(kind: 'tick' | 'go' | 'complete'): void {
   if (!cuesEnabled) return;
   try {
     if (!ctx) return;
-    const freq = kind === 'tick' ? 880 : 1320;
-    const dur = kind === 'tick' ? 0.12 : 0.3;
+    const freq = kind === 'tick' ? 880 : kind === 'go' ? 1320 : 660;
+    const dur = kind === 'tick' ? 0.12 : kind === 'go' ? 0.3 : 0.55;
     const t = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.frequency.value = freq;
+    if (kind === 'complete') osc.frequency.setValueAtTime(990, t + 0.18);
     gain.gain.setValueAtTime(0.0001, t);
     gain.gain.exponentialRampToValueAtTime(0.4, t + 0.01);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);

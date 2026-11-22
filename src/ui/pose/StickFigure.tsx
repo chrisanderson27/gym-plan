@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { PoseDef } from '../../content/types';
-import { anglesAt, HEAD_RADIUS, layout, resolveFrames, skeleton, type Joint, type Layout, type Skeleton } from '../../engine/pose';
+import { anglesAt, gobletDumbbellBounds, HEAD_RADIUS, idleAngles, layout, resolveFrames, skeleton, type Joint, type Layout, type Pt, type Skeleton } from '../../engine/pose';
 
 const SEGMENTS: { key: string; a: Joint; b: Joint; far?: boolean }[] = [
   { key: 'torso', a: 'hip', b: 'neck' },
@@ -15,13 +15,34 @@ const SEGMENTS: { key: string; a: Joint; b: Joint; far?: boolean }[] = [
   { key: 'armN1', a: 'neck', b: 'elbowN' },
   { key: 'armN2', a: 'elbowN', b: 'wristN' },
 ];
-const IMPLEMENT_R = { bar: 5, db: 4, kb: 5, handle: 3, none: 0 } as const;
+const IMPLEMENT_R = { bar: 5, db: 4, 'goblet-db': 0, kb: 5, handle: 3, none: 0 } as const;
 const r1 = (n: number) => Math.round(n * 10) / 10;
+const translate = ({ x, y }: Pt) => `translate(${r1(x)} ${r1(y)})`;
 const rowerSeat = (hipX: number, railY: number) => [{ x: hipX - 11, y: railY - 5 }, { x: hipX + 11, y: railY - 5 }] as const;
+const BIKE_FAN = { x: 69, y: 49, radius: 32 };
+
+function bikeLinks(hip: Pt, sk: Skeleton): [Pt, Pt][] {
+  const fan = { x: hip.x + BIKE_FAN.x, y: hip.y + BIKE_FAN.y };
+  const crank = { x: hip.x + 35, y: hip.y + 56 };
+  return [[fan, sk.wristF], [crank, sk.ankleF], [fan, sk.wristN], [crank, sk.ankleN]];
+}
 
 /** Static furniture positioned from frame 0. */
 function Prop({ def, lay }: { def: PoseDef; lay: Layout }) {
   const { hip0: h, propRect, viewBox: v, anchorAt: foot } = lay;
+  if (def.prop === 'air-bike') return <g class="prop" fill="none" transform={`translate(${h.x} ${h.y})`}>
+    <path d="M-22 75H105 M-15 5H10 M-20 75L0 5l35 51 34-7" />
+    <circle cx={BIKE_FAN.x} cy={BIKE_FAN.y} r={BIKE_FAN.radius} />
+  </g>;
+  if (def.prop === 'cable-row') return <g class="prop" fill="none" transform={`translate(${h.x} ${h.y})`}>
+    <path d="M-18 40H116V-79H89V40 M-12 10H25 M0 10V40 M76 16H103V-64" />
+  </g>;
+  if (def.prop === 'plyo-box' && propRect) {
+    const { x, y, w, h: height } = propRect;
+    const face = w - 14;
+    return <path class="prop" fill="none" stroke-linejoin="round" transform={`translate(${r1(x)} ${r1(y)})`}
+      d={`M0 10L14 0H${w}V${r1(height - 10)}L${face} ${r1(height)}H0Z M0 10H${face}L${w} 0 M${face} 10V${r1(height)}`} />;
+  }
   if (def.prop === 'rower' && propRect) {
     return <g fill="none">
       <rect class="prop" x={r1(propRect.x)} y={r1(propRect.y)} width={r1(propRect.w)} height={propRect.h} />
@@ -69,6 +90,7 @@ function Figure({ def, lay, sk, refs, testId, label, onToggle, running }: {
   const reg = (key: string) => (el: Element | null) => { if (refs) refs.current[key] = el; };
   const cable = def.cable ? { x: anchorAt.x + def.cable.x, y: anchorAt.y + def.cable.y } : null;
   const implR = IMPLEMENT_R[def.implement ?? 'none'];
+  const dumbbell = def.implement === 'goblet-db' ? gobletDumbbellBounds(sk.wristN) : null;
   const seat = def.prop === 'rower' && lay.propRect ? rowerSeat(sk.hip.x, lay.propRect.y) : null;
   return (
     <svg
@@ -81,6 +103,9 @@ function Figure({ def, lay, sk, refs, testId, label, onToggle, running }: {
       onClick={onToggle}
     >
       <Prop def={def} lay={lay} />
+      {def.prop === 'air-bike' && bikeLinks(lay.hip0, sk).map(([a, b], i) => (
+        <line class="prop" key={i} ref={reg(`bike-${i}`)} x1={r1(a.x)} y1={r1(a.y)} x2={r1(b.x)} y2={r1(b.y)} />
+      ))}
       {seat && <line class="prop" ref={reg('seat')} x1={r1(seat[0].x)} y1={r1(seat[0].y)} x2={r1(seat[1].x)} y2={r1(seat[1].y)} />}
       {cable && <line class="prop" ref={reg('cable')} x1={r1(cable.x)} y1={r1(cable.y)} x2={r1(sk.wristN.x)} y2={r1(sk.wristN.y)} />}
       {SEGMENTS.map((s) => (
@@ -88,6 +113,13 @@ function Figure({ def, lay, sk, refs, testId, label, onToggle, running }: {
       ))}
       <circle class="head" ref={reg('head')} cx={r1(sk.head.x)} cy={r1(sk.head.y)} r={HEAD_RADIUS} />
       {implR > 0 && <circle class="implement" ref={reg('impl')} cx={r1(sk.wristN.x)} cy={r1(sk.wristN.y)} r={implR} />}
+      {dumbbell && (
+        <g class="implement" ref={reg('dumbbell')} transform={translate(dumbbell)}>
+          <rect x={6} y={8} width={dumbbell.w - 12} height={4} />
+          <rect width={7} height={dumbbell.h} rx={1} />
+          <rect x={dumbbell.w - 7} width={7} height={dumbbell.h} rx={1} />
+        </g>
+      )}
     </svg>
   );
 }
@@ -110,7 +142,7 @@ export function StickFigure({ def, label, testId, running }: { def: PoseDef; lab
     return () => mq.removeEventListener('change', on);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (reduced || running === false) return;
     let raf = 0;
     let last = performance.now();
@@ -123,10 +155,12 @@ export function StickFigure({ def, label, testId, running }: { def: PoseDef; lab
       for (const s of SEGMENTS) setLine(r[s.key] ?? null, sk[s.a], sk[s.b]);
       if (r.cable) setLine(r.cable, { x: lay.anchorAt.x + (def.cable?.x ?? 0), y: lay.anchorAt.y + (def.cable?.y ?? 0) }, sk.wristN);
       if (r.seat && lay.propRect) setLine(r.seat, ...rowerSeat(sk.hip.x, lay.propRect.y));
+      if (def.prop === 'air-bike') bikeLinks(lay.hip0, sk).forEach(([a, b], i) => setLine(r[`bike-${i}`] ?? null, a, b));
       r.head?.setAttribute('cx', String(r1(sk.head.x)));
       r.head?.setAttribute('cy', String(r1(sk.head.y)));
       r.impl?.setAttribute('cx', String(r1(sk.wristN.x)));
       r.impl?.setAttribute('cy', String(r1(sk.wristN.y)));
+      r.dumbbell?.setAttribute('transform', translate(gobletDumbbellBounds(sk.wristN)));
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
@@ -143,10 +177,13 @@ export function StickFigure({ def, label, testId, running }: { def: PoseDef; lab
       </div>
     );
   }
-  // First frame is drawn synchronously, so the figure exists before any rAF fires.
+  const idle = running === false;
+  // Remount when switching modes because playback writes the SVG attributes directly.
   return (
     <Figure
-      def={def} lay={lay} sk={skeleton(anglesAt(def, 0), def.anchor, lay.anchorAt)} refs={refs} testId={testId} label={aria}
+      key={idle ? 'idle' : 'playing'}
+      def={def} lay={lay} sk={skeleton(idle ? idleAngles(def) : anglesAt(def, 0), def.anchor, lay.anchorAt)}
+      refs={refs} testId={testId} label={aria}
       running={running ?? true}
       onToggle={running === undefined ? () => { paused.current = !paused.current; } : undefined}
     />

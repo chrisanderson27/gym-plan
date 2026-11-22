@@ -1,16 +1,18 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { buildExport, importExport, parseExport } from './backup';
 import { exerciseById } from '../content';
+import { coachedSchedule, initialCoached, projectCoached } from '../engine/block/coached';
 import type { GymDb } from './db';
 import { loadSessionPRs } from './history';
 import { findOpenLiftSession, findStaleOpenLifts } from './lift';
 import { findOpenMixedSession, mixedOptions, rateMixedSession, startMixedSession, updateMixedSession } from './mixedSession';
-import { MIXED_AT, MIXED_TEMPLATE, PRIOR_LIFT, PRIOR_SET } from './mixedSession.test-fixture';
+import { COACHED_TEMPLATE, MIXED_AT, MIXED_TEMPLATE, PRIOR_LIFT, PRIOR_SET } from './mixedSession.test-fixture';
 import { settings } from './p4-test-utils';
 import { loadRingInput } from './plan';
 import { saveAsMine } from './templates';
 import { openTestDb } from './test-utils';
 import type { MixedExecution } from './types';
+import { validateRows } from './validate';
 import { weeklyGoal } from '../engine/plan/ring';
 
 const source = { templateId: MIXED_TEMPLATE.id };
@@ -56,6 +58,126 @@ async function roundTrip(id: string) {
     await restored.delete();
   }
 }
+
+const coachedFixture = () => {
+  const block = COACHED_TEMPLATE.ordered!.blocks[2]!;
+  if (block.kind !== 'coached' || !block.stations) throw new Error('Missing coached fixture');
+  return block;
+};
+
+test('reconciles stale and duplicate Next, pause, expiry and Continue across backup and replay', async () => {
+  const block = coachedFixture();
+  const id = await startBlocks(block);
+  const entry = (await current(id)).mixed!.cursor;
+  await Promise.all([0, 10].map((ms) => updateMixedSession(db, id, entry, { type: 'start' }, at(ms))));
+  const active = (await current(id)).mixed!;
+  expect(active.timers.rotation?.coached).toEqual(initialCoached);
+  await roundTrip(id);
+  await Promise.all([0, 1].map(() => updateMixedSession(db, id, active.cursor, { type: 'next', observed: initialCoached }, at(8_000))));
+  let clock = (await current(id)).mixed!.timers.rotation!;
+  expect(clock).toMatchObject({ startedAt: at().getTime(), pausedMs: 0, durationMs: 720_000, coached: { station: 1, phaseStartMs: 8000 } });
+  const stale = { type: 'next', observed: clock.coached! } as const;
+  await action(id, stale, 53_000);
+  expect((await current(id)).mixed!.timers.rotation).toEqual(clock);
+  const schedule = coachedSchedule(block, block.stations);
+  await action(id, { type: 'pause' }, 53_000);
+  clock = (await current(id)).mixed!.timers.rotation!;
+  expect(clock.coached).toEqual(projectCoached(schedule, stale.observed, 53_000).at);
+  await action(id, { type: 'expire' }, 900_000);
+  await roundTrip(id);
+  await action(id, { type: 'resume' }, 900_000);
+  const deadline = 720_000 + 900_000 - 53_000;
+  await Promise.all([stale, { type: 'expire' } as const].map((incoming) => updateMixedSession(db, id, active.cursor, incoming, at(deadline))));
+  const review = (await current(id)).mixed!;
+  expect(review.cursor.stage).toBe('review');
+  expect(review.timers.rotation?.frozenElapsedMs).toBe(720_000);
+  expect(review.drafts.rotation?.rounds).toBe(4);
+  await roundTrip(id);
+  const partial = { slotId: 'cable', unit: 'reps' as const, count: 6 };
+  await action(id, { type: 'review', rounds: 2, partial }, deadline + 1);
+  const failWrite = () => { throw new Error('result write failed'); };
+  db.sessions.hook('updating').subscribe(failWrite);
+  await expect(action(id, { type: 'continue' }, deadline + 2)).rejects.toThrow('result write failed');
+  db.sessions.hook('updating').unsubscribe(failWrite);
+  await Promise.all([0, 1].map(() => updateMixedSession(db, id, review.cursor, { type: 'continue' }, at(deadline + 3))));
+  expect((await current(id)).mixed!.results).toEqual({ rotation: expect.objectContaining({ status: 'completed', rounds: 2, partial, elapsedMs: 720_000 }) });
+  await roundTrip(id);
+  const restored = openTestDb();
+  try {
+    await importExport(restored, parseExport(JSON.stringify(await buildExport(db, at(deadline + 4), 'test'))).file);
+    const replay = await startMixedSession(restored, { sessionId: id }, at(deadline + 10));
+    const fresh = (await restored.sessions.get(replay))!.mixed!;
+    expect(fresh.timers).toEqual({});
+    expect(fresh.drafts.rotation).toEqual({ rounds: null, tapped: 0 });
+    expect(fresh.results).toEqual({});
+    const started = await updateMixedSession(restored, replay, fresh.cursor, { type: 'start' }, at(deadline + 100));
+    expect(started?.mixed?.timers.rotation).toMatchObject({ coached: initialCoached, startedAt: at(deadline + 100).getTime() });
+  } finally {
+    await restored.delete();
+  }
+});
+
+test('keeps skipped slots, live replacement windows and completed lineup history', async () => {
+  const block = coachedFixture();
+  await db.settings.update('settings', { unavailableEquipment: ['plyo-box'] });
+  const id = await startBlocks(block);
+  await expect(action(id, { type: 'start' })).rejects.toThrow('Replace or skip');
+  await action(id, { type: 'swap-station', slotId: 'box', exerciseId: null, expectedExerciseId: 'box-step-up' });
+  await action(id, { type: 'start' });
+  const active = (await current(id)).mixed!;
+  expect(active.stations.rotation?.[0]?.skipped).toBe(true);
+  expect(active.timers.rotation?.coached).toEqual(initialCoached);
+  await action(id, { type: 'swap-station', slotId: 'squat', exerciseId: 'leg-press', expectedExerciseId: 'goblet-squat' }, 137_000);
+  const swapped = (await current(id)).mixed!;
+  expect(swapped.drafts.rotation?.stationChanges).toEqual([{ afterRound: 1, stations: active.stations.rotation }]);
+  expect(swapped.stations.rotation?.[2]).toMatchObject({ exerciseId: 'leg-press', target: { unit: 'reps', amount: 12 } });
+  expect(swapped.timers.rotation?.coached).toMatchObject({ station: 0, phase: 'work', phaseStartMs: 135_000 });
+  expect(swapped.timers.rotation?.durationMs).toBe(720_000);
+  await roundTrip(id);
+  await action(id, { type: 'finish' }, 138_000);
+  const saved = await action(id, { type: 'continue' }, 139_000);
+  expect(saved?.mixed?.results.rotation).toMatchObject({ rounds: 1, stations: swapped.stations.rotation });
+  await roundTrip(id);
+});
+
+test('distinguishes early zero, skipped, and saved placeholders', async () => {
+  const block = coachedFixture();
+  const { id: blockId, name, durationSec, kind } = block;
+  await expect(startBlocks({ id: blockId, name, durationSec, kind })).rejects.toThrow('without a station schedule');
+  expect(await db.sessions.count()).toBe(0);
+  const id = await startBlocks(block);
+  await action(id, { type: 'start' });
+  await action(id, { type: 'finish' }, 8000);
+  const zero = (await action(id, { type: 'continue' }, 8000))!;
+  expect(zero.mixed?.results.rotation).toMatchObject({ status: 'completed', rounds: 0, elapsedMs: 8000 });
+  const skipped = await startBlocks(block);
+  await action(skipped, { type: 'skip' });
+  expect((await action(skipped, { type: 'continue' }))?.mixed?.results.rotation).toMatchObject({ status: 'skipped', rounds: null });
+  await roundTrip(skipped);
+});
+
+test('rejects hostile coached timing, result and lineup snapshots', async () => {
+  const id = await startBlocks(coachedFixture());
+  await action(id, { type: 'start' });
+  const snapshot = await current(id);
+  const invalid = (mutate: (m: MixedExecution) => void) => {
+    const row = structuredClone(snapshot);
+    mutate(row.mixed!);
+    expect(() => validateRows('sessions', [row])).toThrow('malformed');
+  };
+  invalid((m) => { delete m.timers.rotation!.coached; });
+  invalid((m) => { m.timers.rotation!.coached!.phase = 'transition'; });
+  invalid((m) => { m.timers.rotation!.coached!.phaseStartMs = 720_001; });
+  invalid((m) => { m.timers.rotation!.coached!.rotations = Number.MAX_SAFE_INTEGER + 1; });
+  invalid((m) => { m.timers.rotation!.pausedAt = at(-1).getTime(); });
+  invalid((m) => { m.timers.rotation!.frozenElapsedMs = 720_000; });
+  invalid((m) => { m.stations.rotation!.reverse(); });
+  invalid((m) => { m.stations.rotation![0]!.target = { unit: 'sec', amount: 46 }; });
+  invalid((m) => { m.stations.rotation![0]!.poseId = 'goblet-squat'; });
+  invalid((m) => { m.stations.rotation![0]!.poseId = 'constructor'; });
+  invalid((m) => { m.drafts.rotation!.stationChanges = [{ afterRound: 1, stations: m.stations.rotation! }]; });
+  invalid((m) => { m.results.rotation = { status: 'completed', elapsedMs: 0 }; });
+});
 
 test('concurrent saved Starts and stale legacy readers leave one durable ordered session', async () => {
   const [id, same] = await Promise.all([startMixedSession(db, source, at()), startMixedSession(db, source, at())]);

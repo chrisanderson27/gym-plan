@@ -23,10 +23,10 @@ export const POSES: Record<string, PoseDef> = {
     ],
   },
   'goblet-squat': {
-    view: 'side', anchor: 'feet', implement: 'db',
+    view: 'side', anchor: 'feet', implement: 'goblet-db', idleFrame: 1,
     frames: [
       { angles: { torso: 180, head: 180, ...legs(0, 0), ...arms(15, 140) } },
-      { angles: { torso: 160, head: 170, ...legs(95, 330), ...arms(25, 140) }, ms: 900, holdMs: 200 },
+      { angles: { torso: 154, head: 170, ...legs(95, 330), thighF: 90, shinF: 320, ...arms(45, 142) }, ms: 900, holdMs: 200 },
     ],
   },
   'leg-press': {
@@ -83,6 +83,15 @@ export const POSES: Record<string, PoseDef> = {
     frames: [
       { angles: { torso: 175, head: 180, thighN: 70, shinN: 350, thighF: 0, shinF: 0, ...arms(0, 0) } },
       { angles: { torso: 180, thighN: 0, shinN: 0, thighF: 350, shinF: 325 }, ms: 900, holdMs: 300 },
+    ],
+  },
+  'box-step-up': {
+    view: 'side', anchor: 'feet', prop: 'plyo-box',
+    frames: [
+      { angles: { torso: 174, head: 170, thighN: 88, shinN: 12, thighF: 330, shinF: 0,
+        upperArmN: 37, forearmN: 115, upperArmF: 325, forearmF: 300 }, ms: 1100, holdMs: 250 },
+      { angles: { torso: 180, thighN: 0, shinN: 0, thighF: 340, shinF: 325,
+        ...arms(5, 40) }, ms: 900, holdMs: 250 },
     ],
   },
   'calf-raise': {
@@ -178,6 +187,16 @@ export const POSES: Record<string, PoseDef> = {
       { angles: { torso: 180, head: 180, ...arms(37, 129) }, ms: 450 },
     ],
   },
+  'seated-cable-row': {
+    view: 'side', anchor: 'hip', prop: 'cable-row', implement: 'handle', idleFrame: 2, cable: { x: 89, y: -12 },
+    frames: [
+      { angles: { ...SEATED, thighN: 106, shinN: 54, footN: 145, thighF: 86, shinF: 68, footF: 115,
+        ...arms(68, 81) }, ms: 450, holdMs: 200 },
+      { angles: { ...arms(47, 88) }, ms: 450 },
+      { angles: { ...arms(18, 97) }, ms: 450, holdMs: 250 },
+      { angles: { ...arms(47, 88) }, ms: 450 },
+    ],
+  },
   'db-row': {
     view: 'side', anchor: 'feet', implement: 'db',
     frames: [
@@ -264,6 +283,18 @@ export const POSES: Record<string, PoseDef> = {
       { angles: { ...legs(90, 83), ...arms(81, 81) }, ms: 450 },
       { angles: { torso: 195, head: 177, ...arms(290, 88) }, ms: 350, holdMs: 150 },
       { angles: { torso: 160, head: 170, ...arms(81, 81) }, ms: 450 },
+    ],
+  },
+  'air-bike': {
+    view: 'side', anchor: 'hip', prop: 'air-bike',
+    frames: [
+      // Opposed feet around the crank, with the opposite hand pushing forward.
+      { angles: { torso: 150, head: 176, thighN: 82.4, shinN: 353, thighF: 34, shinF: 19.4,
+        upperArmN: 6, forearmN: 97, upperArmF: 46, forearmF: 80 }, ms: 350 },
+      { angles: { thighN: 59.1, shinN: 21.1, thighF: 59.8, shinF: 340.7, ...arms(30, 94) }, ms: 350 },
+      { angles: { thighN: 34, shinN: 19.4, thighF: 82.4, shinF: 353,
+        upperArmN: 46, forearmN: 80, upperArmF: 6, forearmF: 97 }, ms: 350 },
+      { angles: { thighN: 59.8, shinN: 340.7, thighF: 59.1, shinF: 21.1, ...arms(30, 94) }, ms: 350 },
     ],
   },
   'farmer-carry': {

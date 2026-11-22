@@ -26,6 +26,25 @@ export const MIXED_TEMPLATE: Template = {
   blocks: ordered.blocks.flatMap((b) => b.kind === 'strength' ? [{ ...b, kind: 'lift' }] : []),
 };
 
+const coached: OrderedPrescription = {
+  ...ordered,
+  blocks: ordered.blocks.map((block) => block.id !== 'thrust' ? block : {
+    id: 'rotation', kind: 'coached', name: 'Four-station rotation', durationSec: 720,
+    workSec: 45, restSec: 0, transitionSec: 0,
+    stations: [
+      { slotId: 'box', exerciseId: 'box-step-up', equipmentId: 'bodyweight', target: { unit: 'sec', amount: 45 } },
+      { slotId: 'cable', exerciseId: 'seated-cable-row', equipmentId: 'cable-stack', target: { unit: 'reps', amount: 12 } },
+      { slotId: 'squat', exerciseId: 'goblet-squat', equipmentId: 'dumbbells', target: { unit: 'reps', amount: 12 } },
+      { slotId: 'bike', exerciseId: 'air-bike', equipmentId: 'air-bike', target: { unit: 'sec', amount: 45 } },
+    ],
+  }),
+};
+
+export const COACHED_TEMPLATE: Template = {
+  ...MIXED_TEMPLATE, id: 'legs-core-coached', ordered: coached,
+  blocks: MIXED_TEMPLATE.blocks.filter((block) => block.id !== 'thrust'),
+};
+
 export const PRIOR_LIFT: Session = {
   id: 'previous-press', type: 'lift', date: priorDate, endedAt: '2026-11-20T16:30:00Z',
   blocks: MIXED_TEMPLATE.blocks, durationMin: 30, hard: false, hardCardio: false, rpe: 7, notes: '',

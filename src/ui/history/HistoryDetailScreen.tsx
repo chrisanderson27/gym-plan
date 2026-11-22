@@ -9,6 +9,7 @@ import { stationTargetLine } from '../blocks/StationCard';
 import { dayOf } from '../cardio/format';
 import { exerciseName, mixedBlockName, modalityName, prLabel, runKindName, sessionTypeLabel } from '../labels';
 import { MoreMenu } from '../MoreMenu';
+import { MixedResultActuals } from '../session/MixedResultActuals';
 import { circuitSummary } from './circuit-summary';
 
 export function HistoryDetailScreen({ id }: { id: string }) {
@@ -93,16 +94,15 @@ export function HistoryDetailScreen({ id }: { id: string }) {
         if (!result) return null;
         const replacement = session.mixed?.strength[block.id]?.exerciseId;
         const title = mixedBlockName(block);
-        const partial = result.partial && result.stations?.find((s) => s.slotId === result.partial?.slotId);
         return (
           <section class="card" key={block.id} data-testid={`mixed-result-${block.id}`}>
             <h2>{title}{replacement && exerciseName(replacement) !== title && ` → ${exerciseName(replacement)}`}</h2>
             <p>{result.status === 'skipped' ? 'Skipped' : 'Completed'}{block.kind !== 'strength' && ` · ${Math.floor(result.elapsedMs / 1000)} sec`}</p>
-            {result.rounds !== undefined && <p>{result.rounds === null ? 'Rounds unreported' : `${result.rounds} rounds`}</p>}
-            {result.partial && partial && <p>Partial · {exerciseName(partial.exerciseId)} · {result.partial.count} {result.partial.unit}</p>}
+            {(block.kind !== 'coached' || result.status !== 'skipped') && <MixedResultActuals result={result} coached={block.kind === 'coached'} />}
             {result.stationChanges?.map((change, i, changes) => {
               const first = (changes[i - 1]?.afterRound ?? 0) + 1;
-              const label = first === change.afterRound ? `Tapped round ${first}` : `Tapped rounds ${first}–${change.afterRound}`;
+              const unit = block.kind === 'coached' ? 'Rotation' : 'Tapped round';
+              const label = first === change.afterRound ? `${unit} ${first}` : `${unit}s ${first}–${change.afterRound}`;
               return <p key={change.afterRound}>{label} · {change.stations.filter((s) => !s.skipped).map((s) => exerciseName(s.exerciseId)).join(', ')}</p>;
             })}
             {result.stations && <ul class="plan">{result.stations.map((s) => <li key={s.slotId}>

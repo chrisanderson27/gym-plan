@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { COACHED_TEMPLATE } from './mixedSession.test-fixture';
 import { validateRows } from './validate';
 import type { Template } from './types';
 
@@ -17,4 +18,21 @@ test('ordered imports accept unknown exercise IDs and reject duplicate slots and
   expect(() => validateRows('templates', [{
     ...template, ordered: { name: 'Legs', blocks: [{ ...circuit, durationSec: Infinity }] },
   }])).toThrow('malformed');
+});
+
+test('coached backups accept complete schedules and old placeholders only', () => {
+  const block = COACHED_TEMPLATE.ordered!.blocks[2]!;
+  if (block.kind !== 'coached' || !block.stations) throw new Error('Missing coached fixture');
+  const { id, kind, name, durationSec } = block;
+  const read = (replacement: object) => validateRows('templates', [{ ...COACHED_TEMPLATE, ordered: { name, blocks: [replacement] } }]);
+  expect(() => read(block)).not.toThrow();
+  expect(() => read({ id, kind, name, durationSec })).not.toThrow();
+  expect(() => read({ ...block, restSec: 0.125, transitionSec: 0.999 })).not.toThrow();
+  for (const patch of [
+    { workSec: undefined }, { restSec: -1 }, { transitionSec: 0.00001 }, { workSec: 0 }, { workSec: Infinity },
+    { restSec: 4000 }, { stations: [block.stations[0], block.stations[0]] }, { stations: [] },
+    { coached: { rotations: 12 } }, { phases: [] }, { stationChanges: [] },
+    { stations: [{ ...block.stations[0], target: { unit: 'sec', amount: 0.00001 } }] },
+    { stations: [{ ...block.stations[1], target: { unit: 'm', amount: 10 } }] },
+  ]) expect(() => read({ ...block, ...patch })).toThrow('malformed');
 });

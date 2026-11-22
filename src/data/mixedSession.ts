@@ -1,7 +1,8 @@
 import { exerciseById } from '../content';
 import { EQUIPMENT_PREFS } from '../content/equipment-prefs';
-import { PHASE3_EXERCISE_IDS, phase3EquipmentId, phase3Pose } from '../content/stationDemos';
-import { finishClock, pauseClock, reconcileClock, resumeClock, startClock } from '../engine/block/session';
+import { COACHED_EXERCISE_IDS, PHASE3_EXERCISE_IDS, coachedEquipmentId, coachedPose, phase3EquipmentId, phase3Pose } from '../content/stationDemos';
+import { coachedSchedule, initialCoached, nextCoached, projectCoached, sameCoachedPhase } from '../engine/block/coached';
+import { elapsedClamped, finishClock, pauseClock, reconcileClock, resumeClock, startClock } from '../engine/block/session';
 import { stationUnits } from '../engine/block/progression';
 import { FINISH_RPE, PRIMARY_SET_WEIGHT, SECONDARY_SET_WEIGHT } from '../engine/config';
 import { localDate } from '../engine/dates';
@@ -17,13 +18,14 @@ import { blockPrescriptionPatch, ensureEquipmentInstance, LIFT_EXERCISES, loadLi
 import { toBlockExercise } from './liftday';
 import { loggedMixedSets, mixedSetId, reconcileMixedStrength } from './mixedSets';
 import { loadRunnable, orderedStrengthBlocks, replayLiftFlags } from './templates';
-import type { EffectiveStation, LiftBlock, MixedCursor, MixedDraft, MixedExecution, MixedResult, MixedTimer,
+import type { CoachedCheckpoint, EffectiveStation, LiftBlock, MixedCursor, MixedDraft, MixedExecution, MixedResult, MixedTimer,
   OrderedBlock, OrderedStation, OrderedStrengthBlock, Session, SetRow } from './types';
 
 export class MixedInputError extends Error {}
 
 type Source = { templateId: string } | { sessionId: string };
 type Action = { type: 'start' | 'pause' | 'resume' | 'expire' | 'finish' | 'skip' }
+  | { type: 'next'; observed: CoachedCheckpoint }
   | { type: 'round'; expectedTapped: number; expectedStations: EffectiveStation[] }
   | { type: 'swap-station'; slotId: string; exerciseId: string | null; expectedExerciseId: string }
   | { type: 'swap-strength'; exerciseId: string; expectedExerciseId: string }
@@ -33,7 +35,7 @@ type Action = { type: 'start' | 'pause' | 'resume' | 'expire' | 'finish' | 'skip
 const PHASE_LIFTS = new Map([...LIFT_EXERCISES].filter(([id, lift]) => lift.repMin > 0 && PHASE3_EXERCISE_IDS.some((known) => known === id)));
 const required = new Map([
   ['step-up', ['dumbbells', 'plyo-box']], ['bulgarian-split-squat', ['dumbbells', 'flat-bench']],
-  ['hip-thrust', ['flat-bench']],
+  ['hip-thrust', ['flat-bench']], ['box-step-up', ['plyo-box']],
 ]);
 const get = <T,>(map: Record<string, T>, key: string): T | undefined => Object.hasOwn(map, key) ? map[key] : undefined;
 const nonnegative = (v: number) => Number.isFinite(v) && v >= 0;
@@ -47,32 +49,33 @@ async function gym(db: GymDb, now: Date) {
 }
 type Gym = Awaited<ReturnType<typeof gym>>;
 
-function availableDemo(g: Gym, exerciseId: string, preferred?: string) {
+function availableDemo(g: Gym, exerciseId: string, preferred?: string, coached = false) {
   const exercise = exerciseById.get(exerciseId);
   if (!exercise || exercise.retired || required.get(exerciseId)?.some((id) => g.unavailable.has(id))
     || !exerciseAllowed({ id: exerciseId, tags: exercise.equipment }, g.excluded, g.snapshot.checklistBlocked ?? new Set(), g.blockedTags)) return null;
-  const equipmentId = preferred ?? resolveEquipmentId(g.snapshot, exercise, g.week, phase3EquipmentId(exerciseId));
+  const seed = coached ? coachedEquipmentId(exerciseId) : phase3EquipmentId(exerciseId);
+  const equipmentId = preferred ?? resolveEquipmentId(g.snapshot, exercise, g.week, seed);
   const equipment = g.snapshot.equipment.get(equipmentId);
   if (!equipment || g.blockedTags.has(equipment.kind)) return null;
-  const poseId = phase3Pose(exerciseId, equipment);
+  const poseId = coached ? coachedPose(exerciseId, equipment) : phase3Pose(exerciseId, equipment);
   return poseId ? { equipmentId, poseId } : null;
 }
 
-function resolveStation(g: Gym, original: OrderedStation, exerciseId = original.exerciseId): EffectiveStation | null {
+function resolveStation(g: Gym, original: OrderedStation, exerciseId = original.exerciseId, coached = false): EffectiveStation | null {
   const ex = exerciseById.get(exerciseId);
-  const demo = availableDemo(g, exerciseId, exerciseId === original.exerciseId ? original.equipmentId : undefined);
+  const demo = availableDemo(g, exerciseId, exerciseId === original.exerciseId ? original.equipmentId : undefined, coached);
   if (!ex || !demo || !stationUnits(toBlockExercise(ex)).includes(original.target.unit)) return null;
   const equipment = g.snapshot.equipment.get(demo.equipmentId);
   const load = equipment?.kind === 'bodyweight' || equipment?.kind === 'cardio' ? undefined : original.load;
   return { slotId: original.slotId, exerciseId, target: original.target, load, ...demo };
 }
 
-function stationChoices(g: Gym, original: OrderedStation, current: EffectiveStation) {
+function stationChoices(g: Gym, original: OrderedStation, current: EffectiveStation, coached: boolean) {
   const ex = exerciseById.get(current.exerciseId);
-  const supported = current.equipmentId && current.poseId && availableDemo(g, current.exerciseId, current.equipmentId)?.poseId === current.poseId;
-  const options = !supported ? PHASE3_EXERCISE_IDS : ex?.substitutes ?? [];
+  const supported = current.equipmentId && current.poseId && availableDemo(g, current.exerciseId, current.equipmentId, coached)?.poseId === current.poseId;
+  const options = coached ? [...(ex?.substitutes ?? []), ...COACHED_EXERCISE_IDS] : !supported ? PHASE3_EXERCISE_IDS : ex?.substitutes ?? [];
   return [...new Set([original.exerciseId, current.exerciseId, ...options])].flatMap((id) => {
-    const next = resolveStation(g, original, id);
+    const next = resolveStation(g, original, id, coached);
     return next && (id !== current.exerciseId || next.equipmentId !== current.equipmentId || !supported || current.skipped) ? [next] : [];
   });
 }
@@ -130,7 +133,7 @@ export async function startMixedSession(db: GymDb, source: Source, now = new Dat
     }
     const run = await loadRunnable(db, source);
     if (!run?.ordered || !run.ordered.blocks.length) throw new MixedInputError('This workout is unavailable.');
-    if (run.ordered.blocks.some((b) => b.kind === 'coached')) throw new MixedInputError('Coached blocks cannot run in this workout yet.');
+    if (run.ordered.blocks.some((b) => b.kind === 'coached' && !b.stations)) throw new MixedInputError('Coached blocks without a station schedule are unavailable.');
     const prescription = structuredClone(run.ordered);
     const g = await gym(db, now);
     const flags = replayLiftFlags(g.snapshot, now);
@@ -149,8 +152,8 @@ export async function startMixedSession(db: GymDb, source: Source, now = new Dat
         mixed.strength = { ...mixed.strength, [b.id]: {
           exerciseId, equipmentId: accepted ? equipmentId : undefined, sets, repMin, repMax, targetWeight, rirTarget, label,
         } };
-      } else if (b.kind === 'self-paced') {
-        mixed.stations = { ...mixed.stations, [b.id]: b.stations.map((s) => resolveStation(g, s) ?? { ...s, poseId: undefined }) };
+      } else if ((b.kind === 'self-paced' || b.kind === 'coached') && b.stations) {
+        mixed.stations = { ...mixed.stations, [b.id]: b.stations.map((s) => resolveStation(g, s, s.exerciseId, b.kind === 'coached') ?? { ...s, poseId: undefined }) };
         mixed.drafts = { ...mixed.drafts, [b.id]: { rounds: null, tapped: 0 } };
       }
     }
@@ -170,15 +173,16 @@ export function findOpenMixedSession(db: GymDb): Promise<Session | undefined> {
 
 export async function mixedOptions(db: GymDb, b: OrderedBlock, mixed: MixedExecution, now = new Date()) {
   const g = await gym(db, now);
-  if (b.kind === 'self-paced') {
+  if ((b.kind === 'self-paced' || b.kind === 'coached') && b.stations) {
+    const coached = b.kind === 'coached';
     const effective = get(mixed.stations, b.id) ?? [];
     const available = new Set(effective.filter((s) =>
-      !s.skipped && s.equipmentId && s.poseId && availableDemo(g, s.exerciseId, s.equipmentId)?.poseId === s.poseId
+      !s.skipped && s.equipmentId && s.poseId && availableDemo(g, s.exerciseId, s.equipmentId, coached)?.poseId === s.poseId
     ).map((s) => s.slotId));
     return {
-      stations: Object.fromEntries(b.stations.map((s, i) => [s.slotId, stationChoices(g, s, effective[i]!)])),
+      stations: Object.fromEntries(b.stations.map((s, i) => [s.slotId, stationChoices(g, s, effective[i]!, coached)])),
       available,
-      ready: effective.every((s) => s.skipped || available.has(s.slotId)),
+      ready: (!coached || available.size > 0) && effective.every((s) => s.skipped || available.has(s.slotId)),
     };
   }
   if (b.kind === 'strength') {
@@ -218,14 +222,14 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
     if (expected.blockId !== blockId || expected.stage !== stage || expected.setSlot !== setSlot) return session;
     const index = m.prescription.blocks.findIndex((b) => b.id === blockId);
     const b = m.prescription.blocks[index];
-    if (!b || b.kind === 'coached') return session;
+    if (!b || (b.kind === 'coached' && !b.stations)) return session;
     const strengthRows = b.kind === 'strength' ? await db.sets.where('sessionId').equals(id).toArray() : undefined;
     if (strengthRows && reconcileMixedStrength(session, blockId, strengthRows)) {
       await db.sessions.put(session);
       return session;
     }
     const nowMs = now.getTime();
-    const clock = get(m.timers, blockId);
+    let clock = get(m.timers, blockId);
     const draft = get(m.drafts, blockId);
     const stations = get(m.stations, blockId);
     const strength = get(m.strength, blockId);
@@ -233,9 +237,18 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
     const saveClock = (next: MixedTimer) => { m.timers = { ...m.timers, [blockId]: next }; };
     const saveDraft = (next: MixedDraft) => { m.drafts = { ...m.drafts, [blockId]: next }; };
     const reconcile = stage === 'active' && clock ? reconcileClock(clock, nowMs) : undefined;
-    if (reconcile?.openedReview) {
-      saveClock(reconcile.clock);
+    if (stage === 'active' && b.kind === 'coached' && b.stations && clock?.coached && stations) {
+      const schedule = coachedSchedule(b, stations.filter((s) => !s.skipped));
+      clock = { ...clock, coached: projectCoached(schedule, clock.coached, elapsedClamped(clock, nowMs)).at };
+      saveClock(clock);
+    }
+    const openReview = (frozen: MixedTimer) => {
+      saveClock(frozen);
+      if (frozen.coached && draft) saveDraft({ ...draft, rounds: frozen.coached.rotations });
       setStage('review');
+    };
+    if (reconcile?.openedReview) {
+      openReview({ ...clock!, frozenElapsedMs: reconcile.clock.frozenElapsedMs });
       await db.sessions.put(session);
       return session;
     }
@@ -244,7 +257,8 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
       case 'start':
         if (stage !== 'entry' || b.kind === 'strength') return session;
         if (!(await mixedOptions(db, b, m, now)).ready) throw new MixedInputError('Replace or skip unavailable movements first.');
-        saveClock(startClock({ startedAt: null, pausedAt: null, pausedMs: 0, durationMs: b.durationSec * 1000 }, nowMs));
+        saveClock({ ...startClock({ startedAt: null, pausedAt: null, pausedMs: 0, durationMs: b.durationSec * 1000 }, nowMs),
+          ...(b.kind === 'coached' ? { coached: initialCoached } : {}) });
         setStage('active');
         break;
       case 'pause':
@@ -254,16 +268,23 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         break;
       case 'expire':
         return session;
+      case 'next': {
+        if (stage !== 'active' || !clock?.coached || clock.pausedAt !== null || !stations || !sameCoachedPhase(clock.coached, action.observed)) return session;
+        const next = nextCoached(clock.coached, stations.filter((s) => !s.skipped).length, elapsedClamped(clock, nowMs));
+        if (next.rotations >= Number.MAX_SAFE_INTEGER - (clock.durationMs - next.phaseStartMs)) throw new MixedInputError('This rotation cannot advance further.');
+        saveClock({ ...clock, coached: next });
+        break;
+      }
       case 'round':
-        if (stage !== 'active' || !draft || !stations || !clock || clock.pausedAt !== null || draft.tapped !== action.expectedTapped) return session;
+        if (b.kind !== 'self-paced' || stage !== 'active' || !draft || !stations || !clock || clock.pausedAt !== null || draft.tapped !== action.expectedTapped) return session;
         if (!sameLineup(stations, action.expectedStations)) throw new MixedInputError('The station lineup changed. Check the current stations before logging a round.');
         if (!(await mixedOptions(db, b, m, now)).ready) throw new MixedInputError('Replace or skip unavailable movements first.');
         saveDraft({ ...draft, tapped: draft.tapped + 1, rounds: draft.tapped + 1 });
         break;
       case 'finish':
         if (stage !== 'active') return session;
-        if (clock) saveClock(finishClock(clock, nowMs));
-        setStage('review');
+        if (clock) openReview(finishClock(clock, nowMs));
+        else setStage('review');
         break;
       case 'skip':
         if (stage !== 'entry') return session;
@@ -280,17 +301,19 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         break;
       }
       case 'swap-station': {
-        if (b.kind !== 'self-paced' || stage === 'review' || !stations || !draft) return session;
+        if ((b.kind !== 'self-paced' && b.kind !== 'coached') || !b.stations || stage === 'review' || !stations || !draft) return session;
         const original = b.stations.find((s) => s.slotId === action.slotId);
         const current = stations.find((s) => s.slotId === action.slotId);
         if (!original || !current || current.exerciseId !== action.expectedExerciseId) return session;
+        if (b.kind === 'coached' && stage === 'active' && (action.exerciseId === null || current.skipped)) return session;
         if (draft.partial?.slotId === current.slotId) throw new MixedInputError('This station already has partial work recorded.');
         const next = action.exerciseId === null ? { ...current, skipped: true }
-          : stationChoices(await gym(db, now), original, current).find((s) => s.exerciseId === action.exerciseId);
+          : stationChoices(await gym(db, now), original, current, b.kind === 'coached').find((s) => s.exerciseId === action.exerciseId);
         if (!next) throw new MixedInputError('That replacement is unavailable. Choose another movement.');
         const changes = draft.stationChanges ?? [];
-        if (draft.tapped > (changes.at(-1)?.afterRound ?? 0)) {
-          saveDraft({ ...draft, stationChanges: [...changes, { afterRound: draft.tapped, stations }] });
+        const rounds = clock?.coached?.rotations ?? draft.tapped;
+        if (rounds > (changes.at(-1)?.afterRound ?? 0)) {
+          saveDraft({ ...draft, stationChanges: [...changes, { afterRound: rounds, stations }] });
         }
         m.stations = { ...m.stations, [blockId]: stations.map((s) => s.slotId !== next.slotId ? s : {
           ...next, swappedFromExerciseId: next.exerciseId !== original.exerciseId ? original.exerciseId : undefined,

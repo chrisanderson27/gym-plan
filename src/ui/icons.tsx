@@ -29,6 +29,11 @@ export const TimerIcon = icon(<><circle cx="12" cy="14" r="7" /><path d="M10 2h4
 export const CheckIcon = icon(<path d="m5 12 4 4L19 6" />);
 export const PlayIcon = icon(<path d="m8 5 11 7-11 7z" />);
 export const PauseIcon = icon(<path d="M8 5v14M16 5v14" />);
+export const ArrowLeftIcon = icon(<path d="M20 12H4m6-6-6 6 6 6" />);
+export const ArrowRightIcon = icon(<path d="M4 12h16m-6-6 6 6-6 6" />);
+export const EditIcon = icon(<path d="m4 16 12-12 4 4L8 20H4zm9-9 4 4" />);
+export const SoundIcon = icon(<path d="M4 9h4l5-4v14l-5-4H4zm13-1a6 6 0 0 1 0 8m2-10a9 9 0 0 1 0 12" />);
+export const MutedIcon = icon(<path d="M4 9h4l5-4v14l-5-4H4zm13 1 4 4m0-4-4 4" />);
 export const ChevronIcon = icon(<path d="m9 6 6 6-6 6" />);
 export const CloseIcon = icon(<path d="m6 6 12 12M18 6 6 18" />);
 export const PlusIcon = icon(<path d="M12 5v14M5 12h14" />);

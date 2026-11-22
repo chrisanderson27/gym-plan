@@ -1,4 +1,4 @@
-import type { StationTarget } from '../../data/types';
+import type { CoachedCheckpoint, ExecutableCoachedBlock, StationTarget } from '../../data/types';
 import { STATION_TARGETS, TRANSITION_SEC } from '../config';
 import { remainingSec } from './clock';
 
@@ -7,10 +7,7 @@ export const COACHED_WORK_SEC = STATION_TARGETS.sec.normal;
 export const COACHED_REST_SEC = 0;
 export const COACHED_TRANSITION_SEC = TRANSITION_SEC;
 
-export interface CoachedCursor {
-  station: number;
-  phase: 'work' | 'rest' | 'transition';
-}
+export type CoachedCursor = Pick<CoachedCheckpoint, 'station' | 'phase'>;
 
 export interface CoachedPhase {
   role: 'work' | 'rest' | 'transition';
@@ -28,6 +25,37 @@ export function stationPhasePlan(workSec: number, restSec: number, transitionSec
   if (restSec > 0) phases.push({ role: 'rest', sec: restSec });
   if (transitionSec > 0) phases.push({ role: 'transition', sec: transitionSec });
   return phases;
+}
+
+export function coachedSchedule(block: ExecutableCoachedBlock, stations: readonly { target: StationTarget }[]) {
+  return stations.map(({ target }) => stationPhasePlan(stationWorkSec(target, block.workSec), block.restSec, block.transitionSec));
+}
+
+export const phaseMs = (sec: number) => Math.round(sec * 1000);
+
+export const initialCoached: CoachedCheckpoint = { station: 0, phase: 'work', phaseStartMs: 0, rotations: 0 };
+
+export function sameCoachedPhase(a: CoachedCheckpoint, b: CoachedCheckpoint): boolean {
+  return a.station === b.station && a.phase === b.phase && a.phaseStartMs === b.phaseStartMs && a.rotations === b.rotations;
+}
+
+export function nextCoached(at: CoachedCheckpoint, stationCount: number, elapsedMs: number): CoachedCheckpoint {
+  const next = nextStation(at, stationCount);
+  return { station: next.station, phase: next.phase, phaseStartMs: elapsedMs, rotations: at.rotations + Number(!!next.rotationCompleted) };
+}
+
+/** Walk at most one cycle from any checkpoint, including when it starts mid-rotation. */
+export function projectCoached(schedule: readonly CoachedPhase[][], anchor: CoachedCheckpoint, elapsedMs: number) {
+  const cycleMs = schedule.reduce((total, phases) => total + phases.reduce((sum, p) => sum + phaseMs(p.sec), 0), 0);
+  const cycles = Math.floor(Math.max(0, elapsedMs - anchor.phaseStartMs) / cycleMs);
+  let at = { ...anchor, phaseStartMs: anchor.phaseStartMs + cycles * cycleMs, rotations: anchor.rotations + cycles };
+  for (;;) {
+    const plan = schedule[at.station]!;
+    const endMs = at.phaseStartMs + phaseMs(plan.find((p) => p.role === at.phase)!.sec);
+    if (elapsedMs < endMs) return { at, endMs, remainingSec: Math.ceil((endMs - elapsedMs) / 1000) };
+    const next = advancePhase(at, schedule.length, plan);
+    at = { station: next.station, phase: next.phase, phaseStartMs: endMs, rotations: at.rotations + Number(!!next.rotationCompleted) };
+  }
 }
 
 /**

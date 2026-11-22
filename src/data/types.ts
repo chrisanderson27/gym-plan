@@ -219,13 +219,25 @@ export interface OrderedSelfPacedBlock {
   durationSec: number;
   stations: OrderedStation[];
 }
-/** Recognized so a saved row stays readable. This phase rejects it at Start. */
-export interface OrderedCoachedBlock {
+interface OrderedCoachedBase {
   id: string;
   kind: 'coached';
   name: string;
   durationSec: number;
 }
+export interface ExecutableCoachedBlock extends OrderedCoachedBase {
+  stations: OrderedStation[];
+  workSec: number;
+  restSec: number;
+  transitionSec: number;
+}
+/** Older saved workouts may still contain a name and duration only. */
+export type OrderedCoachedBlock = ExecutableCoachedBlock | (OrderedCoachedBase & {
+  stations?: undefined;
+  workSec?: undefined;
+  restSec?: undefined;
+  transitionSec?: undefined;
+});
 export type OrderedBlock = OrderedTimedBlock | OrderedStrengthBlock | OrderedSelfPacedBlock | OrderedCoachedBlock;
 export interface OrderedPrescription {
   name: string;
@@ -258,13 +270,20 @@ export interface MixedTimer {
   durationMs: number;
   /** Set when work ends. Expiry uses the scheduled duration, not the late tick. */
   frozenElapsedMs?: number;
+  coached?: CoachedCheckpoint;
+}
+export interface CoachedCheckpoint {
+  station: number;
+  phase: 'work' | 'rest' | 'transition';
+  phaseStartMs: number;
+  rotations: number;
 }
 export interface MixedDraft {
   /** null is unreported. A typed 0 is 0. */
   rounds: number | null;
   tapped: number;
   partial?: { slotId: string; unit: StationUnit; count: number };
-  /** The previous lineup through this tapped round, saved before a live swap or skip. */
+  /** The previous lineup through this completed round, saved before a live swap or skip. */
   stationChanges?: { afterRound: number; stations: EffectiveStation[] }[];
 }
 export interface MixedResult {
