@@ -7,6 +7,17 @@ import type { PlanInput, PlanSession } from './types';
 type Range = ReturnType<typeof programWeekRange>;
 interface RingSegment { activity: Activity; done: number; min: number }
 
+/** The program-week activity goal Today, Progress, and the finish summary already share. */
+export function weeklyGoal(
+  sessions: readonly PlanSession[],
+  day: Range['from'],
+  programStart: Range['from'],
+  activities?: PlanInput['activities'],
+) {
+  const range = programWeekRange(day, programStart);
+  return { range, ...weekRing(sessions, range, activities) };
+}
+
 export function weekRing(sessions: readonly PlanSession[], { from, to }: Range, activities?: PlanInput['activities']) {
   const week = sessions.filter((s) => s.finished && s.day >= from && s.day <= to);
   const lines: RingSegment[] = [

@@ -7,6 +7,8 @@ import { toBlockExercise } from './liftday';
 import type { StoreName } from './stores';
 import { APPEARANCES, FEEDBACK_TAGS, GOAL_DIRECTIONS, STATION_UNITS } from './types';
 
+import type { EffectiveStation, MixedDraft, MixedExecution } from './types';
+
 type Rec = Record<string, unknown>;
 type Check = (v: unknown) => boolean;
 
@@ -118,17 +120,99 @@ const libraryBlock: Check = (v) => {
   return finite(v.workSec) && v.workSec > 0 && finite(v.restSec) && v.restSec >= 0 && finite(v.transitionSec) && v.transitionSec >= 0;
 };
 
+const nonnegative: Check = (v) => finite(v) && v >= 0;
+const integer: Check = (v) => finite(v) && Number.isSafeInteger(v) && v >= 0;
+const bounded = (min: number, max: number): Check => (v) => finite(v) && Number.isInteger(v) && v >= min && v <= max;
+const id: Check = (v) => typeof v === 'string' && v.trim().length > 0;
+const keyed = (key: string, min: number, max: number, check: Check): Check => (v) =>
+  Array.isArray(v) && v.length >= min && v.length <= max
+  && v.every((item) => isRec(item) && id(item[key]) && check(item))
+  && new Set(v.map((item: Rec) => item[key])).size === v.length;
+const dict = (check: Check): Check => (v) => isRec(v) && Object.entries(v).every(([key, item]) => id(key) && check(item));
+const noActuals = (v: Rec) => ['log', 'result', 'skipped', 'swappedFromExerciseId', 'poseId', 'rounds', 'partial']
+  .every((key) => !Object.hasOwn(v, key));
+const orderedStation: Check = (v) => isRec(v) && noActuals(v) && opt(id)(v.equipmentId) && libraryStation(v);
+const effectiveStation = shape({ slotId: id, equipmentId: opt(id), poseId: opt(id), skipped: opt(bool), swappedFromExerciseId: opt(id) });
+const strengthFields = {
+  exerciseId: id, equipmentId: opt(id), sets: bounded(1, 30), repMin: bounded(1, 1000), repMax: bounded(1, 1000),
+  targetWeight: opt(nonnegative), rirTarget: opt(nonnegative), label: opt(str),
+};
+const strength: Check = (v) => isRec(v) && shape(strengthFields)(v) && Number(v.repMin) <= Number(v.repMax);
+const orderedBlock: Check = (v) => {
+  if (!isRec(v) || !noActuals(v)) return false;
+  if (v.kind === 'strength') return strength(v) && opt(nonnegative)(v.restSec);
+  if (!bounded(1, 3600)(v.durationSec)) return false;
+  if (v.kind === 'preparation' || v.kind === 'recovery') return id(v.instructions) && opt(id)(v.exerciseId);
+  if (v.kind === 'coached') return bounded(60, 3600)(v.durationSec) && id(v.name);
+  return v.kind === 'self-paced' && bounded(60, 3600)(v.durationSec) && id(v.name) && keyed('slotId', 1, 6, orderedStation)(v.stations);
+};
+const ordered = shape({ name: id, blocks: keyed('id', 1, 30, orderedBlock) });
+const stations = keyed('slotId', 1, 6, (v) => isRec(v) && effectiveStation(v) && libraryStation(v));
+const partial = shape({ slotId: id, unit: stationUnit, count: nonnegative });
+const timer = shape({ startedAt: nullable(num), pausedAt: nullable(num), pausedMs: nonnegative, durationMs: nonnegative, frozenElapsedMs: opt(nonnegative) });
+const draft = shape({ rounds: nullable(integer), tapped: integer, partial: opt(partial) });
+const mixedResult = shape({
+  status: oneOf('completed', 'skipped'), elapsedMs: nonnegative, rounds: opt(nullable(integer)),
+  partial: opt(partial), stations: opt(stations),
+});
+const mixedShape = shape({
+  kind: oneOf('ordered'), sourceId: id, prescription: ordered,
+  stations: dict(stations), strength: dict(strength), timers: dict(timer), drafts: dict(draft), results: dict(mixedResult),
+  cursor: shape({ blockId: id, stage: oneOf('entry', 'active', 'review'), setSlot: integer }),
+});
+
+function validMixed(row: Rec): boolean {
+  if (row.mixed === undefined) return true;
+  if (row.type !== 'custom' || (!row.endedAt && row.rpe !== null) || !mixedShape(row.mixed)) return false;
+  const m = row.mixed as MixedExecution;
+  const blocks = m.prescription.blocks;
+  const current = blocks.findIndex((b) => b.id === m.cursor.blockId);
+  if (current < 0 || (row.endedAt && (current !== blocks.length - 1 || m.cursor.stage !== 'review'))) return false;
+  const ids = new Set(blocks.map((b) => b.id));
+  if ([m.stations, m.strength, m.timers, m.drafts, m.results].some((map) => Object.keys(map).some((key) => !ids.has(key)))) return false;
+  return blocks.every((b, i) => {
+    if (b.kind === 'coached') return false;
+    const read = <T,>(map: Record<string, T>) => Object.hasOwn(map, b.id) ? map[b.id] : undefined;
+    const accepted = read(m.strength);
+    const effective = read(m.stations);
+    const d = read(m.drafts);
+    const t = read(m.timers);
+    const r = read(m.results);
+    if (!!r !== (i < current || (i === current && !!row.endedAt))) return false;
+    if ((i === current && m.cursor.setSlot > (accepted?.sets ?? 0)) || (i > current && t)) return false;
+    if (b.kind === 'strength') {
+      if (!accepted || effective || d || t || r?.stations || r?.partial || r?.rounds !== undefined || (r && r.elapsedMs !== 0)) return false;
+      if (i === current && r && (r.status === 'skipped') !== (m.cursor.setSlot === 0)) return false;
+      return i !== current || (m.cursor.stage === 'entry' ? m.cursor.setSlot === 0 : m.cursor.stage === 'review' || (m.cursor.setSlot > 0 && m.cursor.setSlot < accepted.sets));
+    }
+    if (accepted) return false;
+    if (i === current && m.cursor.stage === 'active' && (!t || t.startedAt === null || t.frozenElapsedMs !== undefined)) return false;
+    if (i === current && m.cursor.stage === 'entry' && t) return false;
+    if (i === current && m.cursor.stage === 'review' && t?.frozenElapsedMs === undefined) return false;
+    if (t && (t.durationMs !== b.durationSec * 1000 || (t.pausedAt !== null && (t.startedAt === null || t.pausedAt < t.startedAt))
+      || (t.frozenElapsedMs !== undefined && t.frozenElapsedMs > t.durationMs))) return false;
+    if (r && (r.elapsedMs !== t?.frozenElapsedMs || (r.status === 'skipped') !== (t.startedAt === null))) return false;
+    if (b.kind !== 'self-paced') return !effective && !d && !r?.stations && !r?.partial && r?.rounds === undefined;
+    const matches = (list: EffectiveStation[] | undefined) =>
+      list?.length === b.stations.length && list.every((s, k) => s.slotId === b.stations[k]?.slotId);
+    const validPartial = (value: MixedDraft['partial'], list: EffectiveStation[] | undefined) =>
+      !value || list?.some((s) => !s.skipped && s.slotId === value.slotId && s.target.unit === value.unit);
+    return matches(effective) && !!d && validPartial(d.partial, effective)
+      && (!r || (r.rounds !== undefined && matches(r.stations) && validPartial(r.partial, r.stations)));
+  });
+}
+
 const ROW_SHAPES: Record<StoreName, Check> = {
   exerciseOverrides: shape({ exerciseId: str, notAtMyGym: bool, preferredEquipmentId: opt(str) }),
   equipment: shape({
     id: str, name: str, kind: oneOf('machine', 'barbell', 'db', 'kb', 'cable', 'cardio', 'bodyweight'), steps: arr(num),
   }),
-  sessions: shape({
+  sessions: (v) => isRec(v) && validMixed(v) && shape({
     id: str, date: iso, type: oneOf(...SESSION_TYPES), blocks: arr(block), hard: bool, hardCardio: bool,
     rpe: nullable(num), durationMin: num, notes: str, templateId: opt(str), endedAt: opt(iso),
     variant: opt(oneOf('upper-a', 'upper-b', 'lower-a', 'lower-b')),
     flags: opt(shape({ calibration: opt(bool), deload: opt(bool), fatigue: opt(bool) })),
-  }),
+  })(v),
   sets: shape({
     id: str, sessionId: str, exerciseId: str, equipmentId: str, idx: num, targetWeight: num, targetReps: num,
     weight: num, reps: num, painFlag: bool, rir: opt(oneOf0(0, 1, 3)), ts: opt(iso), supersetGroup: opt(str),
@@ -146,11 +230,11 @@ const ROW_SHAPES: Record<StoreName, Check> = {
     id: str, kind: oneOf('css'), date: iso, poolUnit: oneOf(...POOL_UNITS), t400: opt(num), t200: opt(num), t3x100: opt(num),
   }),
   bodyLogs: shape({ date: localDate, protein: bool, weightLb: opt(num), waistIn: opt(num) }),
-  templates: shape({
+  templates: (v) => isRec(v) && (v.ordered === undefined || (v.source === 'saved' && v.type === 'custom' && ordered(v.ordered))) && shape({
     id: str, name: str, type: oneOf(...SESSION_TYPES), blocks: arr(block),
     source: oneOf('generated', 'saved', 'built'), createdAt: iso,
     variant: opt(oneOf('upper-a', 'upper-b', 'lower-a', 'lower-b')),
-  }),
+  })(v),
   feedback: shape({
     id: str, v: (x) => x === 1, ts: iso, kind: oneOf('workout', 'exercise', 'set', 'app'), tags: arr(oneOf(...FEEDBACK_TAGS)), text: str,
     context: shape({ sessionId: opt(str), exerciseId: opt(str), setId: opt(str), equipmentId: opt(str), screen: opt(str), templateId: opt(str) }), ref: opt(str),

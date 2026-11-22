@@ -14,7 +14,9 @@ export function holdWakeLock(): () => void {
     try {
       const api = (navigator as unknown as { wakeLock?: WakeLockApi }).wakeLock;
       if (!api || released) return;
-      sentinel = await api.request('screen');
+      const next = await api.request('screen');
+      if (released) await next.release();
+      else sentinel = next;
     } catch {
       // Denied or unsupported (WebKit < 18.4, low power mode): the timer still works.
     }

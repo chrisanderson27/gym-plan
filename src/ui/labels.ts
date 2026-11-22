@@ -1,6 +1,6 @@
 import { HOME_GYM, LIFT_TEMPLATES, defaultEquipmentFor, exerciseById } from '../content';
 import type { EquipmentTag, Muscle } from '../content';
-import type { CardioModality, CircuitStation, Equipment, RunKind } from '../data/types';
+import type { CardioModality, CircuitStation, Equipment, OrderedBlock, RunKind } from '../data/types';
 import { round1 } from '../engine/body';
 import { CARDIO_MODALITY_LABELS } from '../engine/config';
 import { zoneOf } from '../engine/gym/availability';
@@ -153,4 +153,10 @@ export function screenName(hash: string | undefined): string | undefined {
   const path = hash.replace(/^#/, '') || '/';
   if (path === '/') return 'Home';
   return SCREEN_NAMES.find(([re]) => re.test(path))?.[1] ?? 'App';
+}
+
+export function mixedBlockName(block: OrderedBlock) {
+  if (block.kind === 'strength') return exerciseName(block.exerciseId);
+  if (block.kind === 'self-paced' || block.kind === 'coached') return block.name;
+  return block.kind === 'preparation' ? 'Preparation' : 'Recovery';
 }

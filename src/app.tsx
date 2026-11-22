@@ -17,6 +17,8 @@ import { VolumeScreen } from './ui/lift/VolumeScreen';
 import { Onboarding } from './ui/Onboarding';
 import { canonicalRoute, PROGRESS_ROUTES } from './ui/progress/routes';
 import { ProgressScreen } from './ui/ProgressScreen';
+import { MixedSessionScreen } from './ui/session/MixedSessionScreen';
+import { MixedSummaryScreen } from './ui/session/MixedSummaryScreen';
 import { showTabs, TabBar } from './ui/TabBar';
 import { useRoute } from './ui/router';
 import { SettingsScreen } from './ui/Settings';
@@ -66,14 +68,18 @@ export function App() {
     body = <CardioRoutes route={route} settings={settings} />;
   } else if (route.startsWith('/hybrid')) {
     body = <HybridRoutes route={route} />;
+  } else if (route.startsWith('/workout/session/')) {
+    body = <MixedSessionScreen key={route} id={route.split('/')[3]!} />;
+  } else if (route.startsWith('/workout/summary/')) {
+    body = <MixedSummaryScreen key={route} id={route.split('/')[3]!} />;
   } else if (route.startsWith('/history/')) {
     body = <HistoryDetailScreen key={route} id={route.split('/')[2]!} />;
   } else if (route === '/builder' || route.startsWith('/builder/')) {
     body = <BuilderScreen {...(route.split('/')[2] ? { templateId: route.split('/')[2]! } : {})} />;
   } else if (route.startsWith('/mine/')) {
-    body = <TemplateRunScreen templateId={route.split('/')[2]!} />;
+    body = <TemplateRunScreen key={route} templateId={route.split('/')[2]!} />;
   } else if (route.startsWith('/again/')) {
-    body = <TemplateRunScreen sessionId={route.split('/')[2]!} />;
+    body = <TemplateRunScreen key={route} sessionId={route.split('/')[2]!} />;
   } else if (route === '/blocks') {
     body = <BlocksScreen settings={settings} />;
   } else if (route.startsWith('/blocks/')) {

@@ -26,9 +26,10 @@ export async function onboard(page: Page, { bodyweight = '247.2', activities = [
   await expect(page.getByTestId('hero')).toBeVisible();
 }
 
-export async function seedBackup(page: Page, stores: Record<string, unknown[]>) {
-  const backup = { schemaVersion: 1, exportedAt: new Date().toISOString(), appVersion: 'e2e', stores };
+export async function seedBackup(page: Page, stores: Record<string, unknown[]>, schemaVersion = 1) {
+  const backup = { schemaVersion, exportedAt: new Date().toISOString(), appVersion: 'e2e', stores };
   await page.goto('./#/settings');
+  await expect(page.getByRole('heading', { name: 'Backup', exact: true })).toBeVisible();
   await page.locator('input[type=file]').setInputFiles({
     name: 'seed.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)),
   });

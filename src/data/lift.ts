@@ -301,12 +301,12 @@ const resumeSince = (now: Date) => new Date(now.getTime() - RESUME_WINDOW_HOURS 
 
 export async function findOpenLiftSession(db: GymDb, now = new Date(), types: SessionType[] = ['lift', 'custom']): Promise<Session | undefined> {
   return db.sessions.where('date').between(resumeSince(now), now.toISOString(), true, true).reverse()
-    .filter((s) => types.includes(s.type) && !s.endedAt).first();
+    .filter((s) => types.includes(s.type) && !s.endedAt && !s.mixed).first();
 }
 
 export async function findStaleOpenLifts(db: GymDb, now = new Date(), types: SessionType[] = ['lift', 'custom', 'hybrid']): Promise<Session[]> {
   return db.sessions.where('date').below(resumeSince(now)).reverse()
-    .filter((s) => types.includes(s.type) && !s.endedAt).toArray();
+    .filter((s) => types.includes(s.type) && !s.endedAt && !s.mixed).toArray();
 }
 
 export async function discardLiftSession(db: GymDb, sessionId: string): Promise<void> {

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { EXERCISES, exerciseById } from '../../content';
 import { blockedExerciseIds } from '../../content/equipment-prefs';
 import { POSES } from '../../content/poses';
+import { stationDemo } from '../../content/stationDemos';
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
 import { saveLibraryBlock } from '../../data/libraryBlocks';
@@ -14,12 +15,12 @@ import { COACHED_REST_SEC, COACHED_TRANSITION_SEC, COACHED_WORK_SEC } from '../.
 import { exerciseAllowed } from '../../engine/gym/eligibility';
 import { localDate } from '../../engine/dates';
 import { weekIndex } from '../../engine/week';
-import { CalendarIcon, CheckIcon, ChevronIcon, CloseIcon, EyeIcon, PauseIcon, PlayIcon, PlusIcon } from '../icons';
-import { PoseView } from '../slots/PoseView';
+import { CalendarIcon, CheckIcon, ChevronIcon, CloseIcon, EyeIcon, PlusIcon } from '../icons';
 import { StickFigure } from '../pose/StickFigure';
 import { navigate } from '../router';
 import { Sheet } from '../Sheet';
 import { stationGearLabel } from './gearLabel';
+import { StationCard, stationTargetLine } from './StationCard';
 
 const EMPTY_TAGS: ReadonlySet<string> = new Set();
 const SELF_HELP = 'The block clock runs while you move through the stations at your pace.';
@@ -88,13 +89,6 @@ function unitsFor(exerciseId: string): StationUnit[] {
   return exercise ? stationUnits(toBlockExercise(exercise)) : [...STATION_UNITS];
 }
 
-function targetLine(station: DraftStation): string {
-  const base = `${station.amount} ${station.unit}`;
-  const load = station.load.trim();
-  if (load === '' || Number(load) === 0) return base;
-  return `${base} \u00b7 ${load} lb`;
-}
-
 export function BlockBuilder({ route, settings }: { route: string; settings: Settings }) {
   const mode = route === '/blocks/new' ? 'new' : route === '/blocks/suggest' ? 'suggest' : 'edit';
   const editId = mode === 'edit' ? route.slice('/blocks/'.length) : undefined;
@@ -125,7 +119,7 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
   const blockedIds = blockedExerciseIds(EXERCISES, settings.unavailableEquipment ?? []);
   const q = query.trim().toLowerCase();
   const choices = EXERCISES.filter((exercise) => {
-    if (!exercise.poseId || !POSES[exercise.poseId] || exercise.cues.length === 0) return false;
+    if (!stationDemo(exercise)) return false;
     if (!exerciseAllowed({ id: exercise.id, tags: exercise.equipment }, excluded, blockedIds, EMPTY_TAGS)) return false;
     return exercise.name.toLowerCase().includes(q);
   });
@@ -337,7 +331,8 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
           <input class="block-search" aria-label="Search exercises" value={query} onInput={(e) => setQuery(e.currentTarget.value)} />
           {choices.length === 0 && <p>No matching exercises.</p>}
           {choices.map((exercise) => {
-            const pose = exercise.poseId ? POSES[exercise.poseId] : undefined;
+            const demo = stationDemo(exercise);
+              const pose = demo ? POSES[demo.poseId] : undefined;
             return (
               <button
                 key={exercise.id}
@@ -376,23 +371,11 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
             <div class="gym-grid">
               {draft.stations.map((station, i) => {
                 const exercise = exerciseById.get(station.exerciseId);
-                const name = exercise?.name ?? station.exerciseId;
-                const pose = exercise?.poseId ? POSES[exercise.poseId] : undefined;
-                const playing = running === i;
                 return (
-                  <article key={station.exerciseId} class="gym-card">
-                    <p class="gym-idx">{String(i + 1).padStart(2, '0')}</p>
-                    {pose && <StickFigure def={pose} label={name} testId={`pose-${station.exerciseId}`} running={playing} />}
-                    <PoseView exerciseId={station.exerciseId} />
-                    <h3>{name}</h3>
-                    <p class="gym-meta">{stationGearLabel(exercise ?? { id: station.exerciseId, equipment: [] })}</p>
-                    <p class="gym-target">{targetLine(station)}</p>
-                    {pose && (
-                      <button type="button" class="block-icon" aria-label={playing ? `Pause ${name}` : `Play ${name}`} onClick={() => setRunning(playing ? -1 : i)}>
-                        {playing ? <PauseIcon /> : <PlayIcon />}
-                      </button>
-                    )}
-                  </article>
+                  <StationCard key={station.exerciseId} exerciseId={station.exerciseId} index={i}
+                    poseId={exercise ? stationDemo(exercise)?.poseId : undefined}
+                    target={stationTargetLine(station.exerciseId, station.amount, station.unit, station.load)}
+                    playing={running === i} onPlay={() => setRunning(running === i ? -1 : i)} />
                 );
               })}
             </div>

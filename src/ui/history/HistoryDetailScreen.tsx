@@ -5,8 +5,9 @@ import { loadSessionDetail, loadSessionPRs } from '../../data/history';
 import { useLiveQuery } from '../../data/live';
 import { saveAsMine } from '../../data/templates';
 import { circuitWork } from '../../engine/block/work';
+import { stationTargetLine } from '../blocks/StationCard';
 import { dayOf } from '../cardio/format';
-import { exerciseName, modalityName, prLabel, runKindName, sessionTypeLabel } from '../labels';
+import { exerciseName, mixedBlockName, modalityName, prLabel, runKindName, sessionTypeLabel } from '../labels';
 import { MoreMenu } from '../MoreMenu';
 import { circuitSummary } from './circuit-summary';
 
@@ -35,7 +36,7 @@ export function HistoryDetailScreen({ id }: { id: string }) {
   return (
     <main class="screen">
       <header class="bar">
-        <h1>{sessionTypeLabel(session.type)} · {dayOf(session.date)}</h1>
+        <h1>{session.mixed?.prescription.name ?? sessionTypeLabel(session.type)} · {dayOf(session.date)}</h1>
         <a class="gear" href="#/progress/history">History</a>
         <MoreMenu feedback={{ kind: 'workout', context: { sessionId: id } }} />
       </header>
@@ -86,10 +87,35 @@ export function HistoryDetailScreen({ id }: { id: string }) {
           </section>
         );
       })}
-      <div class="actions">
+      {session.mixed && session.mixed.prescription.blocks.map((block) => {
+        const results = session.mixed!.results;
+        const result = Object.hasOwn(results, block.id) ? results[block.id] : undefined;
+        if (!result) return null;
+        const replacement = session.mixed?.strength[block.id]?.exerciseId;
+        const title = mixedBlockName(block);
+        const partial = result.partial && result.stations?.find((s) => s.slotId === result.partial?.slotId);
+        return (
+          <section class="card" key={block.id} data-testid={`mixed-result-${block.id}`}>
+            <h2>{title}{replacement && exerciseName(replacement) !== title && ` → ${exerciseName(replacement)}`}</h2>
+            <p>{result.status === 'skipped' ? 'Skipped' : 'Completed'}{block.kind !== 'strength' && ` · ${Math.floor(result.elapsedMs / 1000)} sec`}</p>
+            {result.rounds !== undefined && <p>{result.rounds === null ? 'Rounds unreported' : `${result.rounds} rounds`}</p>}
+            {result.partial && partial && <p>Partial · {exerciseName(partial.exerciseId)} · {result.partial.count} {result.partial.unit}</p>}
+            {result.stations && <ul class="plan">{result.stations.map((s) => <li key={s.slotId}>
+              <span>{s.swappedFromExerciseId && `${exerciseName(s.swappedFromExerciseId)} → `}{exerciseName(s.exerciseId)}</span>
+              <span>{s.skipped ? 'Skipped' : stationTargetLine(s.exerciseId, s.target.amount, s.target.unit, s.load)}</span>
+            </li>)}</ul>}
+          </section>
+        );
+      })}
+      {session.mixed && (
+        <a class="btn" href={session.endedAt ? `#/workout/summary/${id}` : `#/workout/session/${id}`}>
+          {session.endedAt ? 'View workout summary' : 'Resume workout'}
+        </a>
+      )}
+      {(!session.mixed || session.endedAt) && <div class="actions">
         <a class="btn" href={'#/again/' + id} data-testid="again">Do this again</a>
         <button type="button" data-testid="save-mine" onClick={async () => { await saveAsMine(db, id); setSaved(true); }}>Save as mine</button>
-      </div>
+      </div>}
       {saved && <p role="status">Saved to Mine</p>}
     </main>
   );

@@ -23,7 +23,7 @@ export function MineRow({ types, title = 'Mine' }: { types: SessionType[]; title
               <span class="row-label">{t.name}</span>
               {min > 0 && <span class="row-meta">{min} min</span>}
             </a>
-            {t.source === 'built' && <a class="btn" href={'#/builder/' + t.id}>edit</a>}
+            {t.source === 'built' && !t.ordered && <a class="btn" href={'#/builder/' + t.id}>edit</a>}
           </li>
           );
         })}

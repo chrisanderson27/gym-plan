@@ -241,4 +241,41 @@ export const POSES: Record<string, PoseDef> = {
       { angles: { ...arms(175, 175) }, ms: 900, holdMs: 300 },
     ],
   },
+  // Starts standing, then the far leg steps backward. The split-squat cycle is already in a lunge.
+  'reverse-lunge': {
+    view: 'side', anchor: 'feet', implement: 'db',
+    frames: [
+      { angles: { torso: 180, head: 180, ...legs(0, 0), ...arms(0, 0) } },
+      { angles: { torso: 175, head: 175, thighN: 55, shinN: 20, thighF: 300, shinF: 15, footF: 200, ...arms(0, 0) }, ms: 1000, holdMs: 200 },
+    ],
+  },
+  'push-up': {
+    view: 'side', anchor: 'feet',
+    frames: [
+      { angles: { torso: 90, head: 90, ...legs(90, 90), ...arms(0, 90) } },
+      { angles: { torso: 80, head: 80, ...arms(40, 130) }, ms: 800, holdMs: 200 },
+    ],
+  },
+  rower: {
+    view: 'side', anchor: 'hip', prop: 'seat', implement: 'handle',
+    frames: [
+      { angles: { torso: 100, head: 110, ...legs(90, 10), ...arms(70, 70) } },
+      { angles: { torso: 130, head: 140, ...legs(15, 0), ...arms(200, 160) }, ms: 1100, holdMs: 200 },
+    ],
+  },
+  'farmer-carry': {
+    view: 'side', anchor: 'feet', implement: 'db',
+    frames: [
+      { angles: { torso: 180, head: 180, ...legs(0, 0), ...arms(5, 0) } },
+      { angles: { thighN: 28, shinN: 350, ...arms(8, 0) }, ms: 500, holdMs: 100 },
+    ],
+  },
+  // Forearm plank: setup, then the braced hold.
+  plank: {
+    view: 'side', anchor: 'feet',
+    frames: [
+      { angles: { torso: 80, head: 80, ...legs(85, 85), upperArmN: 10, forearmN: 90, upperArmF: 10, forearmF: 90 } },
+      { angles: { torso: 90, head: 90, ...legs(90, 90) }, ms: 600, holdMs: 800 },
+    ],
+  },
 };

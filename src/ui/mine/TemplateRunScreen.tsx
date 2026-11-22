@@ -5,6 +5,7 @@ import { burnInputs, loadCardioSnapshot, saveBurn, saveRun, saveSwim, type Cardi
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
 import { useLiveQuery } from '../../data/live';
+import { MixedInputError, startMixedSession } from '../../data/mixedSession';
 import { poolOf } from '../../data/settings';
 import { loadRunnable, startFromBlocks, type Runnable } from '../../data/templates';
 import type { IntervalBlock, RunBlock, SwimSetBlock } from '../../data/types';
@@ -21,6 +22,8 @@ import { SwimCard } from '../cardio/SwimCard';
 import { SwimLog } from '../cardio/SwimLog';
 import { TimerScreen } from '../cardio/TimerScreen';
 import { PoolSheet } from '../PoolSheet';
+import { unlockAudio } from '../../platform/audio';
+import { mixedBlockName } from '../labels';
 import { navigate } from '../router';
 import { MoreMenu } from '../MoreMenu';
 
@@ -42,6 +45,7 @@ export function TemplateRunScreen(src: { templateId: string } | { sessionId: str
       </main>
     );
   }
+  if (run.ordered) return <MixedAgain source={src} ordered={run.ordered} />;
   const first = run.blocks.find((b) => b.kind !== 'lift' || !b.warmup);
   if (run.type === 'burn' && run.blocks.some((b) => b.kind === 'circuit')) {
     return <BurnScreen templateId={BURN_TEMPLATES.some((t) => t.id === run.templateId) ? run.templateId : undefined} />;
@@ -51,6 +55,27 @@ export function TemplateRunScreen(src: { templateId: string } | { sessionId: str
   if (first?.kind === 'run') return <RunAgain run={run} block={first} snap={snap} />;
   if (first?.kind === 'swim') return <SwimAgain run={run} snap={snap} />;
   return <main class="screen"><header class="bar"><h1>Nothing to run</h1><MoreMenu feedback={{ kind: 'workout', context: {} }} /></header></main>;
+}
+
+function MixedAgain({ source, ordered }: { source: Parameters<typeof startMixedSession>[1]; ordered: NonNullable<Runnable['ordered']> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const start = async () => {
+    setBusy(true);
+    setError('');
+    unlockAudio();
+    try { navigate('/workout/session/' + await startMixedSession(db, source)); }
+    catch (reason) { setError(reason instanceof MixedInputError ? reason.message : 'Could not start the workout. Try again.'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <main class="screen">
+      <header class="bar"><h1>{ordered.name}</h1><a class="gear" href="#/progress">Progress</a></header>
+      <ol class="plan">{ordered.blocks.map((b) => <li key={b.id}>{mixedBlockName(b)}</li>)}</ol>
+      {error && <p role="alert">{error}</p>}
+      <button type="button" class="primary" data-testid="again-start" disabled={busy} onClick={start}>Start</button>
+    </main>
+  );
 }
 
 function LiftAgain({ run }: { run: Runnable }) {

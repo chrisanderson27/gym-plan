@@ -16,10 +16,10 @@ const tabs: readonly Tab[] = [
 const blocksRoute = (route: string) => route === '/blocks' || route.startsWith('/blocks/');
 
 export const showTabs = (route: string) =>
-  route === '/' || route === '/settings' || blocksRoute(route) || /^\/(progress|history|builder)(\/|$)/.test(route);
+  route === '/' || route === '/settings' || blocksRoute(route) || route.startsWith('/workout/summary/') || /^\/(progress|history|builder)(\/|$)/.test(route);
 
 export function TabBar({ route }: { route: string }) {
-  const current = route === '/' || route === '/settings' ? route : blocksRoute(route) ? '/blocks' : '/progress';
+  const current = route.startsWith('/workout/summary/') ? '/' : route === '/' || route === '/settings' ? route : blocksRoute(route) ? '/blocks' : '/progress';
   return (
     <nav class="tab-bar" aria-label="Main">
       <div>

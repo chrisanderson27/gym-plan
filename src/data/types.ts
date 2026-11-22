@@ -184,6 +184,111 @@ export interface LibraryBlock {
   updatedAt: ISODateTime;
 }
 
+/** Saved ordered prescription. Log and edit fields stay on the session, not here. */
+export interface OrderedStation {
+  slotId: string;
+  exerciseId: string;
+  target: StationTarget;
+  load?: number;
+  equipmentId?: string;
+}
+export interface OrderedTimedBlock {
+  id: string;
+  kind: 'preparation' | 'recovery';
+  durationSec: number;
+  instructions: string;
+  exerciseId?: string;
+}
+export interface OrderedStrengthBlock {
+  id: string;
+  kind: 'strength';
+  exerciseId: string;
+  equipmentId?: string;
+  sets: number;
+  repMin: number;
+  repMax: number;
+  targetWeight?: number;
+  restSec?: number;
+  rirTarget?: number;
+  label?: string;
+}
+export interface OrderedSelfPacedBlock {
+  id: string;
+  kind: 'self-paced';
+  name: string;
+  durationSec: number;
+  stations: OrderedStation[];
+}
+/** Recognized so a saved row stays readable. This phase rejects it at Start. */
+export interface OrderedCoachedBlock {
+  id: string;
+  kind: 'coached';
+  name: string;
+  durationSec: number;
+}
+export type OrderedBlock = OrderedTimedBlock | OrderedStrengthBlock | OrderedSelfPacedBlock | OrderedCoachedBlock;
+export interface OrderedPrescription {
+  name: string;
+  blocks: OrderedBlock[];
+}
+export interface EffectiveStation {
+  slotId: string;
+  exerciseId: string;
+  target: StationTarget;
+  load?: number;
+  equipmentId?: string;
+  poseId?: string;
+  skipped?: boolean;
+  swappedFromExerciseId?: string;
+}
+export interface AcceptedStrength {
+  exerciseId: string;
+  equipmentId?: string;
+  sets: number;
+  repMin: number;
+  repMax: number;
+  targetWeight?: number;
+  rirTarget?: number;
+  label?: string;
+}
+export interface MixedTimer {
+  startedAt: number | null;
+  pausedAt: number | null;
+  pausedMs: number;
+  durationMs: number;
+  /** Set when work ends. Expiry uses the scheduled duration, not the late tick. */
+  frozenElapsedMs?: number;
+}
+export interface MixedDraft {
+  /** null is unreported. A typed 0 is 0. */
+  rounds: number | null;
+  tapped: number;
+  partial?: { slotId: string; unit: StationUnit; count: number };
+}
+export interface MixedResult {
+  status: 'completed' | 'skipped';
+  elapsedMs: number;
+  rounds?: number | null;
+  partial?: MixedDraft['partial'];
+  stations?: EffectiveStation[];
+}
+export interface MixedCursor {
+  blockId: string;
+  stage: 'entry' | 'active' | 'review';
+  setSlot: number;
+}
+export interface MixedExecution {
+  kind: 'ordered';
+  sourceId: string;
+  prescription: OrderedPrescription;
+  stations: Record<string, EffectiveStation[]>;
+  strength: Record<string, AcceptedStrength>;
+  cursor: MixedCursor;
+  timers: Record<string, MixedTimer>;
+  drafts: Record<string, MixedDraft>;
+  results: Record<string, MixedResult>;
+}
+
 // ---- rows ----
 export interface ExerciseOverride {
   exerciseId: string;
@@ -212,6 +317,8 @@ export interface Session {
   variant?: LiftVariant;
   endedAt?: ISODateTime;
   flags?: { calibration?: boolean; deload?: boolean; fatigue?: boolean };
+  /** Present only for an ordered mixed session. Legacy rows omit it. */
+  mixed?: MixedExecution;
 }
 export interface SetRow {
   id: string;
@@ -277,6 +384,8 @@ export interface Template {
   blocks: Block[];
   source: 'generated' | 'saved' | 'built';
   createdAt: ISODateTime;
+  /** Ordered snapshot copied by value. Absent on legacy templates. */
+  ordered?: OrderedPrescription;
 }
 export interface FeedbackRow {
   /** ULID. */

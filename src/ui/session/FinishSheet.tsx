@@ -3,8 +3,7 @@ import { db } from '../../data/db';
 import { finishLiftSession } from '../../data/lift';
 import { loadRingInput } from '../../data/plan';
 import { FINISH_DWELL_MS, FINISH_RPE } from '../../engine/config';
-import { programWeekRange } from '../../engine/lift/volume';
-import { weekRing } from '../../engine/plan/ring';
+import { weeklyGoal } from '../../engine/plan/ring';
 import { Sheet } from '../Sheet';
 import { Ring } from '../home/Ring';
 import { Confetti } from './Confetti';
@@ -12,10 +11,10 @@ import './finish-ring.css';
 
 const RATINGS = { easy: 'Easy', right: 'Right', hard: 'Hard' } as const;
 type Rating = keyof typeof RATINGS;
-type RingState = ReturnType<typeof weekRing>;
+type RingState = ReturnType<typeof weeklyGoal>;
 
 function ringFor({ sessions, today, programStart, activities }: Awaited<ReturnType<typeof loadRingInput>>) {
-  return weekRing(sessions, programWeekRange(today, programStart), activities);
+  return weeklyGoal(sessions, today, programStart, activities);
 }
 
 export function FinishSheet({

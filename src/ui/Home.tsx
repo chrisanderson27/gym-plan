@@ -4,13 +4,13 @@ import { db } from '../data/db';
 import { findOpenLiftSession, findStaleOpenLifts } from '../data/lift';
 import { planTodayLift, startOrResumePlannedLift } from '../data/liftday';
 import { useLiveQuery } from '../data/live';
+import { findOpenMixedSession } from '../data/mixedSession';
 import { loadPlanInput, loadRingInput } from '../data/plan';
 import type { Settings } from '../data/types';
 import { DEFAULT_LIFT_BUDGET_MIN } from '../engine/config';
 import { localDate } from '../engine/dates';
-import { programWeekRange } from '../engine/lift/volume';
 import { rankToday } from '../engine/plan/pick';
-import { streak, weekRing } from '../engine/plan/ring';
+import { streak, weeklyGoal } from '../engine/plan/ring';
 import { BackupBanner } from './BackupBanner';
 import { HeroCard, heroFor } from './home/HeroCard';
 import { Ring } from './home/Ring';
@@ -30,27 +30,26 @@ export function Home({ settings }: { settings: Settings }) {
   const [day, setDay] = useState(() => localDate(new Date()));
   const home = useLiveQuery(async () => {
     const now = new Date();
-    const [plan, input, open, stale] = await Promise.all([
-      loadPlanInput(db, now), loadRingInput(db, now), findOpenLiftSession(db, now), findStaleOpenLifts(db, now),
+    const [plan, input, open, stale, mixed] = await Promise.all([
+      loadPlanInput(db, now), loadRingInput(db, now), findOpenLiftSession(db, now), findStaleOpenLifts(db, now), findOpenMixedSession(db),
     ]);
     const ranked = rankToday(plan);
     const { pick } = ranked;
     if (open) {
       const title = open.variant ? variantName(open.variant) : 'Lift';
-      return { ranked, input, open, stale, hero: { activity: 'lift' as const, duration: null, place: undefined, title } };
+      return { ranked, input, open, stale, mixed, hero: { activity: 'lift' as const, duration: null, place: undefined, title } };
     }
-    if (input.done || pick.id === 'rest') return { ranked, input, open, stale, hero: null };
+    if (input.done || pick.id === 'rest') return { ranked, input, open, stale, mixed, hero: null };
     const cardio = pick.tile === 'run' || pick.tile === 'swim' ? await loadCardioSnapshot(db, now) : null;
     const liftDay = pick.route.startsWith('#/lift/start/') && pick.variant
       ? await planTodayLift(db, pick.variant, DEFAULT_LIFT_BUDGET_MIN, now)
       : undefined;
-    return { ranked, input, open, stale, hero: heroFor(pick, cardio, now, liftDay) };
+    return { ranked, input, open, stale, mixed, hero: heroFor(pick, cardio, now, liftDay) };
   }, [day]);
   if (!home) return <main class="screen today-screen" aria-busy="true"><h1>Today</h1><div class="hero loading-hero" /></main>;
 
-  const { ranked: { pick, reason, budget }, input: { sessions, programStart, today, activities, done }, open, stale: [stale], hero } = home;
-  const range = programWeekRange(today, programStart);
-  const ring = weekRing(sessions, range, activities);
+  const { ranked: { pick, reason, budget }, input: { sessions, programStart, today, activities, done }, open, stale: [stale], mixed, hero } = home;
+  const ring = weeklyGoal(sessions, today, programStart, activities);
   const { count, freezeAvailable } = streak(sessions, programStart, today, activities);
   const workout = hero !== null;
 
@@ -60,7 +59,7 @@ export function Home({ settings }: { settings: Settings }) {
         <h1 class="num">{dateLabel.format(new Date(today + 'T12:00:00')).replace(',', '')}</h1>
         <Ring ring={ring} budget={budget} freezeAvailable={freezeAvailable} />
       </header>
-      <WeekStrip from={range.from} today={today} sessions={sessions} />
+      <WeekStrip from={ring.range.from} today={today} sessions={sessions} />
       {hero ? (
         <HeroCard state={open ? 'resume' : pick.route.startsWith('#/lift/calibrate/') ? 'first-run' : 'workout'}
           {...hero} reason={open ? 'In progress' : reason} />
@@ -69,6 +68,7 @@ export function Home({ settings }: { settings: Settings }) {
           progress={`${ring.done}/${ring.target}`} />
       ) : <HeroCard state="rest" />}
       <p class="streak num" data-testid="streak"><FlameIcon /> {count}-week streak</p>
+      {mixed && <a class="btn" href={`#/workout/session/${mixed.id}`}>Resume {mixed.mixed?.prescription.name}</a>}
       {!open && stale && (
         <a class="btn stale-lift" data-testid="stale-lift" href={`#/lift/session/${stale.id}`}>
           Unfinished lift from {staleDateLabel.format(new Date(stale.date)).replace(',', '')}

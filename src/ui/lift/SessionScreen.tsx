@@ -79,7 +79,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
   const [record, setRecord] = useState<{ pr: PR; name: string; key: string } | null>(null);
   const [error, setError] = useState('');
   const now = useNow(1000);
-  useWakeLock(!!data?.session && !data.session.endedAt);
+  useWakeLock(!!data?.session && !data.session.endedAt && !data.session.mixed);
   const steps = sessionSteps(data?.session?.blocks ?? []);
   const index = i ?? resumeIndex(steps, data?.sets ?? []);
 
@@ -92,6 +92,11 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
   const { session, sets, snapshot, templateName, blocked } = data;
   if (!session) {
     return <main class="screen"><h1>Session not found</h1><a class="btn" href="#/lift">Back to Lift</a></main>;
+  }
+
+  if (session.mixed) {
+    return <main class="screen"><h1>{session.mixed.prescription.name}</h1><a class="btn"
+      href={`#/workout/${session.endedAt ? 'summary' : 'session'}/${session.id}`}>{session.endedAt ? 'View workout summary' : 'Resume workout'}</a></main>;
   }
 
   const step = steps[index];

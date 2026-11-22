@@ -13,7 +13,7 @@ import { loadCardioSnapshot } from './cardio';
 import type { GymDb } from './db';
 import { newId } from './ids';
 import { LIFT_EXERCISES, blockPrescriptionPatch, loadLiftSnapshot, resolveEquipmentId, writeLiftSession } from './lift';
-import type { Block, LiftBlock, LiftVariant, RunBlock, SessionType, Template } from './types';
+import type { Block, LiftBlock, LiftVariant, OrderedPrescription, RunBlock, SessionType, Template } from './types';
 
 export interface Runnable {
   type: SessionType;
@@ -21,6 +21,7 @@ export interface Runnable {
   templateId?: string;
   variant?: LiftVariant;
   name: string;
+  ordered?: OrderedPrescription;
 }
 
 const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
@@ -36,9 +37,12 @@ export async function saveAsMine(db: GymDb, sessionId: string, name?: string, no
   const session = await db.sessions.get(sessionId);
   if (!session) throw new Error(`No such session: ${sessionId}`);
   const id = newId();
+  const ordered = session.mixed ? structuredClone(session.mixed.prescription) : undefined;
+  if (ordered && name?.trim()) ordered.name = name.trim();
   await db.templates.add({
-    id, name: name?.trim() || defaultName(session.type, session.variant, session.templateId, session.date), type: session.type,
-    ...(session.variant ? { variant: session.variant } : {}), blocks: toTemplateBlocks(session.blocks, newId), source: 'saved', createdAt: now.toISOString(),
+    id, name: ordered?.name ?? (name?.trim() || defaultName(session.type, session.variant, session.templateId, session.date)), type: session.type,
+    ...(ordered ? { ordered } : {}),
+    ...(session.variant ? { variant: session.variant } : {}), blocks: ordered ? orderedStrengthBlocks(ordered) : toTemplateBlocks(session.blocks, newId), source: 'saved', createdAt: now.toISOString(),
   });
   return id;
 }
@@ -60,27 +64,45 @@ export const deleteTemplate = (db: GymDb, id: string): Promise<void> => db.templ
 export async function loadRunnable(db: GymDb, src: { templateId: string } | { sessionId: string }): Promise<Runnable | null> {
   if ('templateId' in src) {
     const t = await db.templates.get(src.templateId);
-    return t ? { type: t.type, blocks: t.blocks, templateId: t.id, name: t.name, ...(t.variant ? { variant: t.variant } : {}) } : null;
+    return t ? { type: t.type, blocks: t.blocks, templateId: t.id, name: t.name, ...(t.ordered ? { ordered: t.ordered } : {}), ...(t.variant ? { variant: t.variant } : {}) } : null;
   }
   const s = await db.sessions.get(src.sessionId);
   if (!s) return null;
   return {
     type: s.type, blocks: toTemplateBlocks(s.blocks, newId), ...(s.templateId ? { templateId: s.templateId } : {}),
-    ...(s.variant ? { variant: s.variant } : {}), name: defaultName(s.type, s.variant, s.templateId, s.date),
+    ...(s.variant ? { variant: s.variant } : {}), name: s.mixed?.prescription.name ?? defaultName(s.type, s.variant, s.templateId, s.date),
+    ...(s.mixed ? { ordered: s.mixed.prescription } : {}),
   };
 }
 
 /** Re-prescribes every lift block from current history, keeps the source's set counts (except in a deload) and substitutes not-at-my-gym exercises. */
 export async function startFromBlocks(db: GymDb, r: Runnable, now = new Date()): Promise<string> {
   if (r.type !== 'lift' && r.type !== 'custom' && r.type !== 'hybrid') throw new Error(`Cannot start a ${r.type} session from blocks`);
-  const snap = await loadLiftSnapshot(db, now);
+  const { blocks, calibration, deload } = await prepareLiftBlocks(db, r, now);
+  return writeLiftSession(db, {
+    type: r.type, blocks, calibration, deload,
+    ...(r.variant ? { variant: r.variant } : {}), ...(r.templateId ? { templateId: r.templateId } : {}),
+  }, now);
+}
+
+export function orderedStrengthBlocks(ordered: OrderedPrescription): LiftBlock[] {
+  return ordered.blocks.flatMap((b) => b.kind === 'strength' ? [{ ...b, kind: 'lift' }] : []);
+}
+
+export function replayLiftFlags(snap: Awaited<ReturnType<typeof loadLiftSnapshot>>, now: Date) {
   const weekIdx = weekIndex(localDate(now), snap.programStart);
   const missed = new Map<string, number>();
   for (const h of snap.history) {
     const lifts = h.session.blocks.filter((b): b is LiftBlock => b.kind === 'lift');
     if (lifts.length) missed.set(h.session.id, summarizeLiftSession(lifts, h.sets).missedExercises.length);
   }
-  const flags = { deload: deloadState(snap, missed).deload, rampIn: isRampInWeek(weekIdx) };
+  return { deload: deloadState(snap, missed).deload, rampIn: isRampInWeek(weekIdx) };
+}
+
+async function prepareLiftBlocks(db: GymDb, r: Runnable, now: Date) {
+  const snap = await loadLiftSnapshot(db, now);
+  const weekIdx = weekIndex(localDate(now), snap.programStart);
+  const flags = replayLiftFlags(snap, now);
   const used = new Set(r.blocks.filter((b): b is LiftBlock => b.kind === 'lift').map((b) => b.exerciseId));
 
   const blocks: Block[] = [];
@@ -120,10 +142,7 @@ export async function startFromBlocks(db: GymDb, r: Runnable, now = new Date()):
     if (next.label === 'Calibration') calibration = true;
     blocks.push(next);
   }
-  return writeLiftSession(db, {
-    type: r.type, blocks, calibration, deload: flags.deload,
-    ...(r.variant ? { variant: r.variant } : {}), ...(r.templateId ? { templateId: r.templateId } : {}),
-  }, now);
+  return { blocks, calibration, deload: flags.deload };
 }
 
 /** A stored run block is never replayed verbatim: it goes back through the generator so the 1.10× cap holds. */

@@ -12,6 +12,7 @@ export interface HistoryItem { session: Session; title: string; summary: string;
 const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 
 function cardTitle(s: Session, run: RunRow | undefined): string {
+  if (s.mixed) return s.mixed.prescription.name;
   if (s.variant) return `${s.type === 'hybrid' ? 'Hybrid · ' : ''}${LIFT_TEMPLATES[s.variant].name}`;
   if (s.type === 'run' && run) return `${cap(run.kind)} run`;
   return cap(s.type);
