@@ -193,6 +193,116 @@ test('preview plays one figure and reduced motion holds the strip', async ({ pag
   await expect(dialog.locator('[data-running=true]')).toHaveCount(0);
 });
 
+test('a figure tap leaves preview playback under the play button', async ({ page }) => {
+  await onboard(page);
+  await page.goto('./#/blocks/new');
+  await page.getByLabel('Block name').fill('Leg day');
+  await addExercise(page, 'Leg press');
+  await page.getByRole('button', { name: 'Preview gym grid' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Block preview' });
+  const figure = dialog.getByTestId('pose-leg-press');
+  await expect(dialog.getByRole('button', { name: 'Pause Leg press' })).toBeVisible();
+  await figure.click();
+  await figure.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => {
+    requestAnimationFrame(() => resolve());
+  })));
+  const afterTap = await figure.innerHTML();
+  await expect.poll(() => figure.innerHTML()).not.toBe(afterTap);
+});
+
+test('reduced-motion preview shows a static sequence and cues', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await onboard(page);
+  await page.goto('./#/blocks/new');
+  await page.getByLabel('Block name').fill('Leg day');
+  await addExercise(page, 'Leg press');
+  await page.getByRole('button', { name: 'Preview gym grid' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Block preview' });
+  await expect(dialog.getByTestId('pose-leg-press').locator('svg')).toHaveCount(2);
+  await expect(dialog.getByText('Do not lock out the knees')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /^(Play|Pause) / })).toHaveCount(0);
+});
+
+test('preview draws the equipment for step-ups and hip thrusts', async ({ page }) => {
+  await onboard(page);
+  await page.goto('./#/blocks/new');
+  await page.getByLabel('Block name').fill('Leg day');
+  await addExercise(page, 'Step-up to box');
+  await addExercise(page, 'Hip thrust');
+  await page.getByRole('button', { name: 'Preview gym grid' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Block preview' });
+  for (const id of ['step-up', 'hip-thrust']) {
+    const prop = dialog.getByTestId(`pose-${id}`).locator('.prop');
+    await expect(prop).toBeVisible();
+    const { insideViewBox, stroke, background } = await prop.evaluate((element: SVGGraphicsElement) => {
+      const bounds = element.getBBox();
+      const viewBox = element.ownerSVGElement!.viewBox.baseVal;
+      const style = getComputedStyle(element);
+      const halfStroke = parseFloat(style.strokeWidth) / 2;
+      return {
+        insideViewBox: bounds.x - halfStroke >= viewBox.x && bounds.y - halfStroke >= viewBox.y
+          && bounds.x + bounds.width + halfStroke <= viewBox.x + viewBox.width
+          && bounds.y + bounds.height + halfStroke <= viewBox.y + viewBox.height,
+        stroke: style.stroke,
+        background: getComputedStyle(element.closest('.gym-card')!).backgroundColor,
+      };
+    });
+    expect(insideViewBox, id).toBe(true);
+    expect(contrast(stroke, background), id).toBeGreaterThanOrEqual(3);
+  }
+});
+
+function contrast(color: string, background: string): number {
+  const luminance = (value: string) => {
+    const channels = value.match(/\d+/g)!.slice(0, 3).map((part) => {
+      const channel = Number(part) / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+  };
+  const a = luminance(color);
+  const b = luminance(background);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+test('builder fields meet AA text contrast in dark Appearance', async ({ page }) => {
+  await onboard(page);
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByTestId('appearance').selectOption('dark');
+  await page.goto('./#/blocks/new');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  const name = page.getByLabel('Block name');
+  const { foreground, background, placeholder } = await name.evaluate((input) => ({
+    foreground: getComputedStyle(input).color,
+    background: getComputedStyle(input).backgroundColor,
+    placeholder: getComputedStyle(input, '::placeholder').color,
+  }));
+  expect.soft(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(placeholder, background)).toBeGreaterThanOrEqual(4.5);
+});
+
+test('picker search indicates keyboard focus with contrasting outline', async ({ page }) => {
+  await onboard(page);
+  await page.goto('./#/blocks/new');
+  await page.getByRole('button', { name: 'Add exercise' }).click();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  const search = page.getByRole('textbox', { name: 'Search exercises' });
+  await expect(search).toBeFocused();
+  const { outline, background, style, width } = await search.evaluate((input) => {
+    const field = getComputedStyle(input);
+    return {
+      outline: field.outlineColor,
+      background: getComputedStyle(input.closest('[role="dialog"]')!).backgroundColor,
+      style: field.outlineStyle,
+      width: parseFloat(field.outlineWidth),
+    };
+  });
+  expect(style).toBe('solid');
+  expect(width).toBeGreaterThanOrEqual(2);
+  expect(contrast(outline, background)).toBeGreaterThanOrEqual(3);
+});
+
 test('preview pose is drawn while offline', async ({ page, context }) => {
   await onboard(page);
   await page.goto('./#/blocks/new');

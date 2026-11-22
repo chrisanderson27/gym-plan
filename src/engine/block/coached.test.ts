@@ -40,6 +40,12 @@ it('runs the 12-minute fixture without a skip credit', () => {
   expect(blockRemainingSec(0, 0, 8000, 720, 8000 + 60_000)).toBe(712);
 });
 
+it('expires at the adjusted deadline after a resumed pause', () => {
+  expect(blockRemainingSec(0, 2250, null, 720, 722_249)).toBe(1);
+  expect(blockRemainingSec(0, 2250, null, 720, 722_250)).toBe(0);
+  expect(blockRemainingSec(0, 2250, null, 720, 823_000)).toBe(0);
+});
+
 it('wraps Next only when it leaves the last station', () => {
   expect(nextStation({ station: 3, phase: 'work' }, 4)).toEqual({ station: 0, phase: 'work', rotationCompleted: true });
   expect(nextStation({ station: 1, phase: 'work' }, 4)).toEqual({ station: 2, phase: 'work' });

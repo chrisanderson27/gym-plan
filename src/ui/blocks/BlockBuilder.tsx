@@ -382,17 +382,16 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
                 return (
                   <article key={station.exerciseId} class="gym-card">
                     <p class="gym-idx">{String(i + 1).padStart(2, '0')}</p>
-                    {pose ? (
-                      <StickFigure def={pose} label={name} testId={`pose-${station.exerciseId}`} running={playing} />
-                    ) : (
-                      <PoseView exerciseId={station.exerciseId} />
-                    )}
+                    {pose && <StickFigure def={pose} label={name} testId={`pose-${station.exerciseId}`} running={playing} />}
+                    <PoseView exerciseId={station.exerciseId} />
                     <h3>{name}</h3>
                     <p class="gym-meta">{stationGearLabel(exercise ?? { id: station.exerciseId, equipment: [] })}</p>
                     <p class="gym-target">{targetLine(station)}</p>
-                    <button type="button" class="block-icon" aria-label={playing ? `Pause ${name}` : `Play ${name}`} onClick={() => setRunning(playing ? -1 : i)}>
-                      {playing ? <PauseIcon /> : <PlayIcon />}
-                    </button>
+                    {pose && (
+                      <button type="button" class="block-icon" aria-label={playing ? `Pause ${name}` : `Play ${name}`} onClick={() => setRunning(playing ? -1 : i)}>
+                        {playing ? <PauseIcon /> : <PlayIcon />}
+                      </button>
+                    )}
                   </article>
                 );
               })}

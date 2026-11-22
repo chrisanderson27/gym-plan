@@ -98,6 +98,14 @@ it('rejects a bad library row and leaves the database unchanged', async () => {
   expect(await db.libraryBlocks.toArray()).toEqual(before);
 });
 
+it.each([
+  ['a non-whole-minute duration', selfPaced({ durationSec: 481 })],
+  ['duplicate exercises', selfPaced({ stations: [...selfPaced().stations, ...selfPaced().stations] })],
+  ['a whitespace-only name', selfPaced({ name: '   ' })],
+])('rejects importing a block with %s', (_, row) => {
+  expect(() => parseExport(file({ libraryBlocks: [row] }))).toThrow(ImportError);
+});
+
 it('imports a coached row and an unknown exercise id', async () => {
   const db = open();
   const unknown = selfPaced({ id: 'legacy', stations: [{ exerciseId: 'legacy-move', target: { unit: 'reps', amount: 10 } }] });

@@ -24,6 +24,10 @@ function Prop({ def, lay }: { def: PoseDef; lay: Layout }) {
   switch (def.prop) {
     case 'bench':
       return <line class="prop" x1={r1(h.x - 55)} y1={r1(h.y + 8)} x2={r1(h.x + 15)} y2={r1(h.y + 8)} />;
+    case 'shoulder-bench':
+      return <rect class="prop" x={r1(h.x - 64)} y={r1(h.y - 24)} width="40" height="8" fill="none" />;
+    case 'box':
+      return <rect class="prop" x={r1(lay.anchorAt.x - 10)} y={r1(lay.anchorAt.y)} width="32" height="27" fill="none" />;
     case 'seat':
       return (
         <>
@@ -82,8 +86,8 @@ function Figure({ def, lay, sk, refs, testId, label, onToggle, running }: {
 const REDUCED = '(prefers-reduced-motion: reduce)';
 const prefersReduced = () => typeof matchMedia === 'function' && matchMedia(REDUCED).matches;
 
-/** Looped stick-figure demo; a static filmstrip when reduced motion is on. Tap to pause. `running` false holds frame 0 so a preview can play one figure. */
-export function StickFigure({ def, label, testId, running = true }: { def: PoseDef; label: string; testId: string; running?: boolean }) {
+/** Looped demo with tap-to-pause for standalone figures and a static strip for reduced motion. */
+export function StickFigure({ def, label, testId, running }: { def: PoseDef; label: string; testId: string; running?: boolean }) {
   const lay = useMemo(() => layout(def), [def]);
   const [reduced, setReduced] = useState(prefersReduced);
   const paused = useRef(false);
@@ -98,7 +102,7 @@ export function StickFigure({ def, label, testId, running = true }: { def: PoseD
   }, []);
 
   useEffect(() => {
-    if (reduced || !running) return;
+    if (reduced || running === false) return;
     let raf = 0;
     let last = performance.now();
     let elapsed = 0;
@@ -133,8 +137,8 @@ export function StickFigure({ def, label, testId, running = true }: { def: PoseD
   return (
     <Figure
       def={def} lay={lay} sk={skeleton(anglesAt(def, 0), def.anchor, lay.anchorAt)} refs={refs} testId={testId} label={aria}
-      running={running}
-      onToggle={() => { paused.current = !paused.current; }}
+      running={running ?? true}
+      onToggle={running === undefined ? () => { paused.current = !paused.current; } : undefined}
     />
   );
 }

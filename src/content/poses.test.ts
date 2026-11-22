@@ -32,6 +32,17 @@ describe('poses', () => {
     for (const id of ids) expect(EXERCISES.find((e) => e.id === id)?.poseId, id).toBeTruthy();
   });
 
+  it('hip adduction brings the knees together on the work stroke', () => {
+    const exercise = EXERCISES.find((entry) => entry.id === 'hip-adduction')!;
+    const def = POSES[exercise.poseId!]!;
+    const { anchorAt } = layout(def);
+    const kneesApart = (ms: number) => {
+      const { kneeN, kneeF } = skeleton(anglesAt(def, ms), def.anchor, anchorAt);
+      return Math.abs(kneeN.x - kneeF.x);
+    };
+    expect(kneesApart(900)).toBeLessThan(kneesApart(0));
+  });
+
   it('every def lays out to a finite, non-empty view box', () => {
     for (const [id, def] of Object.entries(POSES)) {
       const { viewBox } = layout(def);

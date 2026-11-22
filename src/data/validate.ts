@@ -108,10 +108,11 @@ const libraryStation: Check = (v) => {
 };
 const libraryBlock: Check = (v) => {
   if (!isRec(v) || typeof v.id !== 'string' || v.id === '') return false;
-  if (typeof v.name !== 'string' || v.name.length === 0) return false;
+  if (typeof v.name !== 'string' || v.name.trim().length === 0) return false;
   if (v.kind !== 'self-paced' && v.kind !== 'coached') return false;
-  if (!finite(v.durationSec) || !Number.isInteger(v.durationSec) || v.durationSec < 60 || v.durationSec > 3600) return false;
+  if (!finite(v.durationSec) || v.durationSec % 60 !== 0 || v.durationSec < 60 || v.durationSec > 3600) return false;
   if (!Array.isArray(v.stations) || v.stations.length < 1 || v.stations.length > 6 || !v.stations.every(libraryStation)) return false;
+  if (new Set(v.stations.map((station: Rec) => station.exerciseId)).size !== v.stations.length) return false;
   if (typeof v.recommend !== 'boolean' || !iso(v.createdAt) || !iso(v.updatedAt)) return false;
   if (v.kind === 'self-paced') return v.workSec === undefined && v.restSec === undefined && v.transitionSec === undefined;
   return finite(v.workSec) && v.workSec > 0 && finite(v.restSec) && v.restSec >= 0 && finite(v.transitionSec) && v.transitionSec >= 0;

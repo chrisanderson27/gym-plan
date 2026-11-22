@@ -58,7 +58,7 @@ export const POSES: Record<string, PoseDef> = {
     ],
   },
   'hip-thrust': {
-    view: 'side', anchor: 'feet', implement: 'bar',
+    view: 'side', anchor: 'feet', implement: 'bar', prop: 'shoulder-bench',
     frames: [
       { angles: { torso: 235, head: 235, ...legs(120, 0), ...arms(60, 90) } },
       { angles: { torso: 265, head: 265, ...legs(85, 0) }, ms: 900, holdMs: 400 },
@@ -79,7 +79,7 @@ export const POSES: Record<string, PoseDef> = {
     ],
   },
   'step-up': {
-    view: 'side', anchor: 'feet', implement: 'db',
+    view: 'side', anchor: 'feet', implement: 'db', prop: 'box',
     frames: [
       { angles: { torso: 175, head: 180, thighN: 70, shinN: 350, thighF: 0, shinF: 0, ...arms(0, 0) } },
       { angles: { torso: 180, thighN: 0, shinN: 0, thighF: 80, shinF: 10 }, ms: 900, holdMs: 300 },
@@ -90,6 +90,13 @@ export const POSES: Record<string, PoseDef> = {
     frames: [
       { angles: { torso: 180, head: 180, ...legs(0, 0), ...arms(0, 0) } },
       { angles: { footN: 40, footF: 40 }, ms: 700, holdMs: 400 },
+    ],
+  },
+  'hip-adduction': {
+    view: 'front', anchor: 'hip', prop: 'seat',
+    frames: [
+      { angles: { torso: 180, head: 180, thighN: 28, shinN: 28, upperArmN: 20, forearmN: 0 } },
+      { angles: { thighN: 6, shinN: 6 }, ms: 900, holdMs: 300 },
     ],
   },
   'hip-abduction': {

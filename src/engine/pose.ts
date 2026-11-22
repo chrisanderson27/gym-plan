@@ -30,7 +30,7 @@ export interface PoseDef {
   anchor: 'feet' | 'hands' | 'hip';
   frames: Keyframe[];
   implement?: 'bar' | 'db' | 'kb' | 'handle' | 'none';
-  prop?: 'bench' | 'incline' | 'seat' | 'floor' | 'none';
+  prop?: 'bench' | 'shoulder-bench' | 'box' | 'incline' | 'seat' | 'floor' | 'none';
   cable?: { x: number; y: number };
 }
 export interface Pt { x: number; y: number }

@@ -58,7 +58,7 @@ export function nextStation(cursor: CoachedCursor, stationCount: number): Coache
 }
 
 /**
- * `remainingSec` plus time already spent paused. While `pausedAtMs` is set the elapsed term freezes there.
+ * Pauses shift the deadline. While `pausedAtMs` is set the elapsed term freezes there.
  * No `creditMs`: skipping a station must not shorten the block.
  */
 export function blockRemainingSec(
@@ -69,5 +69,5 @@ export function blockRemainingSec(
   nowMs: number,
 ): number {
   const now = pausedAtMs ?? nowMs;
-  return Math.min(durationSec, remainingSec(startedAtMs, durationSec, now) + pausedMs / 1000);
+  return remainingSec(startedAtMs + pausedMs, durationSec, now);
 }
