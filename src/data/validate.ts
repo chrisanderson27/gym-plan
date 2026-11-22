@@ -18,6 +18,7 @@ type Rec = Record<string, unknown>;
 type Check = (v: unknown) => boolean;
 interface BackupSnapshot {
   exportedAt: unknown;
+  restoreAt: number;
   equipment: ReadonlyMap<string, Equipment>;
 }
 
@@ -190,7 +191,7 @@ const mixedShape = shape({
   cursor: shape({ blockId: id, stage: oneOf('entry', 'active', 'review'), setSlot: integer }),
 });
 
-function validCoachedClock(block: ExecutableCoachedBlock, effective: EffectiveStation[], t: MixedTimer, row: Rec, snapshotAt?: number) {
+function validCoachedClock(block: ExecutableCoachedBlock, effective: EffectiveStation[], t: MixedTimer, row: Rec, latestAnchorAt?: number) {
   const { coached: at, startedAt, pausedAt, pausedMs, frozenElapsedMs, durationMs } = t;
   if (!only(t as unknown as Rec, ['coached', 'startedAt', 'pausedAt', 'pausedMs', 'durationMs', 'frozenElapsedMs'])) return false;
   if (startedAt === null) return !at && pausedMs === 0 && frozenElapsedMs === 0;
@@ -200,8 +201,8 @@ function validCoachedClock(block: ExecutableCoachedBlock, effective: EffectiveSt
   const elapsedLimit = frozenElapsedMs ?? (pausedAt === null ? durationMs - 1 : elapsedClamped(t, pausedAt));
   if (startedAt < Date.parse(String(row.date)) || (row.endedAt && startedAt + pausedMs + elapsedLimit > Date.parse(String(row.endedAt)))) return false;
   if (at.phaseStartMs > elapsedLimit || at.rotations >= Number.MAX_SAFE_INTEGER - (durationMs - at.phaseStartMs)) return false;
-  if (snapshotAt !== undefined && (!Number.isFinite(snapshotAt) || (pausedAt ?? startedAt + pausedMs) > snapshotAt
-    || at.phaseStartMs > elapsedClamped(t, snapshotAt))) return false;
+  if (latestAnchorAt !== undefined && (!Number.isFinite(latestAnchorAt) || (pausedAt ?? startedAt + pausedMs) > latestAnchorAt
+    || at.phaseStartMs > elapsedClamped(t, latestAnchorAt))) return false;
   if (pausedAt !== null && (elapsedLimit >= durationMs || (frozenElapsedMs !== undefined && frozenElapsedMs !== elapsedClamped({ ...t, frozenElapsedMs: undefined }, pausedAt)))) return false;
   const lineup = effective.filter((s) => !s.skipped);
   if (!lineup.every((s) => s.poseId && s.equipmentId)) return false;
@@ -278,8 +279,10 @@ function validMixed(row: Rec, backup?: BackupSnapshot): boolean {
       const equipment = backup?.equipment.get(s.equipmentId) ?? SEED_EQUIPMENT.find((e) => e.id === s.equipmentId);
       return equipment && coachedPose(s.exerciseId, equipment) === s.poseId;
     })) return false;
-    const snapshotAt = active && backup ? (iso(backup.exportedAt) ? Date.parse(backup.exportedAt) : NaN) : undefined;
-    if (t && (i < current && t.frozenElapsedMs === undefined || !validCoachedClock(b as ExecutableCoachedBlock, effective!, t, row, snapshotAt))) return false;
+    const latestAnchorAt = active && backup
+      ? (iso(backup.exportedAt) ? Math.min(Date.parse(backup.exportedAt), backup.restoreAt) : NaN)
+      : undefined;
+    if (t && (i < current && t.frozenElapsedMs === undefined || !validCoachedClock(b as ExecutableCoachedBlock, effective!, t, row, latestAnchorAt))) return false;
     if (d.tapped !== 0 || ((!t || t.startedAt === null || t.frozenElapsedMs === undefined) && (d.rounds !== null || d.partial))) return false;
     // The result is a portable copy of the final draft and lineup. Object key order is immaterial.
     const snapshot = (value: unknown): string => JSON.stringify(value, (_, item) => isRec(item)

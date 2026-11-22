@@ -63,9 +63,8 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
   })();
 
   const doExport = async (preferShare: boolean) => {
-    const now = new Date();
-    const file = await buildExport(db, now, __APP_VERSION__);
-    const result = await deliverFile(backupFileName(now), JSON.stringify(file), { preferShare });
+    const file = await buildExport(db, undefined, __APP_VERSION__);
+    const result = await deliverFile(backupFileName(new Date(file.exportedAt)), JSON.stringify(file), { preferShare });
     if (result === 'cancelled') return setBackupMsg({ text: 'Export cancelled.' });
     await markBackedUp(db, file.exportedAt);
     setBackupMsg({ text: result === 'shared' ? 'Backup shared.' : 'Backup downloaded.' });

@@ -13,12 +13,12 @@ export const ROUND_TRIP_EXCLUDE = [['settings', 'backupAt']] as const;
 export { ImportError };
 
 /** Reads every user store; writes nothing. */
-export async function buildExport(db: GymDb, now: Date, appVersion: string): Promise<ExportFile> {
-  const stores: Record<string, unknown[]> = {};
-  await db.transaction('r', STORE_NAMES.map((n) => db.table(n)), async () => {
+export async function buildExport(db: GymDb, now: Date | undefined, appVersion: string): Promise<ExportFile> {
+  return db.transaction('r', STORE_NAMES.map((n) => db.table(n)), async () => {
+    const stores: Record<string, unknown[]> = {};
     for (const name of STORE_NAMES) stores[name] = await db.table(name).toArray();
+    return { schemaVersion: SCHEMA_VERSION, exportedAt: (now ?? new Date()).toISOString(), appVersion, stores };
   });
-  return { schemaVersion: SCHEMA_VERSION, exportedAt: now.toISOString(), appVersion, stores };
 }
 
 /** Call only after share/download succeeded, so the exported file holds the previous backupAt. */
@@ -83,7 +83,9 @@ export function parseExport(text: string): { file: ExportFile; warnings: string[
   }
   if (stores.sessions) {
     const equipment = (stores.equipment ?? []) as Equipment[];
-    validateRows('sessions', stores.sessions, { exportedAt: obj.exportedAt, equipment: new Map(equipment.map((row) => [row.id, row])) });
+    validateRows('sessions', stores.sessions, {
+      exportedAt: obj.exportedAt, restoreAt: Date.now(), equipment: new Map(equipment.map((row) => [row.id, row])),
+    });
   }
   return { file: { ...file, stores }, warnings };
 }

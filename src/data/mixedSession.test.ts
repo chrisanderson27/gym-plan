@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import Dexie from 'dexie';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { buildExport, ImportError, importExport, parseExport } from './backup';
 import { exerciseById } from '../content';
 import { coachedSchedule, initialCoached, projectCoached } from '../engine/block/coached';
-import type { GymDb } from './db';
+import { GymDb } from './db';
 import { loadSessionPRs } from './history';
 import { findOpenLiftSession, findStaleOpenLifts } from './lift';
 import { findOpenMixedSession, mixedOptions, rateMixedSession, startMixedSession, updateMixedSession } from './mixedSession';
@@ -19,11 +20,16 @@ const source = { templateId: MIXED_TEMPLATE.id };
 const at = (ms = 0) => new Date(MIXED_AT.getTime() + ms);
 let db: GymDb;
 beforeEach(async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(at(2_000_000));
   db = openTestDb();
   await db.settings.put(settings({ programStart: '2026-07-03', activities: ['lift', 'run'] }));
   await db.templates.put(MIXED_TEMPLATE);
 });
-afterEach(async () => { await db.delete(); });
+afterEach(async () => {
+  vi.useRealTimers();
+  await db.delete();
+});
 
 const current = async (id: string) => (await db.sessions.get(id))!;
 const action = async (id: string, next: Parameters<typeof updateMixedSession>[3], ms = 0) =>
@@ -195,6 +201,52 @@ test('active coached checkpoint must exist at export time and can catch up after
     expect(expired?.mixed?.timers.rotation?.frozenElapsedMs).toBe(720_000);
     expect(expired?.mixed?.drafts.rotation?.rounds).toBe(4);
   } finally {
+    await restored.delete();
+  }
+});
+
+test.each<[string, Partial<MixedExecution['timers'][string]>]>([
+  ['phase checkpoint', { coached: { ...initialCoached, phaseStartMs: 600_000 } }],
+  ['start', { startedAt: at(600_000).getTime() }],
+  ['pause', { pausedAt: at(1_001).getTime() }],
+  ['resume', { pausedMs: 600_000 }],
+])('rejects a coached %s after restore time even with a later export timestamp', async (_, anchor) => {
+  const id = await startBlocks(coachedFixture());
+  const session = (await action(id, { type: 'start' }))!;
+  Object.assign(session.mixed!.timers.rotation!, anchor);
+  const backup = await buildExport(db, at(600_000), 'test');
+  backup.stores.sessions = [session];
+
+  vi.setSystemTime(at(1_000));
+  expect(() => parseExport(JSON.stringify(backup))).toThrow(ImportError);
+});
+
+test('exports a concurrent pause with a coherent snapshot and restores it paused', async () => {
+  const id = await startBlocks(coachedFixture());
+  const cursor = (await action(id, { type: 'start' }))!.mixed!.cursor;
+  const writer = new GymDb(db.name);
+  const restored = openTestDb();
+  try {
+    vi.setSystemTime(at(1_000));
+    const { pending } = await writer.transaction('rw', writer.tables, async () => {
+      await writer.sessions.get(id);
+      const pending = Dexie.ignoreTransaction(() => buildExport(db, undefined, 'test'));
+      vi.setSystemTime(at(1_001));
+      await updateMixedSession(writer, id, cursor, { type: 'pause' });
+      return { pending };
+    });
+    const backup = await pending;
+    expect(backup.stores.sessions).toMatchObject([{ mixed: { timers: { rotation: { pausedAt: at(1_001).getTime() } } } }]);
+    expect(backup.exportedAt).toBe(at(1_001).toISOString());
+
+    vi.setSystemTime(at(900_000));
+    await importExport(restored, parseExport(JSON.stringify(backup)).file);
+    const paused = await updateMixedSession(restored, id, cursor, { type: 'expire' });
+    expect(paused?.mixed?.cursor.stage).toBe('active');
+    const resumed = await updateMixedSession(restored, id, cursor, { type: 'resume' });
+    expect(resumed?.mixed?.timers.rotation).toMatchObject({ pausedAt: null, pausedMs: 898_999 });
+  } finally {
+    writer.close();
     await restored.delete();
   }
 });
