@@ -14,6 +14,7 @@ import type { GymDb } from './db';
 import { newId } from './ids';
 import { LIFT_EXERCISES, blockPrescriptionPatch, loadLiftSnapshot, resolveEquipmentId, writeLiftSession } from './lift';
 import type { Block, LiftBlock, LiftVariant, OrderedPrescription, RunBlock, SessionType, Template } from './types';
+import { snapshotValue, validAuthoredWorkout } from './validate';
 
 export interface Runnable {
   type: SessionType;
@@ -49,8 +50,38 @@ export async function saveAsMine(db: GymDb, sessionId: string, name?: string, no
 
 export async function saveBuilt(db: GymDb, input: { id?: string; name: string; blocks: LiftBlock[] }, now = new Date()): Promise<string> {
   const id = input.id ?? newId();
-  const cur = input.id ? await db.templates.get(input.id) : undefined;
-  await db.templates.put({ id, name: input.name.trim(), type: 'custom', blocks: input.blocks, source: 'built', createdAt: cur?.createdAt ?? now.toISOString() });
+  await db.transaction('rw', db.templates, async () => {
+    const row = input.id ? await db.templates.get(id) : undefined;
+    if (input.id && !editableLiftTemplate(row)) throw new WorkoutSaveError('This workout cannot be edited in the lift builder.');
+    await db.templates.put({ id, name: input.name.trim(), type: 'custom', blocks: input.blocks, source: 'built', createdAt: row?.createdAt ?? now.toISOString() });
+  });
+  return id;
+}
+
+export class WorkoutSaveError extends Error {}
+export class StaleWorkoutSaveError extends WorkoutSaveError {}
+
+export function editableLiftTemplate(row: Template | undefined): row is Template {
+  return !!row && row.source === 'built' && row.type === 'custom' && !row.ordered && row.blocks.every((block) => block.kind === 'lift');
+}
+
+export async function saveOrderedWorkout(db: GymDb, draft: OrderedPrescription,
+  edit?: { id: string; baseline: OrderedPrescription }, now = new Date()): Promise<string> {
+  const ordered = structuredClone({ name: draft.name.trim(), blocks: draft.blocks });
+  if (!validAuthoredWorkout(ordered)) throw new WorkoutSaveError('Enter a name and add 1–30 valid blocks. Replace or remove any coached block missing its schedule.');
+  const id = edit?.id ?? newId();
+  await db.transaction('rw', db.templates, async () => {
+    const row = edit ? await db.templates.get(id) : undefined;
+    if (edit && (!row?.ordered || row.type !== 'custom' || row.source !== 'saved' || snapshotValue(row.ordered) !== snapshotValue(edit.baseline))) {
+      throw new StaleWorkoutSaveError('This workout changed or was removed. Reopen it to edit the latest version, or save this draft as a new workout.');
+    }
+    const saved: Template = {
+      id, name: ordered.name, type: 'custom', source: 'saved',
+      createdAt: row?.createdAt ?? now.toISOString(), ordered, blocks: orderedStrengthBlocks(ordered),
+    };
+    if (edit) await db.templates.put(saved);
+    else await db.templates.add(saved);
+  });
   return id;
 }
 

@@ -350,8 +350,8 @@
   }
 }
 
-/* Drawn Preferences frame stays on the light shell when Appearance is dark. */
-.preferences {
+/* Drawn shell frames keep their contrast when Appearance is dark. */
+.workouts, .preferences {
   color-scheme: light;
   --color-canvas: var(--shell-canvas);
   --color-surface: var(--shell-bg);

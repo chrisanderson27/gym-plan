@@ -681,3 +681,112 @@ button.block-station { border-radius: var(--radius); }
 @media (prefers-reduced-motion: reduce) {
   .gym-card .block-icon { display: none; }
 }
+
+/* Workouts library and ordered builder. */
+@font-face {
+  font-family: 'IBM Plex Mono Workout Duration';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/ibm-plex-mono-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Manrope Workout Badge';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./fonts/manrope-700.woff2?no-inline') format('woff2');
+}
+.screen.workouts { overflow-wrap: anywhere; }
+.workouts > .pref-top { position: static; }
+.workouts .pref-eyebrow { gap: 10px; }
+.workout-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--shell-dot); }
+.workout-saved { display: grid; gap: 12px; margin-top: 20px; }
+.workout-suggested { display: grid; gap: 12px; margin-top: 34px; }
+.workout-suggested > h2 { margin: 0 0 10px; font-weight: 800; }
+.workout-footer { display: flex; justify-content: flex-end; margin-top: 12px; }
+.workout-card {
+  min-width: 0; padding: 20px; border: 1px solid var(--shell-line); border-radius: 17px;
+  background: var(--shell-bg); box-shadow: var(--shadow-1);
+}
+.workout-card h2, .workout-card h3 {
+  margin: 8px 0 0; color: var(--shell-ink); font-size: 24px; font-weight: 800; line-height: 30px; letter-spacing: -1.2px;
+}
+.workout-description { color: var(--shell-secondary); margin: 10px 0 0; font-size: 14px; line-height: 22px; }
+.workout-meta {
+  display: flex; align-items: center; gap: 8px; margin: 12px 0 0; color: var(--shell-secondary);
+  font: 600 11px/1.5 'IBM Plex Mono Workout Duration', var(--font-mono);
+}
+.workout-meta svg { width: 16px; height: 16px; flex: none; }
+.workout-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.workout-card .workout-actions { margin-top: 16px; }
+.workout-actions button, .workout-actions .btn, .workouts .workout-new, .workouts .workout-save {
+  min-height: var(--tap); height: auto; margin: 0; border-radius: 10px; font-weight: 800; font-size: 13px;
+}
+.workout-card .workout-preview-action { font-size: 12px; line-height: 18px; }
+.workouts .workout-new { margin-top: 24px; }
+.workout-actions .primary { width: auto; padding-inline: 16px; }
+.workout-actions .primary:not(:disabled), .workouts .workout-new:not(:disabled), .workouts .workout-save:not(:disabled) {
+  color: var(--shell-ink); background: var(--shell-lime); border-color: var(--shell-action-active);
+}
+.workout-actions .primary:hover:not(:disabled), .workouts .workout-new:hover:not(:disabled), .workouts .workout-save:hover:not(:disabled) {
+  background: var(--shell-action); color: var(--shell-ink);
+}
+.workouts .workout-save:disabled { background: var(--shell-tab-wash); color: var(--shell-secondary); }
+.workout-actions button:not(.primary):not(:disabled), .workout-actions .btn:not(.primary) {
+  background: var(--shell-bg); color: var(--shell-ink); border-color: var(--shell-line);
+}
+.workout-actions button:not(.primary):hover:not(:disabled), .workout-actions .btn:not(.primary):hover { border-color: var(--shell-secondary); }
+.workout-actions svg { width: 16px; height: 16px; flex: none; }
+.workout-error { flex-basis: 100%; color: var(--color-danger-text); margin: 8px 0; }
+.workout-warning { font-size: 13px; color: var(--shell-ink); margin: 8px 0; }
+.sheet.overlay.sheet-top {
+  top: 0; bottom: auto; max-height: 100dvh; border-radius: 0 0 12px 12px;
+  padding: calc(20px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+}
+.workouts .sheet.overlay { background: var(--shell-bg); color: var(--shell-ink); }
+.workout-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.workout-dialog-head > div { min-width: 0; }
+.workout-editor .workout-dialog-head h2 { margin: 7.5px 0 0; font-size: 24px; font-weight: 800; line-height: 30px; letter-spacing: -1.08px; }
+.workout-dialog-head .workout-close {
+  flex: none; min-width: var(--tap); min-height: var(--tap); margin: 0; padding: 0;
+  display: grid; place-items: center; color: var(--shell-ink); background: var(--shell-canvas); border-color: var(--shell-line); border-radius: 12px;
+}
+.workout-close svg { width: 18px; height: 18px; }
+.workout-name { font-size: 12px; font-weight: 800; color: var(--shell-ink); margin: 12px 0 14px; }
+.workout-name input { min-height: var(--tap); margin-top: 6px; background: var(--shell-canvas); color: var(--shell-ink); }
+.workout-name input::placeholder { font-weight: 600; }
+.workout-editor h3 { margin: 0 0 8px; font-size: 14px; font-weight: 800; }
+.workout-choices { margin: 0 0 18px; padding: 0; list-style: none; border: 1px solid var(--shell-line); border-radius: 13px; max-height: 307px; overflow: auto; }
+.workout-choices li + li { border-top: 1px solid var(--shell-line); }
+.workout-choice-row { display: flex; align-items: center; min-height: 60px; gap: 10px; padding: 0 0 0 10px; }
+.workout-kind-tile {
+  width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; flex: none;
+  background: var(--shell-empty-tile); color: var(--shell-empty-ink);
+}
+.workout-kind-tile svg { width: 18px; height: 18px; }
+.workout-choice[data-kind='preparation'] .workout-kind-tile { background: var(--shell-peach); color: var(--shell-peach-ink); }
+.workout-choice[data-kind='strength'] .workout-kind-tile { background: var(--shell-mint); color: var(--shell-mint-ink); }
+.workout-choice[data-kind='coached'] .workout-kind-tile { background: var(--shell-suggest-tile); color: var(--shell-suggest-ink); }
+.workout-choice[data-kind='recovery'] .workout-kind-tile { background: var(--blue-10); color: var(--blue-70); }
+.workout-choice-text { flex: 1; min-width: 0; font-size: 14px; }
+.workout-choice-text strong { display: block; font-weight: 800; }
+.workout-choice-text small { display: block; color: var(--shell-secondary); font-size: 11px; font-weight: 800; }
+.workouts .workout-pick {
+  flex: none; width: var(--tap); min-height: var(--tap); margin: 0; padding: 0;
+  display: grid; place-items: center; background: transparent; color: var(--shell-ink); border: 0;
+}
+.workout-pick:focus-visible { outline-offset: -3px; }
+.workout-pick span {
+  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 9px;
+  color: var(--shell-ink); background: var(--shell-canvas);
+}
+.workout-pick[aria-expanded] span { font: 700 12px/16px 'Manrope Workout Badge', var(--font-sans); }
+.workout-pick svg { width: 16px; height: 16px; }
+.workout-pick:disabled span { color: var(--shell-secondary); }
+.workout-choice > .workout-warning, .workout-choice-actions { padding: 0 10px 8px; }
+.workout-more { margin: 4px 10px; }
+.workout-preview-list { padding-inline-start: 24px; }
+.workout-preview-list > li { margin-block: 16px; }
+.workout-preview-list h3 { margin: 0; }
+.workout-preview-list .gym-grid { margin-top: 8px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); }

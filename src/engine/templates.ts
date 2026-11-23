@@ -1,4 +1,4 @@
-import type { Block, IntervalBlock, LiftBlock } from '../data/types';
+import type { Block, IntervalBlock, LiftBlock, OrderedBlock } from '../data/types';
 import { MIN_PER_SET } from './config';
 
 /** Fresh ids; no `result`; lift blocks drop the old target weight and the calibration label; superset groups are remapped. */
@@ -20,7 +20,7 @@ export function toTemplateBlocks(blocks: Block[], makeId: () => string): Block[]
   });
 }
 
-export function moveBlock(blocks: LiftBlock[], id: string, dir: -1 | 1): LiftBlock[] {
+export function moveBlock<T extends { id: string }>(blocks: T[], id: string, dir: -1 | 1): T[] {
   const i = blocks.findIndex((b) => b.id === id);
   const j = i + dir;
   if (i < 0 || j < 0 || j >= blocks.length) return blocks;
@@ -61,6 +61,14 @@ export function newLiftBlock(ex: { id: string; repMin: number; repMax: number },
 }
 
 const intervalSec = (b: IntervalBlock) => b.rounds * b.phases.reduce((n, p) => n + p.sec, 0);
+
+export function orderedBlockMinutes(b: OrderedBlock) {
+  return b.kind === 'strength' ? b.sets * MIN_PER_SET.other : b.durationSec / 60;
+}
+
+export function orderedDurationMin(blocks: OrderedBlock[]) {
+  return Math.round(blocks.reduce((min, block) => min + orderedBlockMinutes(block), 0));
+}
 
 export function templateDurationMin(blocks: Block[]): number {
   let min = 0;

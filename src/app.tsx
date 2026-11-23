@@ -25,6 +25,7 @@ import { SettingsScreen } from './ui/Settings';
 import { setCuesEnabled } from './platform/audio';
 import { applyAppearance } from './ui/theme';
 import { UpdatePrompt } from './ui/UpdatePrompt';
+import { WorkoutsScreen } from './ui/workouts/WorkoutsScreen';
 
 export function App() {
   // null = loaded but no settings row yet; undefined = first tick still loading.
@@ -75,11 +76,13 @@ export function App() {
   } else if (route.startsWith('/history/')) {
     body = <HistoryDetailScreen key={route} id={route.split('/')[2]!} />;
   } else if (route === '/builder' || route.startsWith('/builder/')) {
-    body = <BuilderScreen {...(route.split('/')[2] ? { templateId: route.split('/')[2]! } : {})} />;
+    body = <BuilderScreen key={route} {...(route.split('/')[2] ? { templateId: route.split('/')[2]! } : {})} />;
   } else if (route.startsWith('/mine/')) {
     body = <TemplateRunScreen key={route} templateId={route.split('/')[2]!} />;
   } else if (route.startsWith('/again/')) {
     body = <TemplateRunScreen key={route} sessionId={route.split('/')[2]!} />;
+  } else if (route === '/workouts') {
+    body = <WorkoutsScreen settings={settings} />;
   } else if (route === '/blocks') {
     body = <BlocksScreen settings={settings} />;
   } else if (route.startsWith('/blocks/')) {

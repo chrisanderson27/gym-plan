@@ -64,7 +64,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
   const reviewHeading = useRef<HTMLHeadingElement>(null);
   useLayoutEffect(() => { heading.current?.focus(); }, []);
   const elapsed = clock ? elapsedClamped(clock, now) : 0;
-  const rotation = coached && clock?.coached && stage === 'active'
+  const rotation = coached && clock?.coached && stage === 'active' && options?.ready
     ? projectCoached(coachedSchedule(coached, lineup), clock.coached, Math.min(elapsed, clock.durationMs - 1)) : undefined;
   const remaining = coached && clock?.startedAt != null && stage === 'active'
     ? blockRemainingSec(clock.startedAt, clock.pausedMs, clock.pausedAt, coached.durationSec, now)
@@ -269,7 +269,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
               <div class="gym-grid">
                 {stations.map((station, i) => (
                   <StationCard key={station.slotId} exerciseId={station.exerciseId} equipmentId={station.equipmentId}
-                    poseId={(coached && stage === 'active' && !station.skipped) || options?.available?.has(station.slotId) ? station.poseId : undefined} index={i}
+                    poseId={options?.available?.has(station.slotId) ? station.poseId : undefined} index={i}
                     target={stationTargetLine(station.exerciseId, station.target.amount, station.target.unit, station.load)}
                     interval={coached && station.target.unit !== 'sec' ? stationWorkSec(station.target, coached.workSec) : undefined}
                     marker={station === currentStation ? 'Now' : station === nextStationInLineup ? 'Next' : undefined}
@@ -279,7 +279,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
                       else setPlaying(slot);
                     }}
                     onSwap={coached && stage === 'active' && station.skipped ? undefined : () => setSwap({ slotId: station.slotId })} disabled={busy}
-                    status={station.skipped ? 'Skipped' : options && (!coached || stage === 'entry') && !options.available?.has(station.slotId) ? 'Movement unavailable' : undefined} />
+                    status={station.skipped ? 'Skipped' : options && !options.available?.has(station.slotId) ? 'Movement unavailable' : undefined} />
                 ))}
               </div>
             </>

@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { GymDb } from './db';
 import { ROUND_TRIP_EXCLUDE, buildExport, importExport, markBackedUp, parseExport, ImportError } from './backup';
 import { newId } from './ids';
+import { saveOrderedWorkout } from './templates';
+import { startMixedSession, updateMixedSession } from './mixedSession';
+import { libraryWorkoutBlock, copyWorkoutBlock, starterWorkoutBlocks } from './workoutChoices';
 import { STORE_NAMES } from './stores';
-import type { Block, Session, Settings } from './types';
+import type { Block, LibraryBlock, Session, Settings } from './types';
 
 const dbs: GymDb[] = [];
 const open = (name = 't-' + newId()) => {
@@ -263,4 +266,88 @@ describe('export/import', () => {
     expect(row?.unavailableEquipment).toEqual(['dumbbells']);
     expect(row?.soundCues).toBe(true);
   });
+});
+
+it('restores authored workouts and history after the source changes, keeping local v1 user rows', async () => {
+  const src = open();
+  await src.settings.put(settings({ programStart: '2026-07-01' }));
+  const now = new Date('2026-11-22T12:00:00.000Z');
+  const stamp = now.toISOString();
+  const source: LibraryBlock = {
+    id: 'source', name: 'My mixed circuit', kind: 'self-paced', recommend: false, durationSec: 480,
+    createdAt: stamp, updatedAt: stamp, stations: [
+      { exerciseId: 'reverse-lunge', target: { unit: 'reps', amount: 8 }, load: 15 },
+      { exerciseId: 'rower', target: { unit: 'cal', amount: 11 } },
+    ],
+  };
+  await src.libraryBlocks.add(source);
+  const ordered = { name: 'Synthetic circuit day', blocks: [
+    ...starterWorkoutBlocks.slice(0, 3), libraryWorkoutBlock(source), starterWorkoutBlocks[4]!,
+  ].map((block) => copyWorkoutBlock(block)) };
+  const id = await saveOrderedWorkout(src, ordered, undefined, now);
+  await src.libraryBlocks.update(source.id, { recommend: true, durationSec: 600, stations: [...source.stations].reverse() });
+  const sid = await startMixedSession(src, { templateId: id }, now);
+  const write = async (action: Parameters<typeof updateMixedSession>[3], ms: number) => {
+    const current = (await src.sessions.get(sid))!.mixed!;
+    return updateMixedSession(src, sid, current.cursor, action, new Date(now.getTime() + ms));
+  };
+  for (const block of ordered.blocks) {
+    if (block.kind === 'strength') {
+      const accepted = (await src.sessions.get(sid))!.mixed!.strength[block.id]!;
+      for (let slot = 0; slot < accepted.sets; slot++) {
+        await write({ type: 'set', expectedExerciseId: accepted.exerciseId, expectedEquipmentId: accepted.equipmentId, weight: 95, reps: 9 }, slot * 1000);
+      }
+    } else {
+      await write({ type: 'start' }, 10_000);
+      if (block.kind === 'self-paced') {
+        await write({ type: 'swap-station', slotId: block.stations[0]!.slotId, exerciseId: 'step-up', expectedExerciseId: 'reverse-lunge' }, 12_000);
+      }
+      await write({ type: 'finish' }, 15_000);
+    }
+    await write({ type: 'continue' }, 20_000);
+  }
+  await src.libraryBlocks.delete(source.id);
+  const backup = parseExport(JSON.stringify(await buildExport(src, undefined, 'v2'))).file;
+  expect(backup.schemaVersion).toBe(2);
+  const dst = open();
+  await importExport(dst, parseExport(JSON.stringify({
+    schemaVersion: 1, exportedAt: stamp, stores: {
+      bodyLogs: [{ date: '2026-10-01', weightLb: 240, protein: false }],
+      settings: [settings({ updatedAt: '2026-12-23T12:00:00.000Z' })],
+      sessions: [session('local')],
+      exerciseOverrides: [{ exerciseId: 'lat-pulldown', notAtMyGym: true }],
+      templates: [{ id: 'legacy', name: 'Legacy', type: 'lift', source: 'saved', createdAt: stamp, blocks: [blocks[1]] }],
+    },
+  })).file);
+  await importExport(dst, backup);
+  expect(await dst.templates.get(id)).toEqual(await src.templates.get(id));
+  expect((await dst.templates.get(id))?.ordered).toEqual(ordered);
+  const restored = (await dst.sessions.get(sid))!;
+  expect(JSON.parse(JSON.stringify(await src.sessions.get(sid)))).toEqual(restored);
+  expect(restored.endedAt).toBeTruthy();
+  expect(restored.mixed!.prescription).toEqual(ordered);
+  expect(Object.keys(restored.mixed!.results)).toEqual(ordered.blocks.map((b) => b.id));
+  const circuitId = ordered.blocks[3]!.id;
+  expect(restored.mixed!.results[circuitId]).toMatchObject({
+    rounds: null, stations: [{ exerciseId: 'step-up', swappedFromExerciseId: 'reverse-lunge' }, { exerciseId: 'rower' }],
+  });
+  expect(await dst.sets.toArray()).toEqual(await src.sets.toArray());
+  expect(await dst.libraryBlocks.count()).toBe(0);
+  expect(await dst.templates.get('legacy')).toBeDefined();
+  expect(await dst.sessions.get('local')).toBeDefined();
+  expect(await dst.bodyLogs.get('2026-10-01')).toMatchObject({ weightLb: 240 });
+  expect(await dst.exerciseOverrides.get('lat-pulldown')).toMatchObject({ notAtMyGym: true });
+  expect(await dst.settings.get('settings')).toMatchObject({ updatedAt: '2026-12-23T12:00:00.000Z' });
+  await dst.templates.delete(id);
+  const later = new Date(now.getTime() + 60_000);
+  const repeat = { sessionId: sid };
+  const [attempt, retried] = await Promise.all([startMixedSession(dst, repeat, later), startMixedSession(dst, repeat, later)]);
+  expect(attempt).toBe(retried);
+  expect(attempt).not.toBe(sid);
+  expect(await dst.sessions.get(attempt)).toMatchObject({ rpe: null, mixed: {
+    prescription: ordered, cursor: { stage: 'entry', setSlot: 0, blockId: ordered.blocks[0]!.id }, timers: {}, results: {},
+    drafts: { [circuitId]: { tapped: 0, rounds: null } },
+    stations: { [circuitId]: [{ exerciseId: 'reverse-lunge' }, { exerciseId: 'rower' }] },
+  } });
+  expect(await dst.sets.where('sessionId').equals(attempt).count()).toBe(0);
 });

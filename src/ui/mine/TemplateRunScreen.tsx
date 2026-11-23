@@ -5,7 +5,7 @@ import { burnInputs, loadCardioSnapshot, saveBurn, saveRun, saveSwim, type Cardi
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
 import { useLiveQuery } from '../../data/live';
-import { MixedInputError, startMixedSession } from '../../data/mixedSession';
+import { missingCoachedSchedule, startMixedSession } from '../../data/mixedSession';
 import { poolOf } from '../../data/settings';
 import { loadRunnable, startFromBlocks, type Runnable } from '../../data/templates';
 import type { IntervalBlock, RunBlock, SwimSetBlock } from '../../data/types';
@@ -22,10 +22,10 @@ import { SwimCard } from '../cardio/SwimCard';
 import { SwimLog } from '../cardio/SwimLog';
 import { TimerScreen } from '../cardio/TimerScreen';
 import { PoolSheet } from '../PoolSheet';
-import { unlockAudio } from '../../platform/audio';
 import { mixedBlockName } from '../labels';
 import { navigate } from '../router';
 import { MoreMenu } from '../MoreMenu';
+import { OrderedStart } from '../workouts/OrderedStart';
 
 const { substitutesOf, labelOf } = burnInputs();
 
@@ -58,22 +58,14 @@ export function TemplateRunScreen(src: { templateId: string } | { sessionId: str
 }
 
 function MixedAgain({ source, ordered }: { source: Parameters<typeof startMixedSession>[1]; ordered: NonNullable<Runnable['ordered']> }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const start = async () => {
-    setBusy(true);
-    setError('');
-    unlockAudio();
-    try { navigate('/workout/session/' + await startMixedSession(db, source)); }
-    catch (reason) { setError(reason instanceof MixedInputError ? reason.message : 'Could not start the workout. Try again.'); }
-    finally { setBusy(false); }
-  };
+  const repair = ordered.blocks.some(missingCoachedSchedule);
   return (
     <main class="screen">
       <header class="bar"><h1>{ordered.name}</h1><a class="gear" href="#/progress">Progress</a></header>
       <ol class="plan">{ordered.blocks.map((b) => <li key={b.id}>{mixedBlockName(b)}</li>)}</ol>
-      {error && <p role="alert">{error}</p>}
-      <button type="button" class="primary" data-testid="again-start" disabled={busy} onClick={start}>Start</button>
+      {repair && <p>Replace or remove coached blocks missing a station schedule in Workouts.</p>}
+      <OrderedStart source={source} ordered={ordered} testId="again-start">Start</OrderedStart>
+      <a class="btn" href="#/workouts">Workouts</a>
     </main>
   );
 }

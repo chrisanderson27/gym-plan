@@ -37,6 +37,8 @@ export const MutedIcon = icon(<path d="M4 9h4l5-4v14l-5-4H4zm13 1 4 4m0-4-4 4" /
 export const ChevronIcon = icon(<path d="m9 6 6 6-6 6" />);
 export const CloseIcon = icon(<path d="m6 6 12 12M18 6 6 18" />);
 export const PlusIcon = icon(<path d="M12 5v14M5 12h14" />);
+export const BookmarkIcon = icon(<path d="M6 4h12v16l-6-4-6 4z" />);
+export const WindIcon = icon(<path d="M3 8h12a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7a3 3 0 1 1-3 3" />);
 export const EyeIcon = icon(<><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="2.5" /></>);
 export const RingIcon = icon(<path d="M12 3a9 9 0 1 0 9 9h-9z" />);
 export const FlameIcon = icon(<path d="M12 2c1 6 7 7 7 13a7 7 0 0 1-14 0c0-3 2-5 4-7 0 2 1 3 2 3 2-3 1-6 1-9Z" />);

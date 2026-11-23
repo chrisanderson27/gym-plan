@@ -19,9 +19,11 @@ import { toBlockExercise } from './liftday';
 import { loggedMixedSets, mixedSetId, reconcileMixedStrength } from './mixedSets';
 import { loadRunnable, orderedStrengthBlocks, replayLiftFlags } from './templates';
 import type { CoachedCheckpoint, EffectiveStation, LiftBlock, MixedCursor, MixedDraft, MixedExecution, MixedResult, MixedTimer,
-  OrderedBlock, OrderedStation, OrderedStrengthBlock, Session, SetRow } from './types';
+  OrderedBlock, OrderedPrescription, OrderedStation, OrderedStrengthBlock, Session, SetRow } from './types';
+import { snapshotValue } from './validate';
 
 export class MixedInputError extends Error {}
+export class StaleWorkoutError extends MixedInputError {}
 
 type Source = { templateId: string } | { sessionId: string };
 type Action = { type: 'start' | 'pause' | 'resume' | 'expire' | 'finish' | 'skip' }
@@ -49,30 +51,74 @@ async function gym(db: GymDb, now: Date) {
 }
 type Gym = Awaited<ReturnType<typeof gym>>;
 
+function verifiedDemo(g: Gym, exerciseId: string, preferred?: string, coached = false) {
+  const exercise = exerciseById.get(exerciseId);
+  if (!exercise) return null;
+  const seed = coached ? coachedEquipmentId(exerciseId) : phase3EquipmentId(exerciseId);
+  const equipmentId = preferred ?? resolveEquipmentId(g.snapshot, exercise, g.week, seed);
+  const equipment = g.snapshot.equipment.get(equipmentId);
+  if (!equipment) return null;
+  const poseId = coached ? coachedPose(exerciseId, equipment) : phase3Pose(exerciseId, equipment);
+  return poseId ? { equipmentId, poseId, equipmentName: equipment.name } : null;
+}
+
 function availableDemo(g: Gym, exerciseId: string, preferred?: string, coached = false) {
   const exercise = exerciseById.get(exerciseId);
   if (!exercise || exercise.retired || required.get(exerciseId)?.some((id) => g.unavailable.has(id))
     || !exerciseAllowed({ id: exerciseId, tags: exercise.equipment }, g.excluded, g.snapshot.checklistBlocked ?? new Set(), g.blockedTags)) return null;
-  const seed = coached ? coachedEquipmentId(exerciseId) : phase3EquipmentId(exerciseId);
-  const equipmentId = preferred ?? resolveEquipmentId(g.snapshot, exercise, g.week, seed);
-  const equipment = g.snapshot.equipment.get(equipmentId);
-  if (!equipment || g.blockedTags.has(equipment.kind)) return null;
-  const poseId = coached ? coachedPose(exerciseId, equipment) : phase3Pose(exerciseId, equipment);
-  return poseId ? { equipmentId, poseId } : null;
+  const demo = verifiedDemo(g, exerciseId, preferred, coached);
+  if (!demo || g.blockedTags.has(g.snapshot.equipment.get(demo.equipmentId)!.kind)) return null;
+  return demo;
+}
+
+function stationUnitMatches(station: OrderedStation) {
+  const exercise = exerciseById.get(station.exerciseId);
+  return !!exercise && stationUnits(toBlockExercise(exercise)).includes(station.target.unit);
+}
+
+export function missingCoachedSchedule(block: OrderedBlock) {
+  return block.kind === 'coached' && !block.stations;
+}
+
+export async function workoutPreview(db: GymDb, blocks: OrderedBlock[], now = new Date()) {
+  const g = await gym(db, now);
+  return blocks.map((block) => {
+    const describe = (exerciseId: string, equipmentId?: string, supported = true) => {
+      const coached = block.kind === 'coached';
+      const verified = supported && verifiedDemo(g, exerciseId, equipmentId, coached);
+      const available = verified && availableDemo(g, exerciseId, equipmentId, coached);
+      const extraGear = required.get(exerciseId)?.filter((id) => verified && id !== verified.equipmentId)
+        .map((id) => EQUIPMENT_PREFS.find((pref) => pref.id === id)?.label);
+      return {
+        exerciseId, equipmentId: verified ? verified.equipmentId : equipmentId,
+        equipmentName: verified ? [verified.equipmentName, ...(extraGear ?? [])].filter(Boolean).join(' · ')
+          : equipmentId ? g.snapshot.equipment.get(equipmentId)?.name : undefined,
+        poseId: available ? available.poseId : undefined,
+        status: !verified ? 'Demo unavailable. Replace or skip this movement before training.'
+          : !available ? 'Unavailable at your gym. Replace or skip this movement before training.' : undefined,
+      };
+    };
+    if (block.kind === 'strength') return [describe(block.exerciseId, block.equipmentId, PHASE_LIFTS.has(block.exerciseId))];
+    if (block.kind === 'coached' || block.kind === 'self-paced') {
+      return (block.stations ?? []).map((station) => describe(station.exerciseId, station.equipmentId, stationUnitMatches(station)));
+    }
+    return block.exerciseId ? [describe(block.exerciseId)] : [];
+  });
 }
 
 function resolveStation(g: Gym, original: OrderedStation, exerciseId = original.exerciseId, coached = false): EffectiveStation | null {
-  const ex = exerciseById.get(exerciseId);
   const demo = availableDemo(g, exerciseId, exerciseId === original.exerciseId ? original.equipmentId : undefined, coached);
-  if (!ex || !demo || !stationUnits(toBlockExercise(ex)).includes(original.target.unit)) return null;
-  const equipment = g.snapshot.equipment.get(demo.equipmentId);
+  if (!demo || !stationUnitMatches({ ...original, exerciseId })) return null;
+  const { equipmentId, poseId } = demo;
+  const equipment = g.snapshot.equipment.get(equipmentId);
   const load = equipment?.kind === 'bodyweight' || equipment?.kind === 'cardio' ? undefined : original.load;
-  return { slotId: original.slotId, exerciseId, target: original.target, load, ...demo };
+  return { slotId: original.slotId, exerciseId, target: original.target, load, equipmentId, poseId };
 }
 
 function stationChoices(g: Gym, original: OrderedStation, current: EffectiveStation, coached: boolean) {
   const ex = exerciseById.get(current.exerciseId);
-  const supported = current.equipmentId && current.poseId && availableDemo(g, current.exerciseId, current.equipmentId, coached)?.poseId === current.poseId;
+  const supported = current.equipmentId && current.poseId && stationUnitMatches(current)
+    && availableDemo(g, current.exerciseId, current.equipmentId, coached)?.poseId === current.poseId;
   const options = coached ? [...(ex?.substitutes ?? []), ...COACHED_EXERCISE_IDS] : !supported ? PHASE3_EXERCISE_IDS : ex?.substitutes ?? [];
   return [...new Set([original.exerciseId, current.exerciseId, ...options])].flatMap((id) => {
     const next = resolveStation(g, original, id, coached);
@@ -123,7 +169,7 @@ async function acceptStrength(db: GymDb, g: Gym, block: OrderedStrengthBlock, ex
   return { ...base, ...patch, sets: count, equipmentId };
 }
 
-export async function startMixedSession(db: GymDb, source: Source, now = new Date()): Promise<string> {
+export async function startMixedSession(db: GymDb, source: Source, now = new Date(), expected?: OrderedPrescription): Promise<string> {
   const sourceId = 'templateId' in source ? 'template:' + source.templateId : 'session:' + source.sessionId;
   return db.transaction('rw', [db.sessions, db.templates, db.sets, db.settings, db.equipment, db.exerciseOverrides], async () => {
     const open = await db.sessions.where('type').equals('custom').filter((s) => !s.endedAt && s.mixed?.sourceId === sourceId).first();
@@ -132,8 +178,11 @@ export async function startMixedSession(db: GymDb, source: Source, now = new Dat
       throw new MixedInputError('Finish the original workout before repeating it.');
     }
     const run = await loadRunnable(db, source);
+    if (expected && snapshotValue(run?.ordered) !== snapshotValue(expected)) {
+      throw new StaleWorkoutError('This workout changed. Review the current plan before starting.');
+    }
     if (!run?.ordered || !run.ordered.blocks.length) throw new MixedInputError('This workout is unavailable.');
-    if (run.ordered.blocks.some((b) => b.kind === 'coached' && !b.stations)) throw new MixedInputError('Coached blocks without a station schedule are unavailable.');
+    if (run.ordered.blocks.some(missingCoachedSchedule)) throw new MixedInputError('Coached blocks without a station schedule are unavailable.');
     const prescription = structuredClone(run.ordered);
     const g = await gym(db, now);
     const flags = replayLiftFlags(g.snapshot, now);
@@ -176,8 +225,10 @@ export async function mixedOptions(db: GymDb, b: OrderedBlock, mixed: MixedExecu
   if ((b.kind === 'self-paced' || b.kind === 'coached') && b.stations) {
     const coached = b.kind === 'coached';
     const effective = get(mixed.stations, b.id) ?? [];
+    // Active coached lineups retain their accepted gym eligibility while settings change.
+    const demo = coached && mixed.cursor.stage === 'active' ? verifiedDemo : availableDemo;
     const available = new Set(effective.filter((s) =>
-      !s.skipped && s.equipmentId && s.poseId && availableDemo(g, s.exerciseId, s.equipmentId, coached)?.poseId === s.poseId
+      !s.skipped && s.equipmentId && s.poseId && stationUnitMatches(s) && demo(g, s.exerciseId, s.equipmentId, coached)?.poseId === s.poseId
     ).map((s) => s.slotId));
     return {
       stations: Object.fromEntries(b.stations.map((s, i) => [s.slotId, stationChoices(g, s, effective[i]!, coached)])),
@@ -187,11 +238,13 @@ export async function mixedOptions(db: GymDb, b: OrderedBlock, mixed: MixedExecu
   }
   if (b.kind === 'strength') {
     const accepted = get(mixed.strength, b.id);
+    const demo = accepted?.equipmentId && PHASE_LIFTS.has(accepted.exerciseId)
+      ? availableDemo(g, accepted.exerciseId, accepted.equipmentId) : null;
     return {
       strength: strengthChoices(g, b, accepted?.exerciseId ?? b.exerciseId)
-        .filter((id) => id !== accepted?.exerciseId || !accepted?.equipmentId),
-      ready: !!accepted?.equipmentId && !!availableDemo(g, accepted.exerciseId, accepted.equipmentId),
-      poseId: accepted?.equipmentId && availableDemo(g, accepted.exerciseId, accepted.equipmentId)?.poseId,
+        .filter((id) => id !== accepted?.exerciseId || !demo),
+      ready: !!demo,
+      poseId: demo?.poseId,
     };
   }
   const demo = b.kind !== 'coached' && b.exerciseId ? availableDemo(g, b.exerciseId) : null;
@@ -270,6 +323,7 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         return session;
       case 'next': {
         if (stage !== 'active' || !clock?.coached || clock.pausedAt !== null || !stations || !sameCoachedPhase(clock.coached, action.observed)) return session;
+        if (!(await mixedOptions(db, b, m, now)).ready) throw new MixedInputError('Replace unavailable movements or finish the block.');
         const next = nextCoached(clock.coached, stations.filter((s) => !s.skipped).length, elapsedClamped(clock, nowMs));
         if (next.rotations >= Number.MAX_SAFE_INTEGER - (clock.durationMs - next.phaseStartMs)) throw new MixedInputError('This rotation cannot advance further.');
         saveClock({ ...clock, coached: next });

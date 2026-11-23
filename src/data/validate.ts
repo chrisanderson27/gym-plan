@@ -12,7 +12,7 @@ import type { StoreName } from './stores';
 import { APPEARANCES, FEEDBACK_TAGS, GOAL_DIRECTIONS, STATION_UNITS } from './types';
 
 import type { AcceptedStrength, EffectiveStation, MixedDraft, MixedExecution } from './types';
-import type { Equipment, ExecutableCoachedBlock, MixedTimer } from './types';
+import type { Equipment, ExecutableCoachedBlock, MixedTimer, OrderedPrescription } from './types';
 
 type Rec = Record<string, unknown>;
 type Check = (v: unknown) => boolean;
@@ -173,6 +173,12 @@ const orderedBlock: Check = (v) => {
   return v.kind === 'self-paced' && bounded(60, 3600)(v.durationSec) && id(v.name) && keyed('slotId', 1, 6, orderedStation)(v.stations);
 };
 const ordered = shape({ name: id, blocks: keyed('id', 1, 30, orderedBlock) });
+export const validAuthoredWorkout = (v: OrderedPrescription) =>
+  ordered(v) && v.blocks.every((b) => b.kind !== 'coached' || !!b.stations);
+
+// JSON backups can omit undefined fields and reorder object keys, but array order is significant.
+export const snapshotValue = (value: unknown): string => JSON.stringify(value, (_, item) => isRec(item)
+  ? Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]])) : item);
 const stations = keyed('slotId', 1, 6, (v) => isRec(v) && effectiveStation(v) && libraryStation(v));
 const stationChanges = arr(shape({ afterRound: integer, stations }));
 const partial = shape({ slotId: id, unit: stationUnit, count: nonnegative });
@@ -285,9 +291,7 @@ function validMixed(row: Rec, backup?: BackupSnapshot): boolean {
     if (t && (i < current && t.frozenElapsedMs === undefined || !validCoachedClock(b as ExecutableCoachedBlock, effective!, t, row, latestAnchorAt))) return false;
     if (d.tapped !== 0 || ((!t || t.startedAt === null || t.frozenElapsedMs === undefined) && (d.rounds !== null || d.partial))) return false;
     // The result is a portable copy of the final draft and lineup. Object key order is immaterial.
-    const snapshot = (value: unknown): string => JSON.stringify(value, (_, item) => isRec(item)
-      ? Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]])) : item);
-    return !r || (r.rounds === d.rounds && snapshot([r.partial, r.stations, r.stationChanges]) === snapshot([d.partial, effective, d.stationChanges]));
+    return !r || (r.rounds === d.rounds && snapshotValue([r.partial, r.stations, r.stationChanges]) === snapshotValue([d.partial, effective, d.stationChanges]));
   });
 }
 

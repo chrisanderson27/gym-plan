@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { COACHED_TEMPLATE } from './mixedSession.test-fixture';
-import { validateRows } from './validate';
+import { validAuthoredWorkout, validateRows } from './validate';
 import type { Template } from './types';
 
 const template: Template = {
@@ -35,4 +35,12 @@ test('coached backups accept complete schedules and old placeholders only', () =
     { stations: [{ ...block.stations[0], target: { unit: 'sec', amount: 0.00001 } }] },
     { stations: [{ ...block.stations[1], target: { unit: 'm', amount: 10 } }] },
   ]) expect(() => read({ ...block, ...patch })).toThrow('malformed');
+});
+
+test('incomplete legacy schedules stay readable while authored writes require their complete schedule', () => {
+  const placeholder = { id: 'old', kind: 'coached' as const, name: 'Old rotation', durationSec: 120 };
+  const old = { ...template, ordered: { name: 'Old rotation', blocks: [placeholder] } };
+  expect(() => validateRows('templates', [old])).not.toThrow();
+  expect(validAuthoredWorkout(old.ordered)).toBe(false);
+  expect(validAuthoredWorkout(COACHED_TEMPLATE.ordered!)).toBe(true);
 });

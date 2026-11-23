@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { moveBlock } from '../engine/templates';
 import type { GymDb } from './db';
 import { loadLiftSnapshot, prescribeExercise, setNotAtMyGym } from './lift';
 import { chestBlock, NOW, seedSettings, session, topSets } from './p4-test-utils';
-import { listMine, loadRunnable, saveAsMine, saveBuilt, startFromBlocks } from './templates';
+import { listMine, loadRunnable, saveAsMine, saveBuilt, saveOrderedWorkout, startFromBlocks } from './templates';
 import { openTestDb } from './test-utils';
-import type { LiftBlock } from './types';
+import { copyWorkoutBlock, starterWorkoutBlocks } from './workoutChoices';
+import type { LiftBlock, OrderedPrescription } from './types';
 
 const dbs: GymDb[] = [];
 const open = () => {
@@ -92,4 +94,47 @@ describe('templates', () => {
     expect(custom.mode).not.toBe('progress');
     expect(custom.weight).toBe(100);
   });
+});
+
+it('ordered saves keep the exact prescription, stable edit identity and legacy lift-only projection', async () => {
+  const db = open();
+  const initial = { name: '  Mixed plan  ', blocks: starterWorkoutBlocks.map((block) => copyWorkoutBlock(block)) };
+  const id = await saveOrderedWorkout(db, initial, undefined, NOW);
+  const baseline = (await loadRunnable(db, { templateId: id }))!.ordered!;
+  expect(baseline).toEqual({ ...initial, name: 'Mixed plan' });
+  const blocks = moveBlock(baseline.blocks, baseline.blocks[2]!.id, -1);
+  const edited = { name: 'Mixed plan edited', blocks };
+  expect(await saveOrderedWorkout(db, edited, { id, baseline }, new Date())).toBe(id);
+  const saved = (await db.templates.get(id))!;
+  expect(saved).toEqual({
+    id, name: edited.name, type: 'custom', source: 'saved', createdAt: NOW.toISOString(), ordered: edited,
+    blocks: [{ ...edited.blocks[2], kind: 'lift' }],
+  });
+  expect(await db.templates.count()).toBe(1);
+  await expect(saveBuilt(db, { id, name: 'Wrong editor', blocks: [chestBlock()] })).rejects.toThrow('cannot be edited');
+  expect(await db.templates.get(id)).toEqual(saved);
+});
+
+it('rejects stale concurrent, malformed and missing-row edits without writing over valid data', async () => {
+  const db = open();
+  const baseline = { name: 'Base', blocks: [starterWorkoutBlocks[0]!] };
+  const id = await saveOrderedWorkout(db, baseline);
+  const results = await Promise.allSettled(['First', 'Second'].map((name) =>
+    saveOrderedWorkout(db, { ...baseline, name }, { id, baseline })));
+  expect(results.map((result) => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+  const winner = (await db.templates.get(id))!;
+  const invalid: OrderedPrescription[] = [
+    { ...baseline, name: ' ' }, { ...baseline, blocks: [] },
+    { ...baseline, blocks: Array.from({ length: 31 }, (_, i) => ({ ...baseline.blocks[0]!, id: String(i) })) },
+    { ...baseline, blocks: [baseline.blocks[0]!, baseline.blocks[0]!] },
+    { ...baseline, blocks: [{ id: 'bad', kind: 'coached', name: 'Old rotation', durationSec: 120 }] },
+    { ...baseline, blocks: [{ id: 'bad', kind: 'strength', exerciseId: 'leg-press', sets: 31, repMin: 12, repMax: 8 }] },
+  ];
+  for (const draft of invalid) {
+    await expect(saveOrderedWorkout(db, draft, { id, baseline: winner.ordered! })).rejects.toThrow('valid blocks');
+    expect(await db.templates.get(id)).toEqual(winner);
+  }
+  await db.templates.delete(id);
+  await expect(saveOrderedWorkout(db, baseline, { id, baseline: winner.ordered! })).rejects.toThrow('changed or was removed');
+  expect(await db.templates.count()).toBe(0);
 });

@@ -68,7 +68,10 @@ const stack = createModalStack<Modal>({
  * Modal: Tab cycles inside it, the page behind is inert and does not scroll. Focus moves in on open and returns to the opener
  * on close; Esc and the backdrop close it.
  */
-export function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: ComponentChildren }) {
+export function Sheet({ label, onClose, children, placement, fallbackFocus }: {
+  label: string; onClose: () => void; children: ComponentChildren;
+  placement?: 'top'; fallbackFocus?: () => HTMLElement | null;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
@@ -109,14 +112,15 @@ export function Sheet({ label, onClose, children }: { label: string; onClose: ()
       document.removeEventListener('keydown', onKey);
       if (modal) stack.remove(modal);
       unlockScroll();
-      if (opener && document.contains(opener)) opener.focus();
+      if (opener && document.contains(opener) && !opener.matches(':disabled') && !opener.closest('[inert]')) opener.focus();
+      else fallbackFocus?.()?.focus();
     };
   }, []);
 
   return (
     <>
       <div ref={backdropRef} class="sheet-backdrop" data-testid="sheet-backdrop" onClick={(e) => { e.stopPropagation(); onClose(); }} />
-      <div ref={ref} class="sheet overlay" role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+      <div ref={ref} class={placement === 'top' ? 'sheet overlay sheet-top' : 'sheet overlay'} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
     </>

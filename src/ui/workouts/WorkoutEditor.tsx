@@ -1,0 +1,142 @@
+import { useMemo, useRef, useState } from 'preact/hooks';
+import { db } from '../../data/db';
+import { useLiveQuery } from '../../data/live';
+import { missingCoachedSchedule, workoutPreview } from '../../data/mixedSession';
+import { saveOrderedWorkout, StaleWorkoutSaveError, WorkoutSaveError } from '../../data/templates';
+import type { OrderedBlock, OrderedPrescription } from '../../data/types';
+import { validAuthoredWorkout } from '../../data/validate';
+import { copyWorkoutBlock, libraryWorkoutBlock, starterWorkoutBlocks, strengthWorkoutChoices, workoutBlockContent } from '../../data/workoutChoices';
+import { moveBlock, orderedBlockMinutes } from '../../engine/templates';
+import { BlocksIcon, BookmarkIcon, CloseIcon, FlameIcon, LiftIcon, PlusIcon, SwapIcon, WindIcon } from '../icons';
+import { durationLabel, workoutBlockKind, workoutBlockName } from '../labels';
+import { Sheet } from '../Sheet';
+
+const icons = { preparation: FlameIcon, strength: LiftIcon, coached: SwapIcon, 'self-paced': BlocksIcon, recovery: WindIcon };
+type DraftBlock = { id: string; block: OrderedBlock; choiceId?: string };
+const choiceKey = (block: { id: string }, source: string) => `${source}:${block.id}`;
+const builtIns = starterWorkoutBlocks.map((block) => ({ id: choiceKey(block, 'starter'), block }));
+const strengthChoices = strengthWorkoutChoices.map((block) => ({ id: choiceKey(block, 'strength'), block }));
+
+export function WorkoutEditor({ edit, onClose, fallbackFocus }: {
+  edit?: { id: string; baseline: OrderedPrescription }; onClose: () => void; fallbackFocus: () => HTMLElement | null;
+}) {
+  const label = edit ? 'Edit workout' : 'Build a workout';
+  const [name, setName] = useState(edit?.baseline.name ?? '');
+  const [selected, setSelected] = useState<DraftBlock[]>(() => edit?.baseline.blocks.map((block) => ({ id: block.id, block })) ?? []);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [moreStrength, setMoreStrength] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [conflict, setConflict] = useState(false);
+  const pending = useRef(false);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const library = useLiveQuery(async () => {
+    const rows = await db.libraryBlocks.toArray();
+    return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }, []);
+  const choices = useMemo(() => [
+    ...builtIns,
+    ...(library ?? []).map((source) => ({ id: choiceKey(source, 'library'), block: libraryWorkoutBlock(source) })),
+    ...(moreStrength ? strengthChoices : []),
+  ], [library, moreStrength]);
+  const matching = new Set<string>();
+  const rows = choices.map((choice) => {
+    const content = workoutBlockContent(choice.block);
+    const entry = selected.find((item) => !matching.has(item.id) &&
+      (item.choiceId ? item.choiceId === choice.id : workoutBlockContent(item.block) === content));
+    if (entry) matching.add(entry.id);
+    return { ...choice, entry };
+  }).concat(selected.filter((item) => !matching.has(item.id)).map((entry) => ({ id: entry.id, block: entry.block, entry })));
+  const blocks = useMemo(() => selected.map((item) => item.block), [selected]);
+  const gym = useLiveQuery(async () => ({ blocks, demos: await workoutPreview(db, blocks) }), [blocks]);
+  const ordered = { name: name.trim(), blocks };
+  const canSave = validAuthoredWorkout(ordered);
+  const full = selected.length >= 30;
+
+  const copy = (source: OrderedBlock, id: string): DraftBlock => {
+    const block = copyWorkoutBlock(source);
+    return { block, id: block.id, choiceId: id };
+  };
+
+  const submit = async (asNew = false) => {
+    if (pending.current || !canSave) return;
+    pending.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      await saveOrderedWorkout(db, ordered, asNew ? undefined : edit);
+      onClose();
+    } catch (reason) {
+      setConflict(reason instanceof StaleWorkoutSaveError);
+      setError(reason instanceof WorkoutSaveError ? reason.message : 'Could not save the workout. Try again.');
+    } finally {
+      pending.current = false;
+      setBusy(false);
+    }
+  };
+  const close = () => { if (!pending.current) onClose(); };
+
+  return (
+    <Sheet label={label} onClose={close} placement="top" fallbackFocus={fallbackFocus}>
+      <form class="workout-editor" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+        <header class="workout-dialog-head">
+          <div><p class="pref-eyebrow">My Workouts</p><h2>{label}</h2></div>
+          <button type="button" class="workout-close" aria-label="Close workout builder" disabled={busy} onClick={close}><CloseIcon /></button>
+        </header>
+        <label class="workout-name">Workout name
+          <input ref={nameInput} required placeholder="e.g. Friday Strength" value={name} onInput={(event) => setName(event.currentTarget.value)} />
+        </label>
+        <h3>Add blocks in workout order</h3>
+        <ul class="workout-choices" aria-label="Workout blocks">
+          {rows.map(({ id, block: source, entry }) => {
+            const block = entry?.block ?? source;
+            const Icon = icons[block.kind];
+            const title = workoutBlockName(block);
+            const index = entry ? selected.indexOf(entry) : -1;
+            const open = expanded === id;
+            const repair = missingCoachedSchedule(block);
+            const invalid = !repair && !!entry && !validAuthoredWorkout({ name: title, blocks: [block] });
+            const warnings = gym?.blocks === blocks && index >= 0 ? gym.demos[index]?.filter((demo) => demo.status) : [];
+            const canCopy = entry && id !== entry.id;
+            const updated = canCopy && workoutBlockContent(source) !== workoutBlockContent(block);
+            const remove = () => {
+              setSelected((items) => items.filter((item) => item.id !== entry?.id));
+              setExpanded(null);
+              if (id === entry?.id) nameInput.current?.focus();
+              else document.getElementById(`pick-${id}`)?.focus();
+            };
+            return (
+              <li key={id} class="workout-choice" data-kind={block.kind}>
+                <div class="workout-choice-row">
+                  <span class="workout-kind-tile"><Icon /></span>
+                  <div class="workout-choice-text"><strong>{title}</strong><small>{durationLabel(orderedBlockMinutes(block) * 60)} · {workoutBlockKind[block.kind]}</small></div>
+                  <button id={`pick-${id}`} type="button" class="workout-pick"
+                    aria-label={entry ? `${title}, block ${index + 1}, actions` : `Add ${title}`}
+                    aria-expanded={entry ? open : undefined} disabled={busy || (!entry && full)}
+                    onClick={() => entry ? setExpanded(open ? null : id) : setSelected((items) => [...items, copy(source, id)])}>
+                    <span>{entry ? index + 1 : <PlusIcon />}</span>
+                  </button>
+                </div>
+                {repair && <p class="workout-warning">Missing station schedule. Add a coached block with a schedule, then remove this block.</p>}
+                {invalid && <p class="workout-warning">Invalid timing or targets. Remove this block and fix its prescription in Blocks.</p>}
+                {!!warnings?.length && <p class="workout-warning">{[...new Set(warnings.map((demo) => demo.status))].join(' ')}</p>}
+                {open && entry && <div class="workout-actions workout-choice-actions">
+                  <button type="button" disabled={busy || index === 0} onClick={() => setSelected(moveBlock(selected, entry.id, -1))}>Move up</button>
+                  <button type="button" disabled={busy || index === selected.length - 1} onClick={() => setSelected(moveBlock(selected, entry.id, 1))}>Move down</button>
+                  <button type="button" disabled={busy} onClick={remove}>Remove</button>
+                  {canCopy && <button type="button" disabled={busy || full} onClick={() => setSelected((items) => [...items, copy(source, id)])}>Add another</button>}
+                  {updated && <button type="button" disabled={busy}
+                    onClick={() => setSelected((items) => items.map((item) => item === entry ? copy(source, id) : item))}>Replace with current block</button>}
+                </div>}
+              </li>
+            );
+          })}
+          {!moreStrength && <li><button type="button" class="workout-more" onClick={() => setMoreStrength(true)}>More strength blocks</button></li>}
+        </ul>
+        {error && <p class="workout-error" role="alert">{error}</p>}
+        {conflict && <button type="button" disabled={!canSave || busy} onClick={() => submit(true)}>Save as new workout</button>}
+        <button type="submit" class="primary workout-save" disabled={!canSave || busy}><BookmarkIcon />Save workout</button>
+      </form>
+    </Sheet>
+  );
+}

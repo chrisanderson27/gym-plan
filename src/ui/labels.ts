@@ -137,6 +137,7 @@ const SCREEN_NAMES: [RegExp, string][] = [
   [/^\/history\/.+/, 'History detail'],
   [/^\/history/, 'History'],
   [/^\/builder/, 'Builder'],
+  [/^\/workouts$/, 'Workouts'],
   [/^\/mine\//, 'Saved workout'],
   [/^\/again\//, 'Do this again'],
   [/^\/weigh-in/, 'Weigh-in'],
@@ -159,4 +160,18 @@ export function mixedBlockName(block: OrderedBlock) {
   if (block.kind === 'strength') return exerciseName(block.exerciseId);
   if (block.kind === 'self-paced' || block.kind === 'coached') return block.name;
   return block.kind === 'preparation' ? 'Preparation' : 'Recovery';
+}
+
+export const workoutBlockKind = {
+  preparation: 'Preparation',
+  strength: 'Strength sets',
+  coached: 'Coached rotation',
+  'self-paced': 'Self-paced circuit',
+  recovery: 'Recovery',
+};
+
+export function workoutBlockName(block: OrderedBlock) {
+  if (block.kind === 'preparation') return 'Warm-up';
+  if (block.kind === 'recovery') return 'Cool-down';
+  return mixedBlockName(block);
 }

@@ -3,7 +3,7 @@ import { exerciseById } from '../../content';
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
 import { LIFT_EXERCISES } from '../../data/lift';
-import { saveBuilt, startFromBlocks } from '../../data/templates';
+import { editableLiftTemplate, saveBuilt, startFromBlocks, WorkoutSaveError } from '../../data/templates';
 import type { LiftBlock } from '../../data/types';
 import { TRACKED_MUSCLES } from '../../engine/config';
 import { moveBlock, newLiftBlock, pairWithNext, removeBlock, unpair } from '../../engine/templates';
@@ -24,14 +24,18 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
   const [muscle, setMuscle] = useState('');
   const [equip, setEquip] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(!templateId);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!templateId) return;
     db.templates.get(templateId).then((t) => {
-      if (!t) return;
-      setName(t.name);
-      setBlocks(t.blocks.filter((b): b is LiftBlock => b.kind === 'lift'));
-    });
+      if (editableLiftTemplate(t)) {
+        setName(t.name);
+        setBlocks(t.blocks.filter((b): b is LiftBlock => b.kind === 'lift'));
+        setLoaded(true);
+      } else setError('This workout cannot be edited in the lift builder. Find your workout in Workouts.');
+    }).catch(() => setError('Could not load the workout.'));
   }, [templateId]);
 
   const results = CHOICES.filter((e) => {
@@ -42,18 +46,26 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
   const patch = (blockId: string, p: Partial<LiftBlock>) => setBlocks(blocks.map((b) => (b.id === blockId ? { ...b, ...p } : b)));
 
   const save = async () => saveBuilt(db, { ...(id ? { id } : {}), name, blocks });
-  const onSave = async () => {
+  const submit = async (start: boolean) => {
     setBusy(true);
-    await save();
-    navigate('/progress');
+    setError('');
+    try {
+      const tid = await save();
+      if (!start) return navigate('/progress');
+      setId(tid);
+      const sid = await startFromBlocks(db, { type: 'custom', blocks, templateId: tid, name });
+      navigate('/lift/session/' + sid);
+    } catch (reason) {
+      setError(reason instanceof WorkoutSaveError ? reason.message : 'Could not save or start the workout. Try again.');
+    } finally {
+      setBusy(false);
+    }
   };
-  const onStart = async () => {
-    setBusy(true);
-    const tid = await save();
-    setId(tid);
-    const sid = await startFromBlocks(db, { type: 'custom', blocks, templateId: tid, name });
-    navigate('/lift/session/' + sid);
-  };
+
+  if (!loaded) return <main class="screen"><h1>Build a session</h1>
+    {error ? <p role="alert">{error}</p> : <p>Loading workout…</p>}
+    <a class="btn" href="#/workouts">Workouts</a>
+  </main>;
 
   return (
     <main class="screen">
@@ -112,8 +124,9 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
         </section>
       ))}
       {!ok && <p class="dim" data-testid="builder-hint">{name.trim().length === 0 ? 'Name your workout to start' : 'Add an exercise to start'}</p>}
-      <button type="button" class="primary" data-testid="builder-start" disabled={!ok || busy} onClick={onStart}>Start</button>
-      <button type="button" data-testid="builder-save" disabled={!ok || busy} onClick={onSave}>Save</button>
+      {error && <p role="alert">{error}</p>}
+      <button type="button" class="primary" data-testid="builder-start" disabled={!ok || busy} onClick={() => submit(true)}>Start</button>
+      <button type="button" data-testid="builder-save" disabled={!ok || busy} onClick={() => submit(false)}>Save</button>
     </main>
   );
 }

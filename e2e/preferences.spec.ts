@@ -22,8 +22,8 @@ test('checklist and an exclusion survive reload', async ({ page }) => {
   await onboard(page);
   await page.getByRole('link', { name: 'Settings' }).click();
   const nav = page.getByRole('navigation', { name: 'Main' });
-  await expect(nav.getByRole('link')).toHaveText(['Today', 'Blocks', 'Progress', 'Settings']);
-  await expect(nav.getByRole('button', { name: 'Workouts' })).toBeDisabled();
+  await expect(nav.getByRole('link')).toHaveText(['Today', 'Workouts', 'Blocks', 'Progress', 'Settings']);
+  await expect(nav.getByRole('link', { name: 'Workouts' })).toHaveAttribute('href', '#/workouts');
 
   const dumbbells = page.getByRole('checkbox', { name: 'Dumbbells' });
   await expect(dumbbells).toBeChecked();

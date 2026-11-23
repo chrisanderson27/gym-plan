@@ -28,7 +28,7 @@ async function onboardWithHistory(page: Page) {
 const ROUTES = [
   '#/', '#/lift', '#/lift/volume', '#/lift/gym', '#/burn', '#/run', '#/swim', '#/swim/css',
   '#/hybrid', '#/progress', '#/history', '#/weigh-in', '#/builder', '#/settings',
-  '#/progress/history', '#/progress/body', '#/progress/volume',
+  '#/progress/history', '#/progress/body', '#/progress/volume', '#/workouts',
 ];
 
 test('every tap target on the key screens is at least 56 x 56 px and no page scrolls sideways', async ({ page }) => {

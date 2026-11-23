@@ -6,7 +6,7 @@ test('first run: onboarding then Today with a hero and the tab bar', async ({ pa
   await expect(page.getByTestId('hero')).toContainText('Lower A (calibration)');
   await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'first-run');
   await expect(page.getByTestId('start')).toHaveAttribute('href', '#/lift/calibrate/lower-a');
-  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Today', 'Blocks', 'Progress', 'Settings']);
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Today', 'Workouts', 'Blocks', 'Progress', 'Settings']);
 });
 
 test('settings backup downloads and restores into a fresh context', async ({ page, browser }, testInfo) => {

@@ -1,8 +1,8 @@
 import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
-import { listMine } from '../../data/templates';
+import { editableLiftTemplate, listMine } from '../../data/templates';
 import type { SessionType } from '../../data/types';
-import { templateDurationMin } from '../../engine/templates';
+import { orderedDurationMin, templateDurationMin } from '../../engine/templates';
 
 export const ALL_TEMPLATE_TYPES: SessionType[] = ['lift', 'custom', 'burn', 'run', 'swim', 'hybrid'];
 
@@ -16,14 +16,14 @@ export function MineRow({ types, title = 'Mine' }: { types: SessionType[]; title
       <ul class="rows">
         {rows.map((t) => {
           // An unknown (0) duration is hidden rather than shown as "0 min".
-          const min = templateDurationMin(t.blocks);
+          const min = t.ordered ? orderedDurationMin(t.ordered.blocks) : templateDurationMin(t.blocks);
           return (
           <li key={t.id} class="row-item">
             <a class="row" href={'#/mine/' + t.id} data-testid={`mine-${t.id}`}>
               <span class="row-label">{t.name}</span>
               {min > 0 && <span class="row-meta">{min} min</span>}
             </a>
-            {t.source === 'built' && !t.ordered && <a class="btn" href={'#/builder/' + t.id}>edit</a>}
+            {editableLiftTemplate(t) && <a class="btn" href={'#/builder/' + t.id}>edit</a>}
           </li>
           );
         })}

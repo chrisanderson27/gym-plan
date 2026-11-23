@@ -621,3 +621,33 @@ test('a restored machine from a different exercise does not enable the leg press
   expect(await mixedOptions(db, press, mixed!, at())).toMatchObject({ ready: false, poseId: undefined });
   expect(mixed!.strength.press?.equipmentId).toBeUndefined();
 });
+
+test('Start requires the displayed prescription while still resuming an already-open attempt', async () => {
+  const baseline = structuredClone(MIXED_TEMPLATE.ordered!);
+  const changed = { ...baseline, blocks: [...baseline.blocks].reverse() };
+  await db.templates.update(source.templateId, { ordered: changed });
+  await expect(startMixedSession(db, source, at(), baseline)).rejects.toThrow('Review the current plan');
+  expect(await db.sessions.count()).toBe(0);
+  const semanticallyEqual = { blocks: changed.blocks, name: changed.name };
+  const id = await startMixedSession(db, source, at(), semanticallyEqual);
+  await db.templates.delete(source.templateId);
+  expect(await startMixedSession(db, source, at(), baseline)).toBe(id);
+  expect((await current(id)).mixed!.prescription).toEqual(changed);
+  expect(await db.sessions.count()).toBe(1);
+});
+
+test('an active coached block rechecks equipment pairing while keeping its deadline and expiry', async () => {
+  const rotation = coachedFixture();
+  const id = await startBlocks(rotation);
+  await action(id, { type: 'start' });
+  const original = (await current(id)).mixed!;
+  const station = original.stations[rotation.id]![0]!;
+  await db.equipment.update(station.equipmentId!, { kind: 'machine' });
+  const options = await mixedOptions(db, rotation, original, at(1000));
+  expect(options.ready).toBe(false);
+  expect(options.available?.has(station.slotId)).toBe(false);
+  await expect(action(id, { type: 'next', observed: initialCoached }, 1000)).rejects.toThrow('Replace unavailable movements');
+  expect((await current(id)).mixed!.timers).toEqual(original.timers);
+  await action(id, { type: 'expire' }, rotation.durationSec * 1000);
+  expect((await current(id)).mixed!.cursor.stage).toBe('review');
+});
