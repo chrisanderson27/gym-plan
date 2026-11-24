@@ -6,9 +6,10 @@ import { editableLiftTemplate, listMine, saveOrderedWorkout } from '../../data/t
 import type { OrderedPrescription, Settings, Template } from '../../data/types';
 import { copyWorkoutBlock, matchingSuggestion, suggestedWorkouts } from '../../data/workoutChoices';
 import { localDate } from '../../engine/dates';
-import { orderedDurationMin, templateDurationMin } from '../../engine/templates';
+import { templateDurationMin } from '../../engine/templates';
 import { weekIndex } from '../../engine/week';
 import { BookmarkIcon, CalendarIcon, HistoryIcon, PlayIcon, PlusIcon } from '../icons';
+import { orderedDurationLabel } from '../labels';
 import { ALL_TEMPLATE_TYPES } from '../mine/MineRow';
 import { MoreMenu } from '../MoreMenu';
 import { OrderedStart } from './OrderedStart';
@@ -55,7 +56,8 @@ export function WorkoutsScreen({ settings }: { settings: Settings }) {
     const match = template ? matches.get(template.id) : suggestion;
     const name = template?.name ?? suggestion!.name;
     const count = ordered?.blocks.length ?? template!.blocks.length;
-    const duration = ordered ? orderedDurationMin(ordered.blocks) : templateDurationMin(template!.blocks);
+    const legacyMinutes = ordered ? 0 : templateDurationMin(template!.blocks);
+    const duration = ordered ? orderedDurationLabel(ordered.blocks) : legacyMinutes > 0 ? `${legacyMinutes} min` : null;
     const url = template && `#/mine/${template.id}`;
     const preview = () => {
       if (ordered) setOverlay({ preview: { ordered, id: template?.id, suggestion } });
@@ -66,7 +68,7 @@ export function WorkoutsScreen({ settings }: { settings: Settings }) {
         <p class="pref-eyebrow">{match?.category ?? (template && !ordered ? legacyCategory[template.type] : 'Custom workout')}</p>
         <h3>{name}</h3>
         {match && <p class="workout-description">{match.description}</p>}
-        <p class="workout-meta"><HistoryIcon />{duration > 0 && `${duration} min · `}{count} {count === 1 ? 'block' : 'blocks'}</p>
+        <p class="workout-meta"><HistoryIcon />{duration && `${duration} · `}{count} {count === 1 ? 'block' : 'blocks'}</p>
         {needsRepair && <p class="workout-warning">Needs a station schedule. Open Preview to edit.</p>}
         <div class="workout-actions">
           {suggestion ? <button type="button" class="primary" disabled={!!saving} onClick={() => saveSuggestion(suggestion, false)}><BookmarkIcon />Save workout</button>

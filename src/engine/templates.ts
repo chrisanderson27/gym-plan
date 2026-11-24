@@ -1,5 +1,5 @@
 import type { Block, IntervalBlock, LiftBlock, OrderedBlock } from '../data/types';
-import { MIN_PER_SET } from './config';
+import { MIN_PER_SET, REST_DEFAULT_SEC, SEC_PER_UNIT } from './config';
 
 /** Fresh ids; no `result`; lift blocks drop the old target weight and the calibration label; superset groups are remapped. */
 export function toTemplateBlocks(blocks: Block[], makeId: () => string): Block[] {
@@ -62,12 +62,24 @@ export function newLiftBlock(ex: { id: string; repMin: number; repMax: number },
 
 const intervalSec = (b: IntervalBlock) => b.rounds * b.phases.reduce((n, p) => n + p.sec, 0);
 
-export function orderedBlockMinutes(b: OrderedBlock) {
-  return b.kind === 'strength' ? b.sets * MIN_PER_SET.other : b.durationSec / 60;
+export const FULL_WORKOUT_MIN_SEC = 45 * 60;
+
+export function orderedBlockSeconds(block: OrderedBlock) {
+  if (block.kind !== 'strength') return block.durationSec;
+  return block.sets * block.repMax * SEC_PER_UNIT.reps
+    + Math.max(0, block.sets - 1) * (block.restSec ?? REST_DEFAULT_SEC);
 }
 
-export function orderedDurationMin(blocks: OrderedBlock[]) {
-  return Math.round(blocks.reduce((min, block) => min + orderedBlockMinutes(block), 0));
+export function orderedDurationSec(blocks: readonly OrderedBlock[]) {
+  return blocks.reduce((seconds, block) => seconds + orderedBlockSeconds(block), 0);
+}
+
+export function orderedBlockMinutes(block: OrderedBlock) {
+  return orderedBlockSeconds(block) / 60;
+}
+
+export function orderedDurationMin(blocks: readonly OrderedBlock[]) {
+  return Math.round(orderedDurationSec(blocks) / 60);
 }
 
 export function templateDurationMin(blocks: Block[]): number {

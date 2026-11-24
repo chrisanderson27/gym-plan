@@ -1,95 +1,51 @@
-import { RUN_FORMATS } from '../../content/run-formats';
-import { SWIM_WORKOUTS } from '../../content/swim-workouts';
-import type { CardioSnapshot } from '../../data/cardio';
-import { newId } from '../../data/ids';
-import { DEFAULT_POOL_LENGTH, poolOf } from '../../data/settings';
-import type { LiftDayPlan } from '../../engine/block/generate';
-import { BURN_DEFAULT_MIN, DEFAULT_LIFT_BUDGET_MIN, HYBRID_CARDIO_MIN, HYBRID_LIFT_MIN, SWIM_ESTIMATE_YD_SEC_PER_100, SWIM_YD_TO_M_PACE } from '../../engine/config';
-import { localDate } from '../../engine/dates';
-import type { Candidate } from '../../engine/plan/types';
-import { generateRun } from '../../engine/run/generator';
-import { latestCss } from '../../engine/swim/css';
-import { generateSwim, nextSwimWorkout } from '../../engine/swim/generator';
-import { weekIndex } from '../../engine/week';
-import { floorLabel, humanize, sessionTypeLabel } from '../labels';
-import { CheckIcon } from '../icons';
+import type { ComponentChildren } from 'preact';
+import type { SessionType } from '../../data/types';
+import { activityOf } from '../../engine/plan/activities';
+import { BurnIcon, CalendarIcon, CheckIcon, LayersIcon, TimerIcon } from '../icons';
+import { durationLabel } from '../labels';
 
-function cardioMinutes(pick: Candidate, cardio: CardioSnapshot, now: Date): number {
-  const today = localDate(now);
-  const programStart = cardio.settings?.programStart ?? today;
-  if (pick.tile === 'run') {
-    const kind = pick.id === 'run-long' ? 'long' : pick.id === 'run-intervals' ? 'intervals' : 'easy';
-    const plan = generateRun({
-      now: now.toISOString(), today, programStart, kind, formats: RUN_FORMATS,
-      history: cardio.runHistory, lastDoneByFormat: cardio.lastIntervalFormat, makeId: newId,
-    });
-    return Math.max(1, Math.round(plan.plannedSec / 60));
-  }
-
-  const pool = poolOf(cardio.settings) ?? { poolUnit: 'yd' as const, poolLength: DEFAULT_POOL_LENGTH };
-  const weekIdx = weekIndex(today, programStart);
-  const workoutId = nextSwimWorkout(SWIM_WORKOUTS, weekIdx, cardio.lastDone);
-  const workout = SWIM_WORKOUTS.find((w) => w.id === workoutId) ?? SWIM_WORKOUTS[0]!;
-  const testedCss = latestCss(cardio.cssTests, pool.poolUnit);
-  const css = testedCss && testedCss.per100 > 0 ? testedCss : null;
-  const pace = css?.per100 ?? SWIM_ESTIMATE_YD_SEC_PER_100 * (pool.poolUnit === 'm' ? SWIM_YD_TO_M_PACE : 1);
-  const plan = generateSwim({ blocks: workout.blocks, css, ...pool, weekIdx, makeId: newId });
-  let seconds = 0;
-  for (const block of plan.blocks) {
-    for (const item of block.items) {
-      const restOrSendoff = item.seconds ?? 0;
-      const repSeconds = item.mode === 'sendoff' ? restOrSendoff : (pace * item.distance) / 100 + restOrSendoff;
-      seconds += block.rounds * item.reps * repSeconds;
-    }
-  }
-  return Math.max(1, Math.round(seconds / 60));
+export function TrainingHeader({ week }: { week: number }) {
+  return <header class="pref-top training-header">
+    <div class="pref-brand">
+      <span class="pref-mark" aria-hidden="true"><svg width="16" height="19" viewBox="0 0 16 19" focusable="false"><path fill="currentColor" d="M9 0 0 11.4H7L6 19 16 7.6H9Z" /></svg></span>
+      <p class="wordmark">Gym Plan.</p>
+    </div>
+    <p class="week-chip"><CalendarIcon />Week {week}</p>
+  </header>;
 }
 
-export function heroFor(pick: Candidate, cardio: CardioSnapshot | null, now: Date, liftDay?: Pick<LiftDayPlan, 'estMin' | 'floor'>) {
-  const activity = pick.tile;
-  const duration = activity === 'lift' ? (liftDay ? Math.round(liftDay.estMin) : DEFAULT_LIFT_BUDGET_MIN) : activity === 'burn' ? BURN_DEFAULT_MIN
-    : activity === 'hybrid' ? HYBRID_LIFT_MIN + HYBRID_CARDIO_MIN
-    : cardio && (activity === 'run' || activity === 'swim') ? cardioMinutes(pick, cardio, now)
-    : null;
-  return { activity, duration, title: pick.title, place: activity === 'lift' && liftDay ? floorLabel(liftDay.floor) : undefined };
-}
+const activityLabels = { lift: 'Strength & conditioning', burn: 'Conditioning', run: 'Run', swim: 'Swim' };
 
-type HeroProps =
-  | ({ state: 'workout' | 'first-run' | 'resume'; reason: string } & ReturnType<typeof heroFor>)
-  | { state: 'done'; detail: string; progress: string }
-  | { state: 'rest' };
-
-export function HeroCard(props: HeroProps) {
-  if (props.state === 'done' || props.state === 'rest') {
-    return (
-      <section class="hero" data-testid="hero">
-        <div data-testid="hero-state" data-state={props.state}>
-          {props.state === 'done' ? (
-            <>
-              <CheckIcon />
-              <h2>Done for today</h2>
-              <p class="num">{props.detail}</p>
-              <p class="num">{props.progress} weekly goal</p>
-            </>
-          ) : (
-            <>
-              <h2>Rest day</h2>
-              <a class="btn" href="#/progress/body">Log weigh-in</a>
-            </>
-          )}
+export function HeroCard({ state, title, detail, durationSec, blockCount, estimated, activity, context, children }: {
+  state: 'workout' | 'resume' | 'done' | 'rest' | 'unavailable';
+  title: string;
+  detail?: string;
+  durationSec?: number;
+  blockCount?: number;
+  estimated?: boolean;
+  activity?: SessionType;
+  context?: string;
+  children?: ComponentChildren;
+}) {
+  const eyebrow = state === 'workout' ? 'Today’s recommendation' : state === 'done' ? 'Session complete' : state === 'resume' ? 'In progress' : null;
+  const activityKind = activity && activityOf(activity);
+  return <section class="hero today-hero" data-testid="hero" data-activity={activity}>
+    {state === 'done' && <span class="today-hero-check" aria-hidden="true"><CheckIcon /></span>}
+    <div data-testid="hero-state" data-state={state}>
+      {eyebrow && <p class="today-hero-label">{eyebrow}</p>}
+      <h2>{title}</h2>
+      {detail && <p>{detail}</p>}
+      {durationSec !== undefined && <div class="today-hero-meta">
+        <div>
+          <span><TimerIcon />{durationLabel(durationSec)}{estimated && ' estimated'}</span>
+          {blockCount !== undefined && <span><LayersIcon />{blockCount} blocks</span>}
         </div>
-      </section>
-    );
-  }
-  const { activity, title, duration, place } = props;
-  return (
-    <section class="hero hero-workout" data-testid="hero" data-activity={activity}>
-      <div data-testid="hero-state" data-state={props.state}>
-        <p class="hero-activity">{sessionTypeLabel(activity)}</p>
-        <h2>{title}</h2>
-        {duration !== null && <p class="num">{activity === 'swim' && '≈ '}{duration} min{place && ` · ${place}`}</p>}
-        <p class="hero-reason">{humanize(props.reason)}</p>
-      </div>
-    </section>
-  );
+        {(activityKind || context) && <div>
+          {activityKind && <span class="today-hero-activity"><BurnIcon />{activityLabels[activityKind]}</span>}
+          {context && <span>{context}</span>}
+        </div>}
+      </div>}
+      <div class="today-hero-actions">{children}</div>
+    </div>
+  </section>;
 }

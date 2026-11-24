@@ -1,5 +1,5 @@
 import { addDays } from '../../engine/dates';
-import { activityOf } from '../../engine/plan/activities';
+import { CheckIcon } from '../icons';
 import type { PlanSession } from '../../engine/plan/types';
 import { sessionTypeLabel } from '../labels';
 
@@ -16,9 +16,9 @@ export function WeekStrip({ from, today, sessions }: { from: string; today: stri
         return (
           <li key={day} aria-current={day === today ? 'date' : undefined}>
             <span aria-hidden="true">{name[0]}</span>
-            <span class="visually-hidden">{name}, {completed.length ? completed.map(sessionTypeLabel).join(', ') : 'no workout'}</span>
-            <span class="week-dots" aria-hidden="true">
-              {completed.length ? completed.map((type) => <i key={type} data-activity={activityOf(type)} class="done" />) : <i />}
+            <span class="visually-hidden">{name} {day}, {completed.length ? completed.map(sessionTypeLabel).join(', ') : 'no workout'}</span>
+            <span class="week-date num" data-finished={completed.length > 0} aria-hidden="true">
+              {completed.length ? <CheckIcon /> : Number(day.slice(-2))}
             </span>
           </li>
         );

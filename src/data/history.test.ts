@@ -198,3 +198,15 @@ describe('history', () => {
     expect(item?.numbers).toEqual(cardNumbers(swim, [], undefined, row));
   });
 });
+
+it('filters unfinished attempts before paging Progress history', async () => {
+  const db = open();
+  await db.sessions.bulkPut([
+    session('open', 1, { endedAt: undefined }),
+    session('zero', 2, { type: 'custom', durationMin: 0 }),
+    session('older', 3),
+  ]);
+  expect((await listHistory(db, 0, 1, true)).map((item) => [item.session.id, item.durationSec])).toEqual([['zero', 0]]);
+  expect((await listHistory(db, 1, 1, true)).map((item) => item.session.id)).toEqual(['older']);
+  expect((await listHistory(db, 0, 1)).map((item) => item.session.id)).toEqual(['open']);
+});

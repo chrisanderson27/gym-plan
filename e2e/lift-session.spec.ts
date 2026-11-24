@@ -78,17 +78,16 @@ const openChange = async (page: Page, id: string) => {
 };
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`Today matches the stored plan and takes two taps to a working set in ${theme}`, async ({ page }, testInfo) => {
+  test(`legacy lift starts the planned workout and advances to a working set in ${theme}`, async ({ page }, testInfo) => {
     await setup(page, { theme });
-    const hero = page.getByTestId('hero');
-    const estimate = (await hero.innerText()).match(/\d+ min/)?.[0];
-    expect(estimate).toBeDefined();
+    await page.goto('./#/lift/start/lower-a');
+    await expect(page.getByTestId('start-lift')).toBeVisible();
     await page.evaluate(() => {
       document.body.dataset.taps = '0';
       document.addEventListener('click', () => { document.body.dataset.taps = String(Number(document.body.dataset.taps) + 1); });
     });
-    await page.getByTestId('start').click();
-    await expect(page.getByTestId('plan-min')).toHaveText(`${estimate} total`);
+    await page.getByTestId('start-lift').click();
+    await expect(page.getByTestId('plan-min')).toHaveText(/\d+ min total/);
     await page.getByTestId('warmup-done').click();
     await expect(page.getByTestId('set-done')).toBeInViewport();
     await expect(page.locator('body')).toHaveAttribute('data-taps', '2');
@@ -130,7 +129,8 @@ for (const theme of ['light', 'dark'] as const) {
 
   test(`a running block saves rounds, partial work and a clock-safe swap in ${theme}`, async ({ page }, testInfo) => {
     await setup(page, { theme, runningClock: true });
-    await page.getByTestId('start').click();
+    await page.goto('./#/lift/start/lower-a');
+    await page.getByTestId('start-lift').click();
     await page.getByTestId('warmup-done').click();
     await expect(page.getByTestId('set-done')).toBeVisible();
     const sessionId = page.url().split('/').at(-1);
@@ -241,9 +241,10 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     await page.emulateMedia({ reducedMotion });
     // Put Monday's saved lift in the same program week as Thursday's new lift.
     await setup(page, { programStart: '2026-10-19' });
-    const ring = page.getByTestId('ring');
-    await expect(ring).toContainText('1/2');
-    await page.getByTestId('start').click();
+    const weeklyGoal = page.getByTestId('weekly-goal');
+    await expect(weeklyGoal).toContainText('1 of 2 sessions');
+    await page.goto('./#/lift/start/lower-a');
+    await page.getByTestId('start-lift').click();
     await page.getByTestId('warmup-done').click();
     await page.getByTestId('set-done').click();
     const id = page.url().split('/').at(-1);
@@ -266,7 +267,7 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
     expect(await saved.isVisible()).toBe(true);
     await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'done');
     await expect(page.locator('.warn')).toHaveCount(0);
-    await expect(ring).toContainText('2/2');
+    await expect(weeklyGoal).toContainText('2 of 2 sessions');
     expect((await readStore<Session>(page, 'sessions')).find((s) => s.id === id)).toMatchObject({ rpe: 7 });
   });
 }

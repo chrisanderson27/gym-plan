@@ -13,7 +13,7 @@ const mmss = (s: string) => {
 test('Burn class runs under a sped-up clock and logs', async ({ page }) => {
   await page.clock.install();
   await onboard(page);
-  await page.getByTestId('something-else-burn').click();
+  await page.goto('./#/burn');
   await page.getByTestId('burn-change').click();
   await page.getByTestId('burn-template-burn-tread-floor').click();
   await page.getByRole('button', { name: 'Done' }).click();
@@ -36,14 +36,14 @@ test('Burn class runs under a sped-up clock and logs', async ({ page }) => {
   await page.getByTestId('more').click();
   await page.getByTestId('more-finish-now').click();
   await page.getByTestId('finish-right').click();
-  await expect(page.getByTestId('something-else-burn')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Choose another' })).toBeVisible();
   await page.goto('./#/burn');
   await expect(page.getByText('Last Burn')).toContainText(today());
 });
 
 test('Run: week-1 easy is run-walk within the cap and logs', async ({ page }) => {
   await onboard(page);
-  await page.getByTestId('something-else-run').click();
+  await page.goto('./#/run');
   await page.getByTestId('run-change').click();
   await page.getByTestId('run-kind-easy').click();
   await page.getByRole('button', { name: 'Done' }).click();
@@ -55,14 +55,14 @@ test('Run: week-1 easy is run-walk within the cap and logs', async ({ page }) =>
   await page.getByTestId('run-distance').fill('1.5');
   await page.getByTestId('rpe-4').click();
   await page.getByTestId('run-save').click();
-  await expect(page.getByTestId('something-else-run')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Choose another' })).toBeVisible();
   await page.goto('./#/run');
   await expect(page.getByText('Last run')).toBeVisible();
 });
 
 test('Swim: rest fallback, CSS test, then send-offs and log', async ({ page }) => {
   await onboard(page);
-  await page.getByTestId('something-else-swim').click();
+  await page.goto('./#/swim');
   await page.getByRole('button', { name: 'Save pool' }).click();
   await page.getByTestId('swim-change').click();
   await page.getByTestId('swim-workout-swim-css-intro').click();
@@ -82,7 +82,7 @@ test('Swim: rest fallback, CSS test, then send-offs and log', async ({ page }) =
   await page.getByTestId('swim-log').click();
   await page.getByTestId('rpe-6').click();
   await page.getByTestId('swim-save').click();
-  await expect(page.getByTestId('something-else-swim')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Choose another' })).toBeVisible();
   await page.goto('./#/swim');
   await expect(page.getByText('Last swim')).toBeVisible();
 });

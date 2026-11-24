@@ -227,8 +227,12 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   await expect(page.getByRole('heading', { name: 'Preparation' })).toBeVisible();
   const sid = page.url().split('/').at(-1)!;
   await page.goto('./#/');
-  await page.getByRole('link', { name: 'Resume Friday mixed edited' }).click();
-  await expect(page).toHaveURL(new RegExp(sid + '$'));
+  const hero = page.getByTestId('hero');
+  await expect(hero.getByRole('heading', { name: 'Friday mixed edited', exact: true })).toBeVisible();
+  const resume = hero.getByRole('link', { name: 'Resume', exact: true });
+  await expect(resume).toHaveAttribute('href', `#/workout/session/${sid}`);
+  await resume.click();
+  await expect(page).toHaveURL(new RegExp('/workout/session/' + sid + '$'));
   const finishTimed = async (next: string) => {
     await button(page, 'Start block').click();
     await button(page, 'Finish block').click();
@@ -363,8 +367,9 @@ test('v1 lift edit and legacy cardio keep their direct and offline library route
   await expect(page.getByTestId('builder-pair-0')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('builder-name').fill('Old paired lifts edited');
   await page.getByTestId('builder-save').click();
-  await expect(page.getByTestId('mine-legacy-lift')).toHaveText(/Old paired lifts edited/);
+  await expect(page).toHaveURL(/#\/progress$/);
   await openWorkouts(page);
+  await expect(saved(page).getByRole('article', { name: 'Old paired lifts edited', exact: true })).toBeVisible();
   await controlledOffline(page, context, info);
   await button(suggestions(page).getByRole('article', { name: 'Full-Body Strength & Conditioning' }), 'Preview').click();
   const starter = page.getByRole('dialog', { name: 'Preview Full-Body Strength & Conditioning' });

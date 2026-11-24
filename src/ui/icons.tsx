@@ -16,10 +16,10 @@ export const LiftIcon = icon(<path d="M2 12h2m4 0h8m4 0h2M4 8h4v8H4zm12 0h4v8h-4
 export const BurnIcon = icon(<path d="m13 2-9 12h7l-1 8 10-12h-7z" />);
 export const RunIcon = icon(<><circle cx="16" cy="4" r="2" /><path d="m6 8 5-1 5 5 4-1m-7-2-3 6 5 3v4M3 20l4-1 3-4" /></>);
 export const SwimIcon = icon(<><circle cx="17" cy="8" r="2" /><path d="m4 13 5-4 5 4m-12 3c3 0 3-2 5-2s3 2 5 2 3-2 5-2 3 2 5 2M2 21c3 0 3-2 5-2s3 2 5 2 3-2 5-2 3 2 5 2" /></>);
-export const TodayIcon = icon(<path d="m3 10 9-7 9 7v10H3zm7 10v-6h4v6" />);
-export const WorkoutsIcon = icon(<path d="M6 9v6M18 9v6M3 10v4m18-4v4M6 12h12" />);
+export const WorkoutsIcon = icon(<path transform="rotate(45 12 12)" d="M6 7v10M18 7v10M3 9v6m18-6v6M6 12h12" />);
 export const BlocksIcon = icon(<path d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z" />);
 export const LayersIcon = icon(<path d="m12 3 9 5-9 5L3 8zm-9 9 9 5 9-5M3 17l9 5 9-5" />);
+export const ListIcon = icon(<path d="M4 6h.01M4 12h.01M4 18h.01M9 6h11M9 12h11M9 18h11" />);
 export const ProgressIcon = icon(<path d="M3 3v18h18M8 16v-4m5 4V8m5 8V4" />);
 export const SettingsIcon = icon(<><path d="M4 6h16M4 12h16M4 18h16M8 3v6m8 0v6m-6 0v6" /></>);
 export const MoreIcon = icon(<><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></>);
@@ -53,3 +53,5 @@ export function ActivityIcon({ activity }: { activity: Activity }) {
   const Icon = ACTIVITY_ICONS[activity];
   return <Icon />;
 }
+
+export const TrophyIcon = icon(<path d="M8 3h8v6a4 4 0 0 1-8 0V3ZM8 5H4v3a3 3 0 0 0 4 3m8-6h4v3a3 3 0 0 1-4 3m-4 2v5m-4 2h8" />);

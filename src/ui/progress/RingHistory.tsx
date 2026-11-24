@@ -1,13 +1,10 @@
-import { db } from '../../data/db';
-import { useLiveQuery } from '../../data/live';
-import { loadRingInput } from '../../data/plan';
 import { streak, weeklyGoal, weekRing } from '../../engine/plan/ring';
 import { weekIndex } from '../../engine/week';
 import { RING_ACTIVITY_LABELS, RingGraphic } from '../home/Ring';
 
-export function RingHistory() {
-  const input = useLiveQuery(() => loadRingInput(db, new Date()), []);
-  if (!input) return null;
+import type { RingInput } from './WeekCard';
+
+export function RingHistory({ input }: { input: RingInput }) {
   const { sessions, today, programStart, activities } = input;
   const { count, freezeAvailable, weeks } = streak(sessions, programStart, today, activities);
   const goal = weeklyGoal(sessions, today, programStart, activities);

@@ -22,7 +22,7 @@ import { SwimCard } from '../cardio/SwimCard';
 import { SwimLog } from '../cardio/SwimLog';
 import { TimerScreen } from '../cardio/TimerScreen';
 import { PoolSheet } from '../PoolSheet';
-import { mixedBlockName } from '../labels';
+import { mixedBlockName, orderedDurationLabel } from '../labels';
 import { navigate } from '../router';
 import { MoreMenu } from '../MoreMenu';
 import { OrderedStart } from '../workouts/OrderedStart';
@@ -62,6 +62,7 @@ function MixedAgain({ source, ordered }: { source: Parameters<typeof startMixedS
   return (
     <main class="screen">
       <header class="bar"><h1>{ordered.name}</h1><a class="gear" href="#/progress">Progress</a></header>
+      <p>{orderedDurationLabel(ordered.blocks)}</p>
       <ol class="plan">{ordered.blocks.map((b) => <li key={b.id}>{mixedBlockName(b)}</li>)}</ol>
       {repair && <p>Replace or remove coached blocks missing a station schedule in Workouts.</p>}
       <OrderedStart source={source} ordered={ordered} testId="again-start">Start</OrderedStart>

@@ -152,3 +152,28 @@ export function matchingSuggestion(ordered: OrderedPrescription) {
     return starter.length === content.length && content.every((block, i) => block !== undefined && block === starter[i]);
   });
 }
+
+/** Accessory stations for a lift day, with compatible alternatives within each training role. */
+export const todayAccessorySlots = {
+  lower: [
+    ['box-step-up', 'reverse-lunge', 'step-up'],
+    ['seated-cable-row', 'push-up'],
+    ['dead-bug', 'plank'],
+    ['air-bike', 'rower', 'plank'],
+  ],
+  upper: [
+    ['seated-cable-row', 'push-up'],
+    ['push-up', 'chest-press-machine'],
+    ['plank', 'dead-bug'],
+    ['air-bike', 'rower', 'dead-bug'],
+  ],
+} as const;
+
+export const todayPreparation = {
+  ...warmUp, durationSec: 420,
+  instructions: 'Walk or march easily for three minutes. Mobilize your joints and rehearse the first lift without load. Keep the circuits conversational, use light resistance, and pause between rounds.',
+};
+export const todayRecovery = {
+  ...coolDown, durationSec: 360,
+  instructions: 'Walk slowly for three minutes. Then breathe comfortably and gently stretch the muscles you trained.',
+};

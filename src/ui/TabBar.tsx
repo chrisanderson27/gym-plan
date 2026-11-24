@@ -1,9 +1,9 @@
-import { BlocksIcon, ProgressIcon, SettingsIcon, TodayIcon, WorkoutsIcon } from './icons';
+import { CalendarIcon, LayersIcon, ProgressIcon, SettingsIcon, WorkoutsIcon } from './icons';
 
 const tabs = [
-  { route: '/', label: 'Today', Icon: TodayIcon },
+  { route: '/', label: 'Today', Icon: CalendarIcon },
   { route: '/workouts', label: 'Workouts', Icon: WorkoutsIcon },
-  { route: '/blocks', label: 'Blocks', Icon: BlocksIcon },
+  { route: '/blocks', label: 'Blocks', Icon: LayersIcon },
   { route: '/progress', label: 'Progress', Icon: ProgressIcon },
   { route: '/settings', label: 'Settings', Icon: SettingsIcon },
 ];

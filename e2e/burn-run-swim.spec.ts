@@ -21,12 +21,12 @@ const sessions = (page: Page) => page.evaluate(() => new Promise<Session[]>((res
 async function startBurn(page: Page) {
   await page.clock.install();
   await onboard(page, { activities: ['burn'] });
-  await page.getByTestId('start').click();
+  await page.goto('./#/burn');
   await page.getByTestId('burn-start').click();
   await expect(page.getByTestId('burn-warmup-remaining')).toBeVisible();
 }
 
-test('Burn warm-up runs after two taps from Home and the workout is open', async ({ page }) => {
+test('legacy Burn warm-up runs and Today resumes the saved session', async ({ page }) => {
   await startBurn(page);
   const warmup = page.getByTestId('burn-warmup-remaining');
   const before = seconds(await warmup.textContent());
@@ -36,10 +36,16 @@ test('Burn warm-up runs after two taps from Home and the workout is open', async
   const saved = await sessions(page);
   expect(saved).toHaveLength(1);
   expect(saved[0]).toMatchObject({ type: 'burn' });
+  const runner = page.url();
+  await page.goto('./#/');
+  await page.getByRole('link', { name: 'Resume', exact: true }).click();
+  await expect(page).toHaveURL(runner);
+  await expect(warmup).toBeVisible();
+  expect((await sessions(page)).map((row) => row.id)).toEqual(saved.map((row) => row.id));
   expect(saved[0]?.endedAt).toBeUndefined();
   expect(saved[0]?.blocks.some((b) => b.kind === 'circuit')).toBe(true);
   expect(saved[0]?.blocks.some((b) => b.kind === 'interval')).toBe(false);
-  expect(await primaryCount(page)).toBe(1);
+  await expect(page.locator('.primary:visible')).toHaveCount(1);
   expect(await tooSmall(page)).toEqual([]);
   expect(await pageWidth(page)).toBeLessThanOrEqual(390);
   expect(await emojiText(page)).toEqual([]);

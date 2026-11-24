@@ -1,26 +1,20 @@
 import { loadBodyLogs } from '../../data/body';
 import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
-import { round1, weeklyRate, weightTrend } from '../../engine/body';
-import { localDate } from '../../engine/dates';
-import { rateLabel } from '../labels';
+import { weightTrend } from '../../engine/body';
 import { TrendChart } from './TrendChart';
 
 export function BodyCard() {
   const logs = useLiveQuery(() => loadBodyLogs(db), []);
   const points = weightTrend(logs ?? []);
-  const last = points.at(-1);
-  const rate = weeklyRate(points, localDate(new Date()));
-  return (
-    <section class="card" data-testid="progress-body">
-      <h2>Bodyweight</h2>
-      {last ? (
-        <>
-          <TrendChart compact points={points} />
-          <p class="num">Trend {round1(last.trend)} lb{rate !== null && ` · ${rateLabel(rate)}`}</p>
-        </>
-      ) : logs && <p class="dim">No weigh-ins yet</p>}
-      <a class="btn" href="#/progress/body" data-testid="progress-link-weigh-in">Log weigh-in</a>
-    </section>
-  );
+  const latest = logs?.filter((row) => row.weightLb !== undefined).at(-1);
+
+  return <section class="training-card" data-testid="progress-body">
+    <h2>Bodyweight trend</h2>
+    <p class="pref-support">Past weigh-ins are separate from training progress.</p>
+    {latest ? <div class="training-trend">
+      <strong class="num">{latest.weightLb} lb · latest</strong>
+      <TrendChart compact points={points} />
+    </div> : logs && <p class="dim">No weigh-ins yet.</p>}
+  </section>;
 }

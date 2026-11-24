@@ -1,107 +1,161 @@
-import { useRef, useState } from 'preact/hooks';
-import { loadCardioSnapshot } from '../data/cardio';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { db } from '../data/db';
-import { findOpenLiftSession, findStaleOpenLifts } from '../data/lift';
-import { planTodayLift, startOrResumePlannedLift } from '../data/liftday';
+import { actualDurationSec, cardTitle, loadSessionDetail } from '../data/history';
+import { findStaleOpenLifts } from '../data/lift';
 import { useLiveQuery } from '../data/live';
-import { findOpenMixedSession } from '../data/mixedSession';
-import { loadPlanInput, loadRingInput } from '../data/plan';
-import type { Settings } from '../data/types';
-import { DEFAULT_LIFT_BUDGET_MIN } from '../engine/config';
+import { findTodayOpen, loadTodayRecommendation, startTodayRecommendation, todaySessionRoute, type TodayDecision } from '../data/recommendation';
+import type { Session, Settings } from '../data/types';
 import { localDate } from '../engine/dates';
-import { rankToday } from '../engine/plan/pick';
-import { streak, weeklyGoal } from '../engine/plan/ring';
+import { streak } from '../engine/plan/ring';
+import { weekIndex } from '../engine/week';
 import { BackupBanner } from './BackupBanner';
-import { HeroCard, heroFor } from './home/HeroCard';
-import { Ring } from './home/Ring';
-import { SomethingElse } from './home/SomethingElse';
-import { WeekStrip } from './home/WeekStrip';
-import { FlameIcon, PlayIcon } from './icons';
-import { sessionTypeLabel, variantName } from './labels';
+import { loggedLineup } from './history/MixedLoggedLineup';
+import { HeroCard, TrainingHeader } from './home/HeroCard';
+import { RecommendedLineup, WorkoutLineup } from './home/WorkoutLineup';
+import { ArrowRightIcon, ChevronIcon, FlameIcon, LayersIcon, PlayIcon, ProgressIcon, SettingsIcon, WorkoutsIcon } from './icons';
+import { useRingInput, WeekCard } from './progress/WeekCard';
 import { navigate } from './router';
+import { useNow } from './session/hooks';
 
-const dateLabel = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
-
-const staleDateLabel = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+const dateLabel = new Intl.DateTimeFormat('en-US', { weekday: 'long', day: 'numeric', month: 'short' });
 
 export function Home({ settings }: { settings: Settings }) {
   const starting = useRef(false);
-  const [startError, setStartError] = useState(false);
-  const [day, setDay] = useState(() => localDate(new Date()));
-  const home = useLiveQuery(async () => {
+  const statusRef = useRef<HTMLParagraphElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [observedOpen, setObservedOpen] = useState<Session>();
+  const [review, setReview] = useState<TodayDecision>();
+  const day = localDate(new Date(useNow(15_000)));
+  const input = useRingInput();
+  const latest = useLiveQuery(() => loadTodayRecommendation(db), [day]);
+  const sessions = useLiveQuery(async () => {
     const now = new Date();
-    const [plan, input, open, stale, mixed] = await Promise.all([
-      loadPlanInput(db, now), loadRingInput(db, now), findOpenLiftSession(db, now), findStaleOpenLifts(db, now), findOpenMixedSession(db),
-    ]);
-    const ranked = rankToday(plan);
-    const { pick } = ranked;
-    if (open) {
-      const title = open.variant ? variantName(open.variant) : 'Lift';
-      return { ranked, input, open, stale, mixed, hero: { activity: 'lift' as const, duration: null, place: undefined, title } };
-    }
-    if (input.done || pick.id === 'rest') return { ranked, input, open, stale, mixed, hero: null };
-    const cardio = pick.tile === 'run' || pick.tile === 'swim' ? await loadCardioSnapshot(db, now) : null;
-    const liftDay = pick.route.startsWith('#/lift/start/') && pick.variant
-      ? await planTodayLift(db, pick.variant, DEFAULT_LIFT_BUDGET_MIN, now)
-      : undefined;
-    return { ranked, input, open, stale, mixed, hero: heroFor(pick, cardio, now, liftDay) };
+    const [open, stale] = await Promise.all([findTodayOpen(db, now), findStaleOpenLifts(db, now)]);
+    return { open, stale: stale[0] };
   }, [day]);
-  if (!home) return <main class="screen today-screen" aria-busy="true"><h1>Today</h1><div class="hero loading-hero" /></main>;
+  const doneId = input?.done?.id;
+  const completed = useLiveQuery(async () => {
+    if (!doneId) return null;
+    const detail = await loadSessionDetail(db, doneId);
+    if (!detail) return null;
+    const equipment = new Map((await db.equipment.toArray()).map((item) => [item.id, item]));
+    return { ...detail, lineup: loggedLineup(detail, equipment, true) };
+  }, [doneId]);
 
-  const { ranked: { pick, reason, budget }, input: { sessions, programStart, today, activities, done }, open, stale: [stale], mixed, hero } = home;
-  const ring = weeklyGoal(sessions, today, programStart, activities);
-  const { count, freezeAvailable } = streak(sessions, programStart, today, activities);
-  const workout = hero !== null;
+  useEffect(() => {
+    if (latest) setReview((previous) => previous?.kind === 'workout' ? previous : latest);
+  }, [latest]);
+  useEffect(() => {
+    if (sessions) setObservedOpen(undefined);
+  }, [sessions]);
+  useEffect(() => {
+    if (refreshCount) statusRef.current?.focus();
+  }, [refreshCount]);
 
-  return (
-    <main class={`screen today-screen${workout ? ' has-start' : ''}`}>
-      <header class="today-header">
-        <h1 class="num">{dateLabel.format(new Date(today + 'T12:00:00')).replace(',', '')}</h1>
-        <Ring ring={ring} budget={budget} freezeAvailable={freezeAvailable} />
-      </header>
-      <WeekStrip from={ring.range.from} today={today} sessions={sessions} />
-      {hero ? (
-        <HeroCard state={open ? 'resume' : pick.route.startsWith('#/lift/calibrate/') ? 'first-run' : 'workout'}
-          {...hero} reason={open ? 'In progress' : reason} />
-      ) : done ? (
-        <HeroCard state="done" detail={`${done.variant ? variantName(done.variant) : sessionTypeLabel(done.type)} · ${done.durationMin} min`}
-          progress={`${ring.done}/${ring.target}`} />
-      ) : <HeroCard state="rest" />}
-      <p class="streak num" data-testid="streak"><FlameIcon /> {count}-week streak</p>
-      {mixed && <a class="btn" href={`#/workout/session/${mixed.id}`}>Resume {mixed.mixed?.prescription.name}</a>}
-      {!open && stale && (
-        <a class="btn stale-lift" data-testid="stale-lift" href={`#/lift/session/${stale.id}`}>
-          Unfinished lift from {staleDateLabel.format(new Date(stale.date)).replace(',', '')}
+  const open = sessions?.open ?? observedOpen;
+  const done = completed?.session.id === doneId ? completed : null;
+  const model = review ?? latest;
+  const weekStreak = input && streak(input.sessions, input.programStart, input.today, input.activities);
+  const hard = model?.budget.find((line) => line.id === 'hard');
+  const planContext = hard && hard.done >= hard.max ? `Hard workouts: ${hard.done} of ${hard.max} maximum` : model?.reason;
+  const savedBlocks = done?.session.mixed?.prescription.blocks;
+  const completedActivity = done?.session.variant && savedBlocks?.some((block) => block.kind === 'strength')
+    && savedBlocks.some((block) => block.kind === 'coached' || block.kind === 'self-paced') ? 'lift' : done?.session.type;
+  const choose = <a class="training-link" href="#/workouts">Choose another <ArrowRightIcon /></a>;
+
+  const start = async () => {
+    if (starting.current || model?.kind !== 'workout') return;
+    starting.current = true;
+    setBusy(true);
+    setError(false);
+    try {
+      const result = await startTodayRecommendation(db, model);
+      if (result.kind === 'stale') {
+        setReview(result.current);
+        setRefreshCount((value) => value + 1);
+      } else if (result.kind === 'open') {
+        setObservedOpen(result.session);
+        setRefreshCount((value) => value + 1);
+      } else {
+        navigate(result.route);
+      }
+    } catch {
+      setError(true);
+    } finally {
+      starting.current = false;
+      setBusy(false);
+    }
+  };
+
+  const decisionReady = sessions && (open || done || (!doneId && model));
+  return <main class="screen shell-screen today-screen training-screen">
+    <TrainingHeader week={weekIndex(day, settings.programStart)} />
+    <p class="pref-eyebrow"><span class="workout-dot" />{dateLabel.format(new Date(day + 'T12:00:00'))}</p>
+    <h1>Today</h1>
+    <p class="pref-lead">Your plan is set. All you have to do is show up.</p>
+    <div class="today-content">
+      {!decisionReady ? <div class="hero loading-hero" aria-busy="true" aria-label="Loading Today" />
+        : open ? <>
+          {refreshCount > 0 && <p role="status" class="training-status" tabIndex={-1} ref={statusRef}>A workout is already in progress.</p>}
+          <HeroCard state="resume" title={cardTitle(open)} activity={open.type}>
+            <a class="btn primary" href={'#' + todaySessionRoute(open)} data-testid="start"><PlayIcon />Resume</a>{choose}
+          </HeroCard></>
+        : done ? <>
+          <HeroCard state="done" title="You showed up." activity={completedActivity}
+            detail={`${cardTitle(done.session, done.run)} is in the books. Give yourself some room to recover.`}
+            durationSec={actualDurationSec(done.session, done.run)} blockCount={done.lineup.blocks.length || undefined}>
+            <a class="btn primary" href="#/progress"><ProgressIcon />View progress</a>
+          </HeroCard>
+          <WorkoutLineup key={done.session.id} gear={done.lineup.gear} rows={done.lineup.blocks} completed />
+        </>
+        : <>
+          {refreshCount > 0 && <p role="status" class="training-status" tabIndex={-1} ref={statusRef}>
+            {model?.kind === 'workout' ? 'Workout changed. Review the updated plan before starting.' : 'Workout changed. No workout was started.'}
+          </p>}
+          {error && <p role="alert" class="training-status">Could not start the workout. Try again.</p>}
+          {model?.kind === 'workout' ? <>
+            <HeroCard state="workout" title={model.title} durationSec={model.durationSec} context={planContext}
+              detail={`Build ${model.workout.variant.startsWith('lower') ? 'lower' : 'upper'}-body strength, then move through coached intervals and core work.`}
+              activity="lift" estimated blockCount={model.workout.prepared.mixed.prescription.blocks.length}>
+              <button type="button" class="primary" disabled={busy} data-testid="start" onClick={start}><PlayIcon />{busy ? 'Starting…' : 'Start workout'}</button>
+              {choose}
+            </HeroCard>
+            <RecommendedLineup key={model.revision} recommendation={model} />
+          </> : <HeroCard state={model?.kind ?? 'unavailable'} title={model?.kind === 'rest' ? 'Rest day' : 'No compatible workout'} detail={model?.reason}>
+            {model?.kind === 'unavailable' && <a class="btn" href="#/settings">Training preferences</a>}
+            {choose}
+          </HeroCard>}
+        </>}
+      {!open && sessions?.stale && <a class="btn stale-lift" data-testid="stale-lift" href={'#' + todaySessionRoute(sessions.stale)}>
+        Unfinished lift from {dateLabel.format(new Date(sessions.stale.date))}
+      </a>}
+      {input && <>
+        <WeekCard input={input} />
+        <p class="streak num" data-testid="streak"><FlameIcon />{weekStreak?.count}-week streak</p>
+      </>}
+      <section class="training-card training-quick">
+        <h2>Quick access</h2>
+        {done && !open && choose}
+        <a class="training-link" href="#/workouts" aria-labelledby="quick-workouts" aria-describedby="quick-workouts-detail">
+          <span class="pref-tile pref-tile-mint"><WorkoutsIcon /></span>
+          <span><strong id="quick-workouts">My Workouts</strong><small id="quick-workouts-detail">Ready-to-repeat sessions</small></span>
+          <ChevronIcon />
         </a>
-      )}
-      <SomethingElse activities={activities} quiet={!!done} />
+        <a class="training-link" href="#/blocks" aria-labelledby="quick-blocks" aria-describedby="quick-blocks-detail">
+          <span class="pref-tile quick-blocks-tile"><LayersIcon /></span>
+          <span><strong id="quick-blocks">My Blocks</strong><small id="quick-blocks-detail">Mix and match your favorites</small></span>
+          <ChevronIcon />
+        </a>
+      </section>
+      <section class="training-card training-preferences">
+        <SettingsIcon />
+        <h2>Make it yours.</h2>
+        <p class="pref-support">Tell us what to skip and which equipment you have. We’ll plan around it.</p>
+        <a class="training-link" href="#/settings">Training preferences <ArrowRightIcon /></a>
+      </section>
       <BackupBanner settings={settings} />
-      {workout && (
-        <div class="today-start">
-          {startError && <p class="error" role="alert">Could not start the lift. Try again.</p>}
-          <a class="btn primary" href={open ? `#/lift/session/${open.id}` : pick.route} data-testid="start" onClick={async (event) => {
-            const currentDay = localDate(new Date());
-            if (today !== currentDay) {
-              event.preventDefault();
-              setDay(currentDay);
-              return;
-            }
-            if (open || !pick.route.startsWith('#/lift/start/') || !pick.variant || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-            event.preventDefault();
-            if (starting.current) return;
-            starting.current = true;
-            setStartError(false);
-            try {
-              const id = await startOrResumePlannedLift(db, pick.variant, DEFAULT_LIFT_BUDGET_MIN);
-              navigate('/lift/session/' + id);
-            } catch {
-              setStartError(true);
-            } finally {
-              starting.current = false;
-            }
-          }}><PlayIcon /> {open ? 'Resume' : 'Start'}</a>
-        </div>
-      )}
-    </main>
-  );
+    </div>
+  </main>;
 }

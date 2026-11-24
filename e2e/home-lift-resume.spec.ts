@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Session } from '../src/data/types';
-import { onboard, primaryCount, seedBackup } from './helpers';
+import { chooseAnother, expectTrainingInventory, onboard, primaryCount, seedBackup } from './helpers';
 
 test.use({ timezoneId: 'America/New_York' });
 
@@ -18,11 +18,12 @@ test('returning to Today and tapping Resume keeps one unfinished lift', async ({
     endedAt: '2026-11-16T15:40:00.000Z', durationMin: 40,
   }] });
   await page.getByRole('link', { name: 'Today' }).click();
-  await page.getByRole('link', { name: 'Start', exact: true }).click();
+  await page.goto('./#/lift/start/lower-a');
+  await page.getByTestId('start-lift').click();
   await expect(page).toHaveURL(/#\/lift\/session\/[^/]+$/);
   const sessionUrl = page.url();
 
-  await page.goBack();
+  await page.goto('./#/');
   await page.getByRole('link', { name: 'Resume', exact: true }).click();
   await expect(page).toHaveURL(sessionUrl);
 
@@ -48,6 +49,9 @@ test('Today shows the open lift variant and resumes that session', async ({ page
   await page.getByRole('link', { name: 'Today' }).click();
 
   await expect(page.getByTestId('hero').getByRole('heading', { name: 'Lower B', exact: true })).toBeVisible();
+  await expectTrainingInventory(page);
+  await chooseAnother(page);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Today' }).click();
   const resume = page.getByRole('link', { name: 'Resume', exact: true });
   await expect(resume).toBeVisible();
   expect(await primaryCount(page)).toBe(1);
@@ -64,7 +68,6 @@ test('Today resumes an unfinished lift that started before midnight', async ({ p
   await expect(resume).toBeVisible();
 
   await page.clock.setFixedTime(now);
-  await resume.click();
   await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'resume');
   await resume.click();
   await expect(page).toHaveURL(/#\/lift\/session\/last-night$/);

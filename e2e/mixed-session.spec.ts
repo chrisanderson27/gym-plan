@@ -16,10 +16,12 @@ async function startSaved(page: Page, earnedPR = true) {
     settings: [settings({ programStart: '2026-07-03', activities: ['lift', 'run'] })],
     ...(earnedPR ? { sessions: [PRIOR_LIFT], sets: [PRIOR_SET] } : {}),
   }, 2);
-  await page.getByRole('link', { name: 'Progress', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'My workouts' })).toBeVisible();
-  await page.getByRole('link', { name: 'Legs & Core' }).click();
-  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Workouts', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'My Workouts', exact: true })).toBeVisible();
+  const saved = page.getByRole('region', { name: 'Saved workouts' });
+  await saved.getByRole('article', { name: 'Legs & Core', exact: true }).getByRole('button', { name: 'Preview', exact: true }).click();
+  const preview = page.getByRole('dialog', { name: 'Preview Legs & Core', exact: true });
+  await preview.getByRole('button', { name: 'Start workout', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Preparation' })).toBeVisible();
   return page.url().split('/').pop()!;
 }

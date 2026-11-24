@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { emojiText, localDay, onboard, pageWidth, primaryCount, seedBackup, tooSmall } from './helpers';
+import { chooseAnother, emojiText, expectTrainingInventory, localDay, onboard, pageWidth, primaryCount, seedBackup, tooSmall } from './helpers';
 
 const DAY = 86_400_000;
 const NOW = new Date(2026, 10, 19, 12).getTime();
@@ -74,10 +74,14 @@ test('seeded history renders as cards with PRs from earlier sessions', async ({ 
   await expect(page.getByText('No sessions yet.')).toBeVisible();
   await seed(page, {
     ...history,
-    sessions: [...history.sessions, {
-      id: 'custom', type: 'custom', date: new Date(NOW - 60_000).toISOString(), blocks: [],
-      durationMin: 0, hard: false, hardCardio: false, rpe: null, notes: '',
-    }],
+    sessions: [...history.sessions,
+      { ...history.sessions.find((session) => session.id === 'run'), id: 'swim', type: 'swim' },
+      {
+        id: 'custom', type: 'custom', date: new Date(NOW - 60_000).toISOString(), blocks: [],
+        durationMin: 0, hard: false, hardCardio: false, rpe: null, notes: '',
+      },
+    ],
+    swims: [{ sessionId: 'swim', poolLength: 25, poolUnit: 'yd', distance: 600, sets: [], rpe: 5, shoulderPainFlag: false }],
   });
   await page.goto('./#/progress');
   const newer = page.getByTestId('history-newer');
@@ -87,9 +91,9 @@ test('seeded history renders as cards with PRs from earlier sessions', async ({ 
   await expect(older).toBeVisible();
   await expect(older.getByTestId('pr-badge')).toHaveCount(0);
   await expect(page.getByTestId('history-run')).toContainText('3 mi');
+  await expect(page.getByTestId('history-swim')).toContainText('600 yd');
   const custom = page.getByTestId('history-custom');
-  await expect(custom).toContainText('in progress');
-  await expect(custom).not.toHaveAttribute('data-activity');
+  await expect(custom).toHaveCount(0);
   await newer.click();
   await expect(page).toHaveURL(/#\/history\/newer$/);
   await expect(page.getByTestId('detail-prs')).toContainText('110 × 10');
@@ -104,7 +108,10 @@ test('seeded history renders as cards with PRs from earlier sessions', async ({ 
   await expect(newer.getByTestId('pr-badge')).toBeVisible();
   await expect(older).toBeVisible();
   await expect(page.getByTestId('history-run')).toContainText('3 mi');
+  await expect(page.getByTestId('history-swim')).toContainText('600 yd');
   await expect(page.getByTestId('history-circuit')).toContainText('3 rounds');
+  await expect(custom).toContainText('in progress');
+  await expect(custom).not.toHaveAttribute('data-activity');
   await page.goto('./#/history/missing');
   await expect(page.getByRole('heading', { name: 'Session not found' })).toBeVisible();
 });
@@ -143,11 +150,10 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('a weigh-in updates the trend and the Progress body card', async ({ page }) => {
+test('the legacy weigh-in route still updates the read-only Progress trend', async ({ page }) => {
   await seed(page, { bodyLogs });
-  await page.goto('./#/progress');
-  await page.getByTestId('progress-link-weigh-in').click();
-  await expect(page).toHaveURL(/#\/progress\/body$/);
+  await page.goto('./#/progress/body');
+  await expect(page.getByRole('heading', { name: 'Weigh-in', exact: true })).toBeVisible();
   const line = page.getByTestId('trend-line');
   const trend = page.getByTestId('body-trend');
   await expect(line).toHaveAttribute('data-last', /\d/);
@@ -160,21 +166,22 @@ test('a weigh-in updates the trend and the Progress body card', async ({ page })
   const after = (await line.getAttribute('data-last'))!;
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Progress' }).click();
   const card = page.getByTestId('progress-body');
-  await expect(card).toContainText(`Trend ${after} lb`);
+  await expect(card.getByRole('img')).toHaveAccessibleName(`Bodyweight trend ${after} lb`);
   await expect(card.getByTestId('trend-line')).toHaveAttribute('data-last', after);
+  await expectTrainingInventory(page);
 });
 
-test('Builder saves to Progress and starts from a saved workout', async ({ page }) => {
-  await page.goto('./#/progress');
-  await page.getByTestId('progress-link-builder').click();
+test('the legacy Builder saves a workout accessible in Workouts', async ({ page }) => {
+  await page.goto('./#/builder');
   await page.getByTestId('builder-name').fill('Chest press practice');
   await page.getByTestId('builder-search').fill('chest press');
   await page.getByTestId('builder-add-chest-press-machine').click();
   await page.getByTestId('builder-save').click();
   await expect(page).toHaveURL(/#\/progress$/);
-  const workouts = page.getByTestId('my-workouts');
-  await expect(workouts.getByRole('link', { name: 'Chest press practice' })).toBeVisible();
-  await workouts.getByRole('link', { name: 'edit', exact: true }).click();
+  await page.locator('main').getByRole('link', { name: 'Workouts', exact: true }).click();
+  const saved = page.getByRole('article', { name: 'Chest press practice' });
+  await expect(saved).toBeVisible();
+  await saved.getByRole('link', { name: 'Edit', exact: true }).click();
   await expect(page.getByTestId('builder-name')).toHaveValue('Chest press practice');
   await page.getByTestId('builder-start').click();
   await expect(page).toHaveURL(/#\/lift\/session\//);
@@ -190,16 +197,18 @@ test('ring history shows closed weeks and the same streak as Today', async ({ pa
   const today = page.getByTestId('streak');
   await expect(today).toContainText('2-week streak');
   const count = (await today.textContent())!.match(/\d+/)![0];
-  const todayRing = page.getByTestId('ring');
-  await expect(todayRing.locator('.ring-fill')).toHaveAttribute('stroke-dasharray', '50 50');
-  const track = (await todayRing.locator('.ring-track').getAttribute('stroke-dasharray'))!;
+  const goal = page.getByTestId('weekly-goal');
+  await expect(goal).toContainText('1 of 2 sessions');
+  await expect(goal.getByRole('list', { name: 'Activity goals' })).toContainText('Lifts 1 of 2');
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Progress' }).click();
   await expect(page.getByTestId('progress-streak')).toHaveText(count);
+  await expect(goal).toContainText('1 of 2 sessions');
+  await expect(goal.getByRole('list', { name: 'Activity goals' })).toContainText('Lifts 1 of 2');
   const weeks = page.getByTestId('ring-week');
   await expect(weeks.and(page.locator('[data-state="closed"]'))).toHaveCount(2);
   const current = weeks.and(page.locator('[data-state="current"]'));
   await expect(current).toHaveCount(1);
-  await expect(current.locator('.ring-track')).toHaveAttribute('stroke-dasharray', track);
+  await expect(current.locator('.ring-track')).toHaveAttribute('stroke-dasharray', '97 3');
   await expect(current.locator('.ring-fill')).toHaveAttribute('stroke-dasharray', '50 50');
   await expect(current).toContainText('Lifts 1 of 2');
 
@@ -211,7 +220,7 @@ test('ring history shows closed weeks and the same streak as Today', async ({ pa
   await expect(weeks).toHaveAttribute('data-state', 'current');
 });
 
-test('old routes redirect without a Back bounce and the rest hero uses the canonical route', async ({ page }) => {
+test('old routes redirect without a Back bounce and rest links to Workouts', async ({ page }) => {
   await seed(page, {
     sessions: Array.from({ length: 5 }, (_, i) => ({
       id: `burn-${i}`, type: 'burn', date: new Date(NOW - (i + 1) * DAY).toISOString(), blocks: [],
@@ -221,7 +230,8 @@ test('old routes redirect without a Back bounce and the rest hero uses the canon
   }, { programStart: localDay(new Date(NOW - 5 * DAY)) });
   await page.getByRole('link', { name: 'Today' }).click();
   await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'rest');
-  await expect(page.getByRole('link', { name: 'Log weigh-in' })).toHaveAttribute('href', '#/progress/body');
+  await expectTrainingInventory(page);
+  await chooseAnother(page);
   await page.goto('./#/history');
   await expect(page).toHaveURL(/#\/progress\/history$/);
   await page.goto('./#/weigh-in');

@@ -5,6 +5,7 @@ import { round1 } from '../engine/body';
 import { CARDIO_MODALITY_LABELS } from '../engine/config';
 import { zoneOf } from '../engine/gym/availability';
 import type { PR } from '../engine/pr';
+import { orderedDurationSec } from '../engine/templates';
 
 /** Display helpers: ids stay in storage, they are mapped to names only when rendered. */
 
@@ -120,6 +121,10 @@ export function durationLabel(sec: number): string {
   if (s < 60) return `${s} s`;
   const m = Math.floor(s / 60);
   return s % 60 === 0 ? `${m} min` : `${m} min ${s % 60} s`;
+}
+
+export function orderedDurationLabel(blocks: readonly OrderedBlock[]): string {
+  return durationLabel(orderedDurationSec(blocks)) + (blocks.some((block) => block.kind === 'strength') ? ' estimated' : '');
 }
 
 const SCREEN_NAMES: [RegExp, string][] = [

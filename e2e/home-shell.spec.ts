@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { ACTIVITIES } from '../src/engine/plan/activities';
-import { emojiText, localDay, onboard, pageWidth, primaryCount, seedBackup, tooSmall } from './helpers';
+import { chooseAnother, emojiText, expectTrainingInventory, localDay, onboard, pageWidth, primaryCount, seedBackup, tooSmall } from './helpers';
 
 const now = new Date(2026, 10, 19, 12);
 const date = (daysAgo: number) => new Date(2026, 10, 19 - daysAgo, 10);
@@ -26,7 +26,7 @@ async function screenRules(page: Page) {
   await expect(page.locator('[data-testid^="feedback-"]:not([role="dialog"] *, [data-testid="developer"] *)')).toHaveCount(0);
 }
 
-test('onboarding needs an activity, Maintain prefills the target, and disabled Swim stays off Today', async ({ page }) => {
+test('legacy onboarding needs an activity and Maintain prefills its target', async ({ page }) => {
   await page.goto('./');
   await page.getByRole('button', { name: 'Get started' }).click();
   for (const activity of ACTIVITIES) await page.getByTestId(`onb-act-${activity}`).click();
@@ -40,12 +40,10 @@ test('onboarding needs an activity, Maintain prefills the target, and disabled S
   await page.getByRole('button', { name: 'Maintain' }).click();
   await expect(page.getByLabel('Target weight (lb)')).toHaveValue('205');
   await page.getByRole('button', { name: 'Start' }).click();
-  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'workout');
-  await expect(page.getByTestId('hero')).toHaveAttribute('data-activity', 'burn');
-  await expect(page.getByTestId('something-else-swim')).toHaveCount(0);
-  await expect(page.getByTestId('ring')).toContainText('0/2');
-  await page.getByTestId('something-else-burn').click();
-  await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
+  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'unavailable');
+  await expect(page.getByTestId('weekly-goal')).toContainText('0 of 2 sessions');
+  await expectTrainingInventory(page);
+  await chooseAnother(page);
 });
 
 for (const theme of ['light', 'dark'] as const) {
@@ -70,7 +68,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByLabel('Target weight (lb)').fill('220');
     await page.getByRole('button', { name: 'Start' }).click();
 
-    await page.getByRole('link', { name: 'Settings' }).click();
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }).click();
     await page.getByLabel('Appearance').selectOption(theme);
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     const developer = page.getByTestId('developer');
@@ -82,14 +80,14 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(developer).toHaveAttribute('open', '');
     await developer.getByText('Running as Home Screen app').scrollIntoViewIfNeeded();
     await capture('settings-developer');
-    await page.getByRole('link', { name: 'Progress' }).click();
-    await expect(page.getByRole('link', { name: 'Progress' })).toHaveAttribute('aria-current', 'page');
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Progress' }).click();
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Progress' })).toHaveAttribute('aria-current', 'page');
     await capture('progress');
     await page.getByRole('link', { name: 'Today' }).click();
-    await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'first-run');
+    await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'workout');
     await capture('home-first-run');
 
-    await page.getByTestId('something-else-swim').click();
+    await page.goto('./#/swim');
     const pool = page.getByRole('dialog', { name: 'Set your pool' });
     await expect(pool).toBeVisible();
     await capture('pool');
@@ -109,7 +107,7 @@ for (const theme of ['light', 'dark'] as const) {
     await seedBackup(page, { settings: [settings({ appearance: theme })], sessions: [earlier], sets: [set(earlier.id)] });
     await page.getByRole('link', { name: 'Today' }).click();
     await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'workout');
-    await expect(page.getByTestId('ring')).toContainText('1/4');
+    await expect(page.getByTestId('weekly-goal')).toContainText('1 of 4 sessions');
     await expect(page.getByTestId('start')).toBeInViewport();
     await capture('home-workout');
 
@@ -117,33 +115,36 @@ for (const theme of ['light', 'dark'] as const) {
     await seedBackup(page, { sessions: full });
     await page.getByRole('link', { name: 'Today' }).click();
     await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'rest');
-    await expect(page.getByRole('link', { name: 'Log weigh-in' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Log weigh-in' })).toHaveAttribute('href', '#/progress/body');
+    await expectTrainingInventory(page);
     await expect(page.locator('main .primary')).toHaveCount(0);
     await capture('home-rest');
+    await chooseAnother(page);
 
     const done = { ...session('today', 0), variant: 'upper-a' };
     await seedBackup(page, { sessions: [done], sets: [set(done.id)] });
     await page.getByRole('link', { name: 'Today' }).click();
     await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'done');
-    await expect(page.getByTestId('hero')).toContainText('Done for today');
-    await expect(page.getByTestId('hero')).toContainText('Upper A · 40 min');
-    await expect(page.getByTestId('ring')).toContainText('2/4');
+    await expect(page.getByTestId('hero')).toContainText('You showed up.');
+    await expect(page.getByTestId('hero')).toContainText('Upper A');
+    await expect(page.getByTestId('hero')).toContainText('40 min');
+    await expect(page.getByTestId('weekly-goal')).toContainText('2 of 4 sessions');
     await expect(page.locator('main')).not.toContainText('warned');
-    await expect(page.locator('main .primary')).toHaveCount(0);
+    await expect(page.locator('main .primary')).toHaveCount(1);
+    await expect(page.getByTestId('hero').getByRole('link', { name: 'View progress' })).toHaveClass(/\bprimary\b/);
+    await expectTrainingInventory(page);
     await capture('home-done');
   });
 }
 
-test('Progress opens all five destinations', async ({ page }) => {
+test('Progress opens History, Workouts, Blocks and weekly volume', async ({ page }) => {
   await onboard(page);
-  for (const [id, heading] of [
-    ['history', 'History'], ['weigh-in', 'Weigh-in'], ['volume', /Week \d+ volume/],
-    ['builder', 'Build a session'], ['hybrid', 'Hybrid'],
-  ]) {
+  for (const [name, heading] of [
+    ['All history', 'History'], ['Workouts', 'My Workouts'], ['Blocks', 'My Blocks'], ['Weekly volume', /Week \d+ volume/],
+  ] as const) {
     await page.goto('./#/progress');
-    await page.getByTestId(`progress-link-${id}`).click();
-    await expect(page.locator('main h1')).toContainText(heading!);
+    await expectTrainingInventory(page);
+    await page.locator('main').getByRole('link', { name, exact: true }).click();
+    await expect(page.locator('main h1')).toContainText(heading);
   }
 });
 
@@ -167,7 +168,7 @@ test('a 205 lb gain trend has not reached 220 lb', async ({ page }) => {
 });
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`2 taps to first set of the existing lift session in ${theme}`, async ({ page }) => {
+  test(`legacy full lift route opens the first set in ${theme}`, async ({ page }) => {
     await page.clock.setFixedTime(now);
     await onboard(page);
     const previous = { ...session('past-lift', 3), variant: 'upper-a' };
@@ -177,11 +178,13 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     await page.getByRole('link', { name: 'Today' }).click();
     await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'workout');
+    await page.goto('./#/lift/start/lower-a');
+    await expect(page.getByTestId('start-lift')).toBeVisible();
     await page.evaluate(() => {
       document.body.dataset.taps = '0';
       document.addEventListener('click', () => { document.body.dataset.taps = String(Number(document.body.dataset.taps) + 1); });
     });
-    await page.getByTestId('start').click();
+    await page.getByTestId('start-lift').click();
     await expect(page).toHaveURL(/#\/lift\/session\//);
     await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
     await page.getByTestId('warmup-done').click();

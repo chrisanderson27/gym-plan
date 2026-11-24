@@ -41,7 +41,7 @@ test('checklist and an exclusion survive reload', async ({ page }) => {
 
 test('blocks is the current tab on the library', async ({ page }) => {
   await onboard(page);
-  await page.getByRole('link', { name: 'Blocks' }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Blocks' }).click();
   const nav = page.getByRole('navigation', { name: 'Main' });
   await expect(nav.getByRole('link', { name: 'Blocks' })).toHaveAttribute('aria-current', 'page');
   await expect(nav.getByRole('link', { name: 'Progress' })).not.toHaveAttribute('aria-current');

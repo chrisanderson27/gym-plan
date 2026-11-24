@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { exerciseById, SEED_EQUIPMENT } from '../content';
 import { COACHED_EXERCISE_IDS, coachedEquipmentId, coachedPose, PHASE3_EXERCISE_IDS, phase3EquipmentId, phase3Pose } from '../content/stationDemos';
 import { stationUnits } from '../engine/block/progression';
-import { orderedDurationMin } from '../engine/templates';
+import { orderedDurationSec } from '../engine/templates';
 import { setPreferredEquipment } from './lift';
 import { toBlockExercise } from './liftday';
 import { mixedOptions, startMixedSession, updateMixedSession, workoutPreview } from './mixedSession';
@@ -20,7 +20,7 @@ afterEach(async () => {
 
 test('starter workouts match their durations and all offered movements resolve a verified demo', async () => {
   await db.settings.put(settings());
-  expect(suggestedWorkouts.map((workout) => [orderedDurationMin(workout.blocks), workout.blocks.length])).toEqual([[40, 5], [27, 4], [30, 4]]);
+  expect(suggestedWorkouts.map((workout) => [orderedDurationSec(workout.blocks), workout.blocks.length])).toEqual([[2340, 5], [1548, 4], [1728, 4]]);
   for (const suggestion of suggestedWorkouts) {
     const blocks = suggestion.blocks.map((block) => copyWorkoutBlock(block));
     expect(matchingSuggestion({ ...suggestion, blocks })).toBe(suggestion);

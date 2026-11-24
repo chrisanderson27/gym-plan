@@ -6,9 +6,9 @@ import { saveOrderedWorkout, StaleWorkoutSaveError, WorkoutSaveError } from '../
 import type { OrderedBlock, OrderedPrescription } from '../../data/types';
 import { validAuthoredWorkout } from '../../data/validate';
 import { copyWorkoutBlock, libraryWorkoutBlock, starterWorkoutBlocks, strengthWorkoutChoices, workoutBlockContent } from '../../data/workoutChoices';
-import { moveBlock, orderedBlockMinutes } from '../../engine/templates';
+import { moveBlock } from '../../engine/templates';
 import { BlocksIcon, BookmarkIcon, CloseIcon, FlameIcon, LiftIcon, PlusIcon, SwapIcon, WindIcon } from '../icons';
-import { durationLabel, workoutBlockKind, workoutBlockName } from '../labels';
+import { orderedDurationLabel, workoutBlockKind, workoutBlockName } from '../labels';
 import { Sheet } from '../Sheet';
 
 const icons = { preparation: FlameIcon, strength: LiftIcon, coached: SwapIcon, 'self-paced': BlocksIcon, recovery: WindIcon };
@@ -121,7 +121,7 @@ export function WorkoutEditor({ edit, onClose, fallbackFocus }: {
               <li key={id} class="workout-choice" data-kind={block.kind}>
                 <div class="workout-choice-row">
                   <span class="workout-kind-tile"><Icon /></span>
-                  <div class="workout-choice-text"><strong>{title}</strong><small>{durationLabel(orderedBlockMinutes(block) * 60)} · {workoutBlockKind[block.kind]}</small></div>
+                  <div class="workout-choice-text"><strong>{title}</strong><small>{orderedDurationLabel([block])} · {workoutBlockKind[block.kind]}</small></div>
                   <button id={triggerId} type="button" class="workout-pick"
                     aria-label={entry ? `${title}, block ${index + 1}, actions` : `Add ${title}`}
                     aria-expanded={entry ? open : undefined} disabled={busy || (!entry && full)}

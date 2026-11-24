@@ -3,9 +3,9 @@ import { onboard } from './helpers';
 
 test('first run: onboarding then Today with a hero and the tab bar', async ({ page }) => {
   await onboard(page);
-  await expect(page.getByTestId('hero')).toContainText('Lower A (calibration)');
-  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'first-run');
-  await expect(page.getByTestId('start')).toHaveAttribute('href', '#/lift/calibrate/lower-a');
+  await expect(page.getByTestId('hero')).toContainText('Lower A');
+  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'workout');
+  await expect(page.getByRole('button', { name: 'Start workout' })).toBeEnabled();
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link')).toHaveText(['Today', 'Workouts', 'Blocks', 'Progress', 'Settings']);
 });
 

@@ -42,12 +42,13 @@ export interface Ranked {
   reason: string;
 }
 
-export function rankToday(input: PlanInput): Ranked {
+export function rankToday(input: PlanInput, { recommendWorkout = false } = {}): Ranked {
+  const cold = !input.hasLiftHistory && input.sessions.length === 0;
   const week = weeklyBudget(input);
   const line = (id: BudgetLine['id']) => week.lines.find((l) => l.id === id)!;
 
   const activities = enabled(input.activities);
-  if (activities.includes('lift') && !input.hasLiftHistory && input.sessions.length === 0) {
+  if (activities.includes('lift') && cold && !recommendWorkout) {
     const pick: Candidate = {
       id: 'lift-lower', tile: 'lift', title: 'Lower A (calibration)', route: '#/lift/calibrate/lower-a', variant: 'lower-a', status: 'eligible',
       reasons: ['No history yet — calibrate first'], score: { unmet: 0, daysSince: Infinity, readyHoursLeft: 0 },
@@ -111,6 +112,7 @@ export function rankToday(input: PlanInput): Ranked {
     || b.score.unmet - a.score.unmet
     || (b.score.daysSince === a.score.daysSince ? 0 : b.score.daysSince > a.score.daysSince ? 1 : -1)
     || a.score.readyHoursLeft - b.score.readyHoursLeft
+    || (cold && recommendWorkout ? Number(b.id === 'lift-lower') - Number(a.id === 'lift-lower') : 0)
     || orderOf(a) - orderOf(b));
 
   const pick = candidates.find((c) => c.status !== 'blocked')!;

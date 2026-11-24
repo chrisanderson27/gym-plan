@@ -7,11 +7,11 @@ import type { GymDb } from './db';
 import type { RunRow, Session, SetRow, SwimRow } from './types';
 
 export interface CardNumber { value: string; label: string }
-export interface HistoryItem { session: Session; title: string; summary: string; numbers: CardNumber[]; prs: PR[] }
+export interface HistoryItem { session: Session; title: string; summary: string; durationSec: number; numbers: CardNumber[]; prs: PR[] }
 
 const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 
-function cardTitle(s: Session, run: RunRow | undefined): string {
+export function cardTitle(s: Session, run?: RunRow): string {
   if (s.mixed) return s.mixed.prescription.name;
   if (s.variant) return `${s.type === 'hybrid' ? 'Hybrid · ' : ''}${LIFT_TEMPLATES[s.variant].name}`;
   if (s.type === 'run' && run) return `${cap(run.kind)} run`;
@@ -26,8 +26,12 @@ function summarize(s: Session, title: string, run: RunRow | undefined, swim: Swi
   return bits.join(' · ');
 }
 
+export function actualDurationSec(s: Session, run?: RunRow): number {
+  return (s.type === 'run' || s.type === 'hybrid') && run && s.durationMin === 0 ? run.durationSec : s.durationMin * 60;
+}
+
 export function cardNumbers(s: Session, sets: SetRow[], run?: RunRow, swim?: SwimRow): CardNumber[] {
-  const minutes = s.durationMin > 0 ? s.durationMin : run ? Math.round(run.durationSec / 60) : 0;
+  const minutes = Math.round(actualDurationSec(s, run) / 60);
   const rounds = s.blocks.reduce((total, block) =>
     total + (block.kind === 'circuit' ? block.log?.completedRounds ?? 0 : 0), 0);
   const values = [
@@ -109,7 +113,7 @@ async function priorWorkingSets(db: GymDb, ids: string[], pairs: [string, string
     .filter((set): set is SetRow => !!set && isWorking(set));
 }
 
-async function priorPRs(db: GymDb, entries: HistorySession[], newestDate: string): Promise<PR[][]> {
+async function priorPRs(db: GymDb, entries: HistorySession[], newestDate: string, completedOnly = false): Promise<PR[][]> {
   const entryIds = new Set(entries.map(({ session }) => session.id));
   const pairs = new Map<string, [string, string]>();
   const keys = new Set<string>();
@@ -137,11 +141,12 @@ async function priorPRs(db: GymDb, entries: HistorySession[], newestDate: string
     return [...entries, ...[...circuits, ...setSessions].flatMap((session) =>
       session ? [{ session, sets: setsBy.get(session.id) ?? [] }] : [])];
   });
-  return entries.map((entry) => sessionPRs(entry, prior.filter(({ session }) => session.date < entry.session.date)));
+  return entries.map((entry) => sessionPRs(entry, prior.filter(({ session }) => session.date < entry.session.date && (!completedOnly || !!session.endedAt))));
 }
 
-export async function listHistory(db: GymDb, page = 0, size = HISTORY_PAGE): Promise<HistoryItem[]> {
-  const rows = await db.sessions.orderBy('date').reverse().offset(page * size).limit(size).toArray();
+export async function listHistory(db: GymDb, page = 0, size = HISTORY_PAGE, completedOnly = false): Promise<HistoryItem[]> {
+  const query = db.sessions.orderBy('date').reverse();
+  const rows = await (completedOnly ? query.filter((s) => !!s.endedAt) : query).offset(page * size).limit(size).toArray();
   const newest = rows[0];
   if (!newest) return [];
   const ids = rows.map((s) => s.id);
@@ -152,7 +157,7 @@ export async function listHistory(db: GymDb, page = 0, size = HISTORY_PAGE): Pro
   ]);
   const setsBy = groupSets(sets);
   const entries = rows.map((session) => ({ session, sets: setsBy.get(session.id) ?? [] }));
-  const prs = await priorPRs(db, entries, newest.date);
+  const prs = await priorPRs(db, entries, newest.date, completedOnly);
   const runBy = new Map(runs.map((r) => [r.sessionId, r]));
   const swimBy = new Map(swims.map((r) => [r.sessionId, r]));
   return entries.map(({ session, sets }, index) => {
@@ -163,6 +168,7 @@ export async function listHistory(db: GymDb, page = 0, size = HISTORY_PAGE): Pro
       session,
       title,
       summary: summarize(session, title, run, swim),
+      durationSec: actualDurationSec(session, run),
       numbers: cardNumbers(session, sets, run, swim),
       prs: prs[index]!,
     };

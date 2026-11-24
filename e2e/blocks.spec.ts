@@ -14,7 +14,7 @@ async function shot(page: Page, testInfo: TestInfo, name: string) {
 
 test('empty library and an empty builder', async ({ page }) => {
   await onboard(page);
-  await page.getByRole('link', { name: 'Blocks' }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Blocks' }).click();
   await expect(page.getByRole('heading', { name: 'My Blocks' })).toBeVisible();
   await expect(page.getByText('No saved blocks yet')).toBeVisible();
   await expect(page.getByText('Save a block from Today, try the suggested pair below, or build one from scratch.')).toBeVisible();
@@ -87,7 +87,7 @@ test('eligibility and targets survive a backup import', async ({ page, browser }
   await fresh.getByRole('link', { name: 'Settings' }).click();
   await fresh.locator('input[type=file]').setInputFiles(saved);
   await expect(fresh.getByTestId('backup-message')).toContainText('Imported');
-  await fresh.getByRole('link', { name: 'Blocks' }).click();
+  await fresh.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Blocks' }).click();
   await fresh.getByRole('link', { name: 'Bench & Core' }).click();
   await expect(fresh.getByRole('checkbox', { name: 'Use in workout recommendations' })).toBeChecked();
   await expect(fresh.getByLabel('Leg press target')).toHaveValue('10');
@@ -103,7 +103,7 @@ test('a v1 backup with no library still imports', async ({ page }) => {
   await addExercise(page, 'Leg press');
   await page.getByRole('button', { name: 'Save to My Blocks' }).click();
   await seedBackup(page, { bodyLogs: [{ date: '2026-11-01', protein: true }] });
-  await page.getByRole('link', { name: 'Blocks' }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Blocks' }).click();
   await expect(page.getByRole('link', { name: 'Bench & Core' })).toBeVisible();
 });
 
@@ -326,7 +326,7 @@ test('frame screenshots at week 21', async ({ page }, testInfo) => {
   await page.getByLabel('Program start (week 1)').fill(programStart);
   await expect(page.locator('.week-chip')).toHaveText('Week 21');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await page.getByRole('link', { name: 'Blocks' }).click();
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Blocks' }).click();
   await expect(page.locator('.week-chip')).toHaveText('Week 21');
   await shot(page, testInfo, '3-3199');
   await page.getByRole('link', { name: 'New block' }).click();

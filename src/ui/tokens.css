@@ -415,3 +415,12 @@
     --dur-slow: 0ms;
   }
 }
+
+:root {
+  --today-hero-base: #101914;
+  --today-hero-edge: #304532;
+  --today-hero-fg: #f8fbf5;
+  --today-hero-muted: #d1dfcf;
+  --today-hero-accent: #d2f587;
+  --today-hero-on-accent: #172019;
+}

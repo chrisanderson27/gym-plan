@@ -26,6 +26,26 @@ export async function onboard(page: Page, { bodyweight = '247.2', activities = [
   await expect(page.getByTestId('hero')).toBeVisible();
 }
 
+export async function expectTrainingInventory(page: Page) {
+  const main = page.locator('main');
+  await expect(main.locator('input, a[href^="#/progress/body"], a[href^="#/weigh-in"], a[href^="#/builder"], a[href^="#/mine"]')).toHaveCount(0);
+  await expect(main.getByRole('button', { name: /^(Log|Burn|Lift|Run|Hybrid|Swim)$/i })).toHaveCount(0);
+  const activityLinks = main.locator('a:is([href^="#/burn"], [href^="#/lift"], [href^="#/run"], [href^="#/hybrid"], [href^="#/swim"])');
+  await expect(activityLinks.filter({ hasNotText: /^(Resume$|Unfinished lift from )/ })).toHaveCount(0);
+}
+
+export async function chooseAnother(page: Page) {
+  const link = page.getByRole('link', { name: 'Choose another', exact: true });
+  await expect(link).toHaveAttribute('href', '#/workouts');
+  const box = await link.boundingBox();
+  expect(box?.height).toBeGreaterThanOrEqual(56);
+  expect(box?.width).toBeGreaterThanOrEqual(56);
+  await link.click();
+  await expect(page.getByRole('heading', { name: 'My Workouts', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/#\/workouts$/);
+  await expect(page.getByRole('dialog', { name: 'Choose another' })).toHaveCount(0);
+}
+
 export async function seedBackup(page: Page, stores: Record<string, unknown[]>, schemaVersion = 1) {
   const backup = { schemaVersion, exportedAt: new Date().toISOString(), appVersion: 'e2e', stores };
   await page.goto('./#/settings');
@@ -73,3 +93,17 @@ export const pageWidth = (page: Page) => page.evaluate(() => document.scrollingE
 
 export const primaryCount = (page: Page) => page.locator('.primary:visible').count();
 export const emojiText = async (page: Page) => (await page.locator('body').innerText()).match(/\p{Extended_Pictographic}/gu) ?? [];
+
+export function persistedRows<T>(page: Page, store: string) {
+  return page.evaluate((name) => new Promise<T[]>((resolve, reject) => {
+    const open = indexedDB.open('gym-plan');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const transaction = db.transaction(name);
+      const read = transaction.objectStore(name).getAll();
+      transaction.oncomplete = () => { db.close(); resolve(read.result as T[]); };
+      transaction.onerror = () => { db.close(); reject(transaction.error); };
+    };
+  }), store);
+}

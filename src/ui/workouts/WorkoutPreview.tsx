@@ -4,11 +4,10 @@ import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
 import { missingCoachedSchedule, workoutPreview } from '../../data/mixedSession';
 import type { OrderedPrescription } from '../../data/types';
-import { orderedDurationMin } from '../../engine/templates';
 import { stationWorkSec } from '../../engine/block/coached';
 import { StationCard, stationTargetLine } from '../blocks/StationCard';
 import { CloseIcon } from '../icons';
-import { durationLabel, workoutBlockKind, workoutBlockName } from '../labels';
+import { orderedDurationLabel, workoutBlockKind, workoutBlockName } from '../labels';
 import { Sheet } from '../Sheet';
 
 export function WorkoutPreview({ ordered, onClose, fallbackFocus, children }: {
@@ -25,7 +24,7 @@ export function WorkoutPreview({ ordered, onClose, fallbackFocus, children }: {
         <header class="workout-dialog-head">
           <div>
             <h2>{ordered.name}</h2>
-            <p class="workout-meta">{orderedDurationMin(ordered.blocks)} min · {ordered.blocks.length} blocks</p>
+            <p class="workout-meta">{orderedDurationLabel(ordered.blocks)} · {ordered.blocks.length} {ordered.blocks.length === 1 ? 'block' : 'blocks'}</p>
           </div>
           <button type="button" class="workout-close" aria-label="Close preview" onClick={onClose}><CloseIcon /></button>
         </header>
@@ -33,7 +32,7 @@ export function WorkoutPreview({ ordered, onClose, fallbackFocus, children }: {
           {ordered.blocks.map((block, index) => (
             <li key={block.id}>
               <h3>{workoutBlockName(block)}</h3>
-              <p class="workout-meta">{workoutBlockKind[block.kind]}{block.kind !== 'strength' && ` · ${durationLabel(block.durationSec)}`}</p>
+              <p class="workout-meta">{workoutBlockKind[block.kind]} · {orderedDurationLabel([block])}</p>
               {block.kind === 'coached' && block.stations &&
                 <p>{block.workSec} sec shared work · {block.restSec} sec rest · {block.transitionSec} sec transition</p>}
               {missingCoachedSchedule(block) && <p>Needs a station schedule. Edit to replace or remove this block.</p>}

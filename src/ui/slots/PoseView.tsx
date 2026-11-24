@@ -4,12 +4,12 @@ import { PauseIcon, PlayIcon } from '../icons';
 import { StickFigure } from '../pose/StickFigure';
 
 /** Stick-figure demo when the exercise has a pose; its text cues otherwise. */
-export function PoseView({ exerciseId, poseId, running }: { exerciseId: string; poseId?: string; running?: boolean }) {
+export function PoseView({ exerciseId, poseId, running, omitCue }: { exerciseId: string; poseId?: string; running?: boolean; omitCue?: string }) {
   const ex = exerciseById.get(exerciseId);
   const def = poseId ? POSES[poseId] : undefined;
   const figure = def && <StickFigure def={def} label={ex?.name ?? exerciseId} testId={`pose-${exerciseId}`} running={running} />;
   if (figure && running === undefined) return figure;
-  const cues = ex?.cues ?? [];
+  const cues = ex?.cues.filter((cue) => cue !== omitCue) ?? [];
   return (
     <>{figure}{cues.length > 0 && (
       <ul class="cues" data-testid={`cues-${exerciseId}`}>

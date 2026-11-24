@@ -4,8 +4,8 @@ import { trendGeometry } from './chart';
 export function TrendChart({ points, goal, compact = false }: { points: TrendPoint[]; goal?: number; compact?: boolean }) {
   const window = points.slice(compact ? -30 : -60);
   const last = window.at(-1);
-  const width = 358;
-  const height = compact ? 64 : 180;
+  const width = compact ? 240 : 358;
+  const height = compact ? 84 : 180;
   const pad = compact ? 4 : 26;
   const chart = trendGeometry(window, { width, height, pad, ...(goal === undefined ? {} : { goal }) });
   if (!last || !chart) return null;

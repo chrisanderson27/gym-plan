@@ -51,10 +51,9 @@ test('simulated week: pick respects 48 h and the 2-hard-session cap', async ({ p
   });
 
   await page.goto('./#/');
-  await page.getByTestId('ring').click();
-  await expect(page.getByRole('dialog', { name: 'This week' })).toContainText('Hard workouts: 2 of 2 maximum');
-  await page.getByRole('button', { name: 'Close' }).click();
   const pick = page.getByTestId('hero');
+  await expect(pick).toContainText('Hard workouts: 2 of 2 maximum');
+  await expect(pick).toContainText('Build upper-body strength');
   await expect(pick).not.toContainText('Lower');
   await expect(pick).not.toContainText('Burn');
   await expect(pick).not.toContainText('Intervals');
@@ -74,8 +73,7 @@ test('hybrid: lift then cardio is one session, with feedback', async ({ page }, 
     sets: setsFor('01HZZZZZZZZZZZZZZZZZZZZZU1', 'chest-press-machine', 'pin-stack', now - 4 * DAY, 100, 11),
   });
 
-  await page.goto('./#/progress');
-  await page.getByTestId('progress-link-hybrid').click();
+  await page.goto('./#/hybrid');
   await page.getByTestId('hybrid-variant-upper-a').click();
   const plannedLifts = await page.locator('ul.plan').first().locator('li').count();
   const cardioPlan = await page.getByTestId('hybrid-cardio').innerText();
