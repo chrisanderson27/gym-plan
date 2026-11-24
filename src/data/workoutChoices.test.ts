@@ -3,6 +3,7 @@ import { exerciseById, SEED_EQUIPMENT } from '../content';
 import { COACHED_EXERCISE_IDS, coachedEquipmentId, coachedPose, PHASE3_EXERCISE_IDS, phase3EquipmentId, phase3Pose } from '../content/stationDemos';
 import { stationUnits } from '../engine/block/progression';
 import { orderedDurationMin } from '../engine/templates';
+import { setPreferredEquipment } from './lift';
 import { toBlockExercise } from './liftday';
 import { mixedOptions, startMixedSession, updateMixedSession, workoutPreview } from './mixedSession';
 import { settings } from './p4-test-utils';
@@ -69,6 +70,29 @@ test('matches only known ordered fields, including nested station targets', () =
   expect(workoutBlockContent({ ...circuit, name: 'x'.repeat(1025) })).toBeUndefined();
   expect(workoutBlockContent({ ...circuit, stations: [{ ...station, exerciseId: 'x'.repeat(1025) }] })).toBeUndefined();
   expect(workoutBlockContent({ id: 'legacy', kind: 'coached', name: 'Older rotation', durationSec: 120 })).toBeDefined();
+});
+
+test.each([
+  { scenario: 'falls back to the verified seed', pin: undefined, unavailableEquipment: [], expectedId: 'barbell-olympic', status: undefined },
+  { scenario: 'honors an incompatible explicit pin', pin: 'pin-stack', unavailableEquipment: [], expectedId: undefined, status: 'Demo unavailable.' },
+  { scenario: 'requires the bench for the verified seed', pin: undefined, unavailableEquipment: ['flat-bench'], expectedId: undefined, status: 'Unavailable at your gym.' },
+])('hip thrust with an ordinary pin-stack preference $scenario in Preview and Start', async ({ pin, unavailableEquipment, expectedId, status }) => {
+  const now = new Date('2026-11-22T12:00:00.000Z');
+  await db.settings.put(settings({ unavailableEquipment }));
+  await setPreferredEquipment(db, 'hip-thrust', 'pin-stack');
+  const preset = strengthWorkoutChoices.find((block) => block.exerciseId === 'hip-thrust')!;
+  expect(preset.equipmentId).toBeUndefined();
+  const block = { ...preset, equipmentId: pin };
+
+  const [demos] = await workoutPreview(db, [block], now);
+  const demo = demos?.[0];
+  expect.soft(demo?.equipmentId).toBe(pin ?? 'barbell-olympic');
+  expect.soft(demo?.poseId).toBe(expectedId ? 'hip-thrust' : undefined);
+  expect.soft(demo?.status?.split(' Replace')[0]).toBe(status);
+
+  const templateId = await saveOrderedWorkout(db, { name: 'Hip thrust day', blocks: [block] }, undefined, now);
+  const session = await db.sessions.get(await startMixedSession(db, { templateId }, now));
+  expect(session?.mixed?.strength[block.id]?.equipmentId).toBe(expectedId);
 });
 
 test('repeats starter strength on the verified machine that logged the original sets', async () => {

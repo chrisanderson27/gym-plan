@@ -71,6 +71,10 @@ function availableDemo(g: Gym, exerciseId: string, preferred?: string, coached =
   return demo;
 }
 
+function strengthEquipmentId(g: Gym, { exerciseId, equipmentId }: OrderedStrengthBlock) {
+  return equipmentId ?? verifiedDemo(g, exerciseId)?.equipmentId ?? phase3EquipmentId(exerciseId);
+}
+
 function stationUnitMatches(station: OrderedStation) {
   const exercise = exerciseById.get(station.exerciseId);
   return !!exercise && stationUnits(toBlockExercise(exercise)).includes(station.target.unit);
@@ -98,7 +102,11 @@ export async function workoutPreview(db: GymDb, blocks: OrderedBlock[], now = ne
           : !available ? 'Unavailable at your gym. Replace or skip this movement before training.' : undefined,
       };
     };
-    if (block.kind === 'strength') return [describe(block.exerciseId, block.equipmentId, PHASE_LIFTS.has(block.exerciseId))];
+    if (block.kind === 'strength') {
+      const supported = PHASE_LIFTS.has(block.exerciseId);
+      const equipmentId = supported ? strengthEquipmentId(g, block) : block.equipmentId;
+      return [describe(block.exerciseId, equipmentId, supported)];
+    }
     if (block.kind === 'coached' || block.kind === 'self-paced') {
       return (block.stations ?? []).map((station) => describe(station.exerciseId, station.equipmentId, stationUnitMatches(station)));
     }
@@ -127,7 +135,8 @@ function stationChoices(g: Gym, original: OrderedStation, current: EffectiveStat
 }
 
 function strengthChoices(g: Gym, block: OrderedStrengthBlock, current: string) {
-  const compatible = new Map([...PHASE_LIFTS].filter(([id]) => availableDemo(g, id, id === block.exerciseId ? block.equipmentId : undefined)));
+  const equipmentId = strengthEquipmentId(g, block);
+  const compatible = new Map([...PHASE_LIFTS].filter(([id]) => availableDemo(g, id, id === block.exerciseId ? equipmentId : undefined)));
   const substitutes = swapCandidates(current, PHASE_LIFTS, g.snapshot.overrides);
   return [...new Set([block.exerciseId, ...substitutes, ...(!PHASE_LIFTS.has(current) ? compatible.keys() : [])])]
     .filter((id) => (id !== current || id === block.exerciseId) && compatible.has(id));
@@ -157,7 +166,7 @@ async function acceptStrength(db: GymDb, g: Gym, block: OrderedStrengthBlock, ex
   flags: ReturnType<typeof replayLiftFlags>, done: Map<string, number>): Promise<LiftBlock | null> {
   const exercise = exerciseById.get(exerciseId);
   const original = exerciseId === block.exerciseId;
-  const demo = availableDemo(g, exerciseId, original ? block.equipmentId : undefined);
+  const demo = availableDemo(g, exerciseId, original ? strengthEquipmentId(g, block) : undefined);
   const lift = LIFT_EXERCISES.get(exerciseId);
   if (!exercise || !demo || !lift || lift.repMin < 1) return null;
   const base = { ...orderedStrengthToLift(block), exerciseId, ...(!original ? { repMin: lift.repMin, repMax: lift.repMax } : {}) };
