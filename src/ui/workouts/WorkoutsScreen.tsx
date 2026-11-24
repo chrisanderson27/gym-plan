@@ -1,4 +1,4 @@
-import { useRef, useState } from 'preact/hooks';
+import { useMemo, useRef, useState } from 'preact/hooks';
 import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
 import { missingCoachedSchedule } from '../../data/mixedSession';
@@ -22,6 +22,8 @@ const legacyCategory = { lift: 'Strength', custom: 'Strength', burn: 'Burn', run
 
 export function WorkoutsScreen({ settings }: { settings: Settings }) {
   const rows = useLiveQuery(() => listMine(db, ALL_TEMPLATE_TYPES), []);
+  const matches = useMemo(() => new Map(rows?.flatMap((row) => row.ordered
+    ? [[row.id, matchingSuggestion(row.ordered)] as const] : [])), [rows]);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export function WorkoutsScreen({ settings }: { settings: Settings }) {
   function card(row: { ordered?: OrderedPrescription; template?: Template; suggestion?: Suggestion }) {
     const { template, suggestion } = row;
     const ordered = row.ordered ?? suggestion;
-    const match = ordered && matchingSuggestion(ordered);
+    const match = template ? matches.get(template.id) : suggestion;
     const name = template?.name ?? suggestion!.name;
     const count = ordered?.blocks.length ?? template!.blocks.length;
     const duration = ordered ? orderedDurationMin(ordered.blocks) : templateDurationMin(template!.blocks);

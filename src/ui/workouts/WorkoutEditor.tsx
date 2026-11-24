@@ -39,14 +39,20 @@ export function WorkoutEditor({ edit, onClose, fallbackFocus }: {
     ...(library ?? []).map((source) => ({ id: choiceKey(source, 'library'), block: libraryWorkoutBlock(source) })),
     ...(moreStrength ? strengthChoices : []),
   ], [library, moreStrength]);
-  const matching = new Set<string>();
-  const rows = choices.map((choice) => {
-    const content = workoutBlockContent(choice.block);
-    const entry = selected.find((item) => !matching.has(item.id) &&
-      (item.choiceId ? item.choiceId === choice.id : workoutBlockContent(item.block) === content));
-    if (entry) matching.add(entry.id);
-    return { ...choice, entry };
-  }).concat(selected.filter((item) => !matching.has(item.id)).map((entry) => ({ id: entry.id, block: entry.block, entry })));
+  const rows = useMemo(() => {
+    // Keep a source row paired to the same copy when the workout order changes.
+    const candidates = [...selected].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    const fingerprints = new Map(selected.map(({ id, block }) => [id, workoutBlockContent(block)]));
+    const matched = new Set<string>();
+    return choices.map((choice) => {
+      const content = workoutBlockContent(choice.block);
+      const entry = candidates.find((item) => !matched.has(item.id) && (item.choiceId
+        ? item.choiceId === choice.id : content !== undefined && fingerprints.get(item.id) === content));
+      if (entry) matched.add(entry.id);
+      return { ...choice, entry, updated: !!entry && (content === undefined || content !== fingerprints.get(entry.id)) };
+    }).concat(selected.filter((item) => !matched.has(item.id))
+      .map((entry) => ({ id: entry.id, block: entry.block, entry, updated: false })));
+  }, [choices, selected]);
   const blocks = useMemo(() => selected.map((item) => item.block), [selected]);
   const gym = useLiveQuery(async () => ({ blocks, demos: await workoutPreview(db, blocks) }), [blocks]);
   const ordered = { name: name.trim(), blocks };
@@ -88,32 +94,38 @@ export function WorkoutEditor({ edit, onClose, fallbackFocus }: {
         </label>
         <h3>Add blocks in workout order</h3>
         <ul class="workout-choices" aria-label="Workout blocks">
-          {rows.map(({ id, block: source, entry }) => {
+          {rows.map(({ id, block: source, entry, updated }) => {
             const block = entry?.block ?? source;
             const Icon = icons[block.kind];
             const title = workoutBlockName(block);
             const index = entry ? selected.indexOf(entry) : -1;
-            const open = expanded === id;
+            const open = !!entry && expanded === entry.id;
+            const triggerId = `pick-${entry?.id ?? id}`;
             const repair = missingCoachedSchedule(block);
             const invalid = !repair && !!entry && !validAuthoredWorkout({ name: title, blocks: [block] });
             const warnings = gym?.blocks === blocks && index >= 0 ? gym.demos[index]?.filter((demo) => demo.status) : [];
             const canCopy = entry && id !== entry.id;
-            const updated = canCopy && workoutBlockContent(source) !== workoutBlockContent(block);
+            const focusTrigger = () => document.getElementById(triggerId)?.focus();
+            const move = (direction: -1 | 1) => {
+              if (!entry) return;
+              focusTrigger();
+              setSelected((items) => moveBlock(items, entry.id, direction));
+            };
             const remove = () => {
               setSelected((items) => items.filter((item) => item.id !== entry?.id));
               setExpanded(null);
               if (id === entry?.id) nameInput.current?.focus();
-              else document.getElementById(`pick-${id}`)?.focus();
+              else focusTrigger();
             };
             return (
               <li key={id} class="workout-choice" data-kind={block.kind}>
                 <div class="workout-choice-row">
                   <span class="workout-kind-tile"><Icon /></span>
                   <div class="workout-choice-text"><strong>{title}</strong><small>{durationLabel(orderedBlockMinutes(block) * 60)} · {workoutBlockKind[block.kind]}</small></div>
-                  <button id={`pick-${id}`} type="button" class="workout-pick"
+                  <button id={triggerId} type="button" class="workout-pick"
                     aria-label={entry ? `${title}, block ${index + 1}, actions` : `Add ${title}`}
                     aria-expanded={entry ? open : undefined} disabled={busy || (!entry && full)}
-                    onClick={() => entry ? setExpanded(open ? null : id) : setSelected((items) => [...items, copy(source, id)])}>
+                    onClick={() => entry ? setExpanded(open ? null : entry.id) : setSelected((items) => [...items, copy(source, id)])}>
                     <span>{entry ? index + 1 : <PlusIcon />}</span>
                   </button>
                 </div>
@@ -121,12 +133,16 @@ export function WorkoutEditor({ edit, onClose, fallbackFocus }: {
                 {invalid && <p class="workout-warning">Invalid timing or targets. Remove this block and fix its prescription in Blocks.</p>}
                 {!!warnings?.length && <p class="workout-warning">{[...new Set(warnings.map((demo) => demo.status))].join(' ')}</p>}
                 {open && entry && <div class="workout-actions workout-choice-actions">
-                  <button type="button" disabled={busy || index === 0} onClick={() => setSelected(moveBlock(selected, entry.id, -1))}>Move up</button>
-                  <button type="button" disabled={busy || index === selected.length - 1} onClick={() => setSelected(moveBlock(selected, entry.id, 1))}>Move down</button>
+                  <button type="button" disabled={busy || index === 0} onClick={() => move(-1)}>Move up</button>
+                  <button type="button" disabled={busy || index === selected.length - 1} onClick={() => move(1)}>Move down</button>
                   <button type="button" disabled={busy} onClick={remove}>Remove</button>
                   {canCopy && <button type="button" disabled={busy || full} onClick={() => setSelected((items) => [...items, copy(source, id)])}>Add another</button>}
-                  {updated && <button type="button" disabled={busy}
-                    onClick={() => setSelected((items) => items.map((item) => item === entry ? copy(source, id) : item))}>Replace with current block</button>}
+                  {updated && <button type="button" disabled={busy} onClick={() => {
+                    const replacement = copy(source, id);
+                    setSelected((items) => items.map((item) => item.id === entry.id ? replacement : item));
+                    setExpanded(null);
+                    focusTrigger();
+                  }}>Replace with current block</button>}
                 </div>}
               </li>
             );

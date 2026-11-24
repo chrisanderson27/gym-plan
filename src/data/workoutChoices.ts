@@ -4,7 +4,6 @@ import { newLiftBlock } from '../engine/templates';
 import { newId } from './ids';
 import { LIFT_EXERCISES } from './lift';
 import type { ExecutableCoachedBlock, LibraryBlock, LibraryStation, OrderedBlock, OrderedPrescription, OrderedSelfPacedBlock, OrderedStation, OrderedStrengthBlock, OrderedTimedBlock } from './types';
-import { snapshotValue } from './validate';
 
 export function copyWorkoutBlock(block: OrderedBlock, makeId = newId): OrderedBlock {
   const copy = structuredClone(block);
@@ -33,7 +32,7 @@ function strength(exerciseId: string, sets?: number): OrderedStrengthBlock {
   const { repMin, repMax } = LIFT_EXERCISES.get(exerciseId)!;
   const lift = newLiftBlock({ id: exerciseId, repMin, repMax }, () => exerciseId);
   return {
-    ...lift, kind: 'strength', equipmentId: phase3EquipmentId(exerciseId),
+    ...lift, kind: 'strength',
     sets: sets ?? lift.sets,
   };
 }
@@ -114,12 +113,42 @@ export const suggestedWorkouts: StarterWorkout[] = [
   },
 ];
 
-export function workoutBlockContent(block: OrderedBlock) {
-  return snapshotValue(copyWorkoutBlock(block, () => '_'));
+function stationContent({ exerciseId, equipmentId, load, target }: OrderedStation) {
+  return [exerciseId, equipmentId, load, target.unit, target.amount];
 }
+
+function blockContent(block: OrderedBlock): unknown[] {
+  switch (block.kind) {
+    case 'strength':
+      return [block.kind, block.exerciseId, block.equipmentId, block.sets, block.repMin, block.repMax,
+        block.targetWeight, block.restSec, block.rirTarget, block.label];
+    case 'coached':
+      return [block.kind, block.name, block.durationSec, block.workSec, block.restSec, block.transitionSec,
+        block.stations?.map(stationContent)];
+    case 'self-paced':
+      return [block.kind, block.name, block.durationSec, block.stations.map(stationContent)];
+    default:
+      return [block.kind, block.durationSec, block.instructions, block.exerciseId];
+  }
+}
+
+export function workoutBlockContent(block: OrderedBlock) {
+  // Longer historical text remains readable. It is too long to use for picker or suggestion matching.
+  let oversized = false;
+  const content = JSON.stringify(blockContent(block), (_, value) => {
+    if (typeof value !== 'string' || value.length <= 1024) return value;
+    oversized = true;
+    return undefined;
+  });
+  return oversized ? undefined : content;
+}
+
+const suggestionContent = suggestedWorkouts.map((suggestion) => suggestion.blocks.map(workoutBlockContent));
 
 export function matchingSuggestion(ordered: OrderedPrescription) {
   const content = ordered.blocks.map(workoutBlockContent);
-  return suggestedWorkouts.find((suggestion) => suggestion.blocks.length === content.length
-    && suggestion.blocks.every((block, index) => workoutBlockContent(block) === content[index]));
+  return suggestedWorkouts.find((_, index) => {
+    const starter = suggestionContent[index]!;
+    return starter.length === content.length && content.every((block, i) => block !== undefined && block === starter[i]);
+  });
 }

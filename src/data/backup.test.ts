@@ -268,6 +268,30 @@ describe('export/import', () => {
   });
 });
 
+it('round-trips an edited ordered workout with extra strength fields and valid legacy lifts', async () => {
+  const src = open();
+  const now = new Date('2026-11-22T12:00:00.000Z');
+  const strength = starterWorkoutBlocks.find((block) => block.kind === 'strength')!;
+  const baseline = { name: 'Restored strength', blocks: [{ ...strength, notes: 12, warmup: 'easy' }] };
+  const template = { id: 'portable', name: baseline.name, ordered: baseline, blocks: [],
+    type: 'custom', source: 'saved', createdAt: now.toISOString() };
+  await importExport(src, parseExport(JSON.stringify({ schemaVersion: 2, stores: { templates: [template] } })).file);
+  const sessionId = await startMixedSession(src, { templateId: template.id }, now);
+  const ordered = { ...baseline, name: 'Renamed strength' };
+  await saveOrderedWorkout(src, ordered, { id: template.id, baseline }, now);
+  const saved = (await src.templates.get(template.id))!;
+  const session = (await src.sessions.get(sessionId))!;
+  for (const block of [saved.blocks[0], session.blocks[0]]) {
+    expect.soft(block).toMatchObject({ kind: 'lift', sets: strength.sets, restSec: strength.restSec });
+    expect.soft(block).not.toHaveProperty('notes');
+    expect.soft(block).not.toHaveProperty('warmup');
+  }
+  const restored = open();
+  await importExport(restored, parseExport(JSON.stringify(await buildExport(src, now, 'test'))).file);
+  expect(await restored.templates.get(template.id)).toMatchObject({ ...template, name: ordered.name, ordered, blocks: saved.blocks });
+  expect((await restored.sessions.get(sessionId))?.mixed?.prescription).toEqual(baseline);
+});
+
 it('restores authored workouts and history after the source changes, keeping local v1 user rows', async () => {
   const src = open();
   await src.settings.put(settings({ programStart: '2026-07-01' }));

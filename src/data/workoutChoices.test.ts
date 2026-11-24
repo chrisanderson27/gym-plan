@@ -4,12 +4,12 @@ import { COACHED_EXERCISE_IDS, coachedEquipmentId, coachedPose, PHASE3_EXERCISE_
 import { stationUnits } from '../engine/block/progression';
 import { orderedDurationMin } from '../engine/templates';
 import { toBlockExercise } from './liftday';
-import { mixedOptions, startMixedSession, workoutPreview } from './mixedSession';
+import { mixedOptions, startMixedSession, updateMixedSession, workoutPreview } from './mixedSession';
 import { settings } from './p4-test-utils';
 import { saveOrderedWorkout } from './templates';
 import { openTestDb } from './test-utils';
 import type { OrderedSelfPacedBlock, OrderedStation } from './types';
-import { copyWorkoutBlock, libraryWorkoutBlock, matchingSuggestion, starterWorkoutBlocks, strengthWorkoutChoices, suggestedWorkouts } from './workoutChoices';
+import { copyWorkoutBlock, libraryWorkoutBlock, matchingSuggestion, starterWorkoutBlocks, strengthWorkoutChoices, suggestedWorkouts, workoutBlockContent } from './workoutChoices';
 
 let db: ReturnType<typeof openTestDb>;
 beforeEach(() => { db = openTestDb(); });
@@ -49,6 +49,59 @@ test('starter workouts match their durations and all offered movements resolve a
     expect(demo.status).toBeUndefined();
     expect(exerciseById.get(demo.exerciseId)?.cues.length).toBeGreaterThan(0);
   }
+});
+
+test('matches only known ordered fields, including nested station targets', () => {
+  const suggestion = suggestedWorkouts[0]!;
+  const blocks = suggestion.blocks.map((source) => {
+    const block = copyWorkoutBlock(source);
+    if (block.kind === 'coached') return block;
+    const extension = { importMetadata: { originalSource: 'archive' } };
+    return block.kind === 'self-paced' ? { ...block, ...extension,
+      stations: block.stations.map((station) => ({ ...station, ...extension, target: { ...station.target, ...extension } })),
+    } : { ...block, ...extension };
+  });
+  expect(matchingSuggestion({ name: suggestion.name, blocks })).toBe(suggestion);
+  const circuit = blocks.find((block) => block.kind === 'self-paced')!;
+  const station = circuit.stations[0]!;
+  expect(workoutBlockContent({ ...circuit, stations: [{ ...station, target: { ...station.target, amount: 5 } }, ...circuit.stations.slice(1)] }))
+    .not.toEqual(workoutBlockContent(circuit));
+  expect(workoutBlockContent({ ...circuit, name: 'x'.repeat(1025) })).toBeUndefined();
+  expect(workoutBlockContent({ ...circuit, stations: [{ ...station, exerciseId: 'x'.repeat(1025) }] })).toBeUndefined();
+  expect(workoutBlockContent({ id: 'legacy', kind: 'coached', name: 'Older rotation', durationSec: 120 })).toBeDefined();
+});
+
+test('repeats starter strength on the verified machine that logged the original sets', async () => {
+  const now = new Date('2026-11-22T12:00:00.000Z');
+  await db.settings.put(settings({ programStart: '2026-07-01' }));
+  const block = starterWorkoutBlocks.find((choice) => choice.kind === 'strength')!;
+  const ordered = { name: 'Leg press day', blocks: [block] };
+  const templateId = await saveOrderedWorkout(db, ordered, undefined, now);
+  const sessionId = await startMixedSession(db, { templateId }, now);
+  const first = (await db.sessions.get(sessionId))!.mixed!;
+  const { equipmentId, sets } = first.strength[block.id]!;
+  const seed = phase3EquipmentId(block.exerciseId)!;
+  expect(equipmentId).toBeTruthy();
+  expect(equipmentId).not.toBe(seed);
+  for (let slot = 0; slot < sets; slot++) {
+    const { cursor } = (await db.sessions.get(sessionId))!.mixed!;
+    await updateMixedSession(db, sessionId, cursor, { type: 'set', weight: 120, reps: 10,
+      expectedExerciseId: block.exerciseId, expectedEquipmentId: equipmentId }, new Date(+now + slot * 1000));
+  }
+  const { cursor } = (await db.sessions.get(sessionId))!.mixed!;
+  await updateMixedSession(db, sessionId, cursor, { type: 'continue' }, new Date(+now + 30_000));
+  await db.templates.delete(templateId);
+  const later = new Date(+now + 86_400_000);
+  const repeat = (await db.sessions.get(await startMixedSession(db, { sessionId }, later)))!;
+  expect(repeat.mixed!.prescription).toEqual(ordered);
+  expect(repeat.mixed!.strength[block.id]).toMatchObject({ equipmentId, targetWeight: 120 });
+  expect(await db.sets.where('sessionId').equals(repeat.id).count()).toBe(0);
+
+  const explicit = { name: 'Seed machine', blocks: [{ ...block, equipmentId: seed }] };
+  const pinned = await saveOrderedWorkout(db, explicit, undefined, now);
+  const ownMachine = (await db.sessions.get(await startMixedSession(db, { templateId: pinned }, later)))!;
+  expect(ownMachine.mixed!.prescription).toEqual(explicit);
+  expect(ownMachine.mixed!.strength[block.id]).toMatchObject({ equipmentId: seed, targetWeight: 0, label: 'Calibration' });
 });
 
 test('manual and imported station equipment/unit matrix only plays verified pairs', async () => {

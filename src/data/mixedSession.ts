@@ -17,7 +17,7 @@ import { newId } from './ids';
 import { blockPrescriptionPatch, ensureEquipmentInstance, LIFT_EXERCISES, loadLiftSnapshot, resolveEquipmentId } from './lift';
 import { toBlockExercise } from './liftday';
 import { loggedMixedSets, mixedSetId, reconcileMixedStrength } from './mixedSets';
-import { loadRunnable, orderedStrengthBlocks, replayLiftFlags } from './templates';
+import { loadRunnable, orderedStrengthToLift, replayLiftFlags } from './templates';
 import type { CoachedCheckpoint, EffectiveStation, LiftBlock, MixedCursor, MixedDraft, MixedExecution, MixedResult, MixedTimer,
   OrderedBlock, OrderedPrescription, OrderedStation, OrderedStrengthBlock, Session, SetRow } from './types';
 import { snapshotValue } from './validate';
@@ -160,7 +160,7 @@ async function acceptStrength(db: GymDb, g: Gym, block: OrderedStrengthBlock, ex
   const demo = availableDemo(g, exerciseId, original ? block.equipmentId : undefined);
   const lift = LIFT_EXERCISES.get(exerciseId);
   if (!exercise || !demo || !lift || lift.repMin < 1) return null;
-  const base = { ...block, kind: 'lift' as const, exerciseId, ...(!original ? { repMin: lift.repMin, repMax: lift.repMax } : {}) };
+  const base = { ...orderedStrengthToLift(block), exerciseId, ...(!original ? { repMin: lift.repMin, repMax: lift.repMax } : {}) };
   const patch = blockPrescriptionPatch(g.snapshot, exerciseId, demo.equipmentId, flags, undefined, base);
   const planned = flags.deload ? Math.min(block.sets, patch.sets ?? block.sets) : block.sets;
   const count = patch.label === 'Calibration' ? planned : strengthCapacity(g, exerciseId, done, planned);
@@ -194,10 +194,10 @@ export async function startMixedSession(db: GymDb, source: Source, now = new Dat
     const blocks: LiftBlock[] = [];
     for (const b of prescription.blocks) {
       if (b.kind === 'strength') {
-        const original = orderedStrengthBlocks({ name: prescription.name, blocks: [b] })[0]!;
         const accepted = await acceptStrength(db, g, b, b.exerciseId, flags, volume);
-        blocks.push(accepted ?? original);
-        const { exerciseId, equipmentId, sets, repMin, repMax, targetWeight, rirTarget, label } = accepted ?? original;
+        const lift = accepted ?? orderedStrengthToLift(b);
+        blocks.push(lift);
+        const { exerciseId, equipmentId, sets, repMin, repMax, targetWeight, rirTarget, label } = lift;
         mixed.strength = { ...mixed.strength, [b.id]: {
           exerciseId, equipmentId: accepted ? equipmentId : undefined, sets, repMin, repMax, targetWeight, rirTarget, label,
         } };

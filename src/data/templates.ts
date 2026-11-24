@@ -13,8 +13,8 @@ import { loadCardioSnapshot } from './cardio';
 import type { GymDb } from './db';
 import { newId } from './ids';
 import { LIFT_EXERCISES, blockPrescriptionPatch, loadLiftSnapshot, resolveEquipmentId, writeLiftSession } from './lift';
-import type { Block, LiftBlock, LiftVariant, OrderedPrescription, RunBlock, SessionType, Template } from './types';
-import { snapshotValue, validAuthoredWorkout } from './validate';
+import type { Block, LiftBlock, LiftVariant, OrderedPrescription, OrderedStrengthBlock, RunBlock, SessionType, Template } from './types';
+import { snapshotValue, validAuthoredWorkout, validateRows } from './validate';
 
 export interface Runnable {
   type: SessionType;
@@ -79,6 +79,7 @@ export async function saveOrderedWorkout(db: GymDb, draft: OrderedPrescription,
       id, name: ordered.name, type: 'custom', source: 'saved',
       createdAt: row?.createdAt ?? now.toISOString(), ordered, blocks: orderedStrengthBlocks(ordered),
     };
+    validateRows('templates', [saved]);
     if (edit) await db.templates.put(saved);
     else await db.templates.add(saved);
   });
@@ -116,8 +117,19 @@ export async function startFromBlocks(db: GymDb, r: Runnable, now = new Date()):
   }, now);
 }
 
+export function orderedStrengthToLift({ id, exerciseId, sets, repMin, repMax, equipmentId, targetWeight, restSec, rirTarget, label }: OrderedStrengthBlock): LiftBlock {
+  return {
+    id, kind: 'lift', exerciseId, sets, repMin, repMax,
+    ...(equipmentId === undefined ? {} : { equipmentId }),
+    ...(targetWeight === undefined ? {} : { targetWeight }),
+    ...(restSec === undefined ? {} : { restSec }),
+    ...(rirTarget === undefined ? {} : { rirTarget }),
+    ...(label === undefined ? {} : { label }),
+  };
+}
+
 export function orderedStrengthBlocks(ordered: OrderedPrescription): LiftBlock[] {
-  return ordered.blocks.flatMap((b) => b.kind === 'strength' ? [{ ...b, kind: 'lift' }] : []);
+  return ordered.blocks.flatMap((b) => b.kind === 'strength' ? [orderedStrengthToLift(b)] : []);
 }
 
 export function replayLiftFlags(snap: Awaited<ReturnType<typeof loadLiftSnapshot>>, now: Date) {
