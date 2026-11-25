@@ -9,7 +9,7 @@ import { WORKOUT_PRESETS } from '../../data/presets';
 import { copyWorkoutBlock, libraryWorkoutBlock, runWorkoutChoices, starterWorkoutBlocks, strengthWorkoutChoices, workoutBlockContent } from '../../data/workoutChoices';
 import { moveBlock, shortfallLabel, workoutShortfallSec } from '../../engine/templates';
 import { BlocksIcon, BookmarkIcon, CloseIcon, FlameIcon, LiftIcon, PlusIcon, RunIcon, SwapIcon, WindIcon } from '../icons';
-import { orderedDurationLabel, workoutBlockKind, workoutBlockName } from '../labels';
+import { NAME_MAX, orderedDurationLabel, workoutBlockKind, workoutBlockName } from '../labels';
 import { Sheet } from '../Sheet';
 
 const icons = { preparation: FlameIcon, strength: LiftIcon, coached: SwapIcon, 'self-paced': BlocksIcon, recovery: WindIcon, run: RunIcon };
@@ -70,7 +70,7 @@ export function WorkoutEditor({ edit, initial, onSaved, onClose, fallbackFocus }
   }, [choices, selected]);
   const blocks = useMemo(() => selected.map((item) => item.block), [selected]);
   const gym = useLiveQuery(async () => ({ blocks, demos: await workoutPreview(db, blocks) }), [blocks]);
-  const ordered = { name: name.trim(), blocks };
+  const ordered = { name: name.trim().slice(0, NAME_MAX), blocks };
   const shortfall = workoutShortfallSec(blocks);
   const canSave = validAuthoredWorkout(ordered) && shortfall === 0;
   const hasRun = blocks.some((block) => block.kind === 'run');
@@ -108,7 +108,7 @@ export function WorkoutEditor({ edit, initial, onSaved, onClose, fallbackFocus }
           <button type="button" class="workout-close" aria-label="Close workout builder" disabled={busy} onClick={close}><CloseIcon /></button>
         </header>
         <label class="workout-name">Workout name
-          <input ref={nameInput} required placeholder="e.g. Friday Strength" value={name} onInput={(event) => setName(event.currentTarget.value)} />
+          <input ref={nameInput} required maxLength={NAME_MAX} placeholder="e.g. Friday Strength" value={name} onInput={(event) => setName(event.currentTarget.value)} />
         </label>
         <h3>Add blocks in workout order</h3>
         <ul class="workout-choices" aria-label="Workout blocks">

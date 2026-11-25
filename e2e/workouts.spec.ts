@@ -156,7 +156,7 @@ async function saveBlock(page: Page, name: string, kind: 'self-paced' | 'coached
   await page.getByLabel('Block type').selectOption(kind);
   await button(page, 'Add exercise').click();
   await button(page.getByRole('dialog', { name: 'Add an exercise' }), pickerLabel).click();
-  await expect(page.getByRole('checkbox', { name: 'Use in workout recommendations' })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Include in my plan' })).not.toBeChecked();
   await button(page, 'Save to My Blocks').click();
   await expect(page.getByRole('link', { name, exact: true })).toBeVisible();
 }
@@ -213,7 +213,7 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   await page.getByRole('link', { name: 'Blocks' }).click();
   await page.getByRole('link', { name: 'Personal rotation', exact: true }).click();
   await page.getByLabel('Minutes').fill('15');
-  await page.getByRole('checkbox', { name: 'Use in workout recommendations' }).check();
+  await page.getByRole('checkbox', { name: 'Include in my plan' }).check();
   await button(page, 'Save to My Blocks').click();
   await expect(page.getByText('1 stations · 15 min · Coached rotation', { exact: true })).toBeVisible();
   await button(page, 'Remove Personal circuit').click();

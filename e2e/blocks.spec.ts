@@ -45,6 +45,7 @@ test('saves a named block and reopens the same targets', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Move Step-up to box up' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Move Romanian deadlift down' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Save to My Blocks' })).toBeDisabled();
+  await expect(page.getByLabel('Block name')).toHaveAttribute('maxlength', '60');
   await page.getByLabel('Block name').fill('Bench & Core');
   await expect(page.getByRole('button', { name: 'Save to My Blocks' })).toBeEnabled();
   await page.getByRole('button', { name: 'Save to My Blocks' }).click();
@@ -54,7 +55,7 @@ test('saves a named block and reopens the same targets', async ({ page }) => {
   await page.getByRole('link', { name: 'Bench & Core' }).click();
   await expect(page.getByLabel('Block name')).toHaveValue('Bench & Core');
   await expect(page.getByLabel('Minutes')).toHaveValue('8');
-  await expect(page.getByRole('checkbox', { name: 'Use in workout recommendations' })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Include in my plan' })).not.toBeChecked();
   await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Step-up to box', 'Leg press', 'Romanian deadlift']);
   await expect(page.getByLabel('Leg press target')).toHaveValue('10');
   await expect(page.getByLabel('Leg press unit')).toHaveValue('reps');
@@ -71,7 +72,7 @@ test('eligibility and targets survive a backup import', async ({ page, browser }
   await page.getByLabel('Block name').fill('Bench & Core');
   await addExercise(page, 'Leg press');
   await page.getByLabel('Leg press load (lb)').fill('140');
-  await page.getByRole('checkbox', { name: 'Use in workout recommendations' }).check();
+  await page.getByRole('checkbox', { name: 'Include in my plan' }).check();
   await page.getByRole('button', { name: 'Save to My Blocks' }).click();
   await page.getByRole('link', { name: 'Settings' }).click();
   const [download] = await Promise.all([
@@ -89,7 +90,7 @@ test('eligibility and targets survive a backup import', async ({ page, browser }
   await expect(fresh.getByTestId('backup-message')).toContainText('Imported');
   await fresh.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Blocks' }).click();
   await fresh.getByRole('link', { name: 'Bench & Core' }).click();
-  await expect(fresh.getByRole('checkbox', { name: 'Use in workout recommendations' })).toBeChecked();
+  await expect(fresh.getByRole('checkbox', { name: 'Include in my plan' })).toBeChecked();
   await expect(fresh.getByLabel('Leg press target')).toHaveValue('10');
   await expect(fresh.getByLabel('Leg press unit')).toHaveValue('reps');
   await expect(fresh.getByLabel('Leg press load (lb)')).toHaveValue('140');

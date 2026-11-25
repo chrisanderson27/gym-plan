@@ -11,7 +11,7 @@ export function RingHistory({ input }: { input: RingInput }) {
   const current = goal.range;
   const visible = [...weeks.slice(-7), { ...current, closed: false, frozen: false }];
   return (
-    <section aria-label="Weekly ring history">
+    <section class="card ring-card" aria-label="Weekly ring history">
       <p class="streak-big num" data-testid="progress-streak">{count}</p>
       <p>week streak</p>
       <p class="dim">{freezeAvailable ? 'Streak freeze available' : 'Streak freeze used recently'}</p>

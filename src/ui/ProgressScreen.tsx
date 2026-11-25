@@ -59,7 +59,7 @@ export function ProgressScreen() {
       </section>
       <BodyCard />
       {input && <RingHistory input={input} />}
-      <section class="progress-workouts" data-testid="my-workouts">
+      <section class="card progress-workouts" data-testid="my-workouts">
         <h2>My workouts</h2>
         <a class="btn" href="#/workouts">Workouts</a>
         <a class="btn" href="#/blocks">Blocks</a>

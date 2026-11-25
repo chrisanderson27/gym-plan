@@ -16,6 +16,7 @@ import { exerciseAllowed } from '../../engine/gym/eligibility';
 import { localDate } from '../../engine/dates';
 import { weekIndex } from '../../engine/week';
 import { CalendarIcon, CheckIcon, ChevronIcon, CloseIcon, EyeIcon, PlusIcon } from '../icons';
+import { NAME_MAX } from '../labels';
 import { StickFigure } from '../pose/StickFigure';
 import { useDemoPlayback } from '../pose/playback';
 import { navigate } from '../router';
@@ -174,7 +175,7 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
       return row;
     });
     const row: LibraryBlock = {
-      id: draft.id, name: draft.name.trim(), kind: draft.kind, durationSec: Number(draft.minutes) * 60,
+      id: draft.id, name: draft.name.trim().slice(0, NAME_MAX), kind: draft.kind, durationSec: Number(draft.minutes) * 60,
       stations, recommend: draft.recommend, createdAt, updatedAt: now,
     };
     if (draft.kind === 'coached') {
@@ -209,7 +210,7 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
         <div class="block-card">
           <label>
             Block name
-            <input value={draft.name} placeholder="e.g. Bench & Core" onInput={(e) => setDraft({ ...draft, name: e.currentTarget.value })} />
+            <input value={draft.name} maxLength={NAME_MAX} placeholder="e.g. Bench & Core" onInput={(e) => setDraft({ ...draft, name: e.currentTarget.value })} />
           </label>
           <div class="block-split">
             <label>
@@ -298,9 +299,9 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
                     </select>
                     {showLoad && (
                       <>
-                        <span aria-hidden="true">·</span>
-                        <input inputMode="decimal" aria-label={`${name} load (lb)`} value={station.load} onInput={(e) => patchStation(i, { load: e.currentTarget.value })} />
-                        <span>lb</span>
+                        {station.load.trim() !== '' && <span aria-hidden="true">·</span>}
+                        <input inputMode="decimal" aria-label={`${name} load (lb)`} placeholder="Load" value={station.load} onInput={(e) => patchStation(i, { load: e.currentTarget.value })} />
+                        {station.load.trim() !== '' && <span>lb</span>}
                       </>
                     )}
                   </div>
@@ -315,7 +316,7 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
             <p>{draft.kind === 'coached' ? COACHED_HELP : SELF_HELP}</p>
             <button type="button" class="block-row" disabled={!valid} onClick={() => setSheet('preview')}><EyeIcon /> Preview gym grid</button>
             <label class="check block-eligibility">
-              <span>Use in workout recommendations</span>
+              <span>Include in my plan</span>
               <input type="checkbox" checked={draft.recommend} onChange={(e) => setDraft({ ...draft, recommend: e.currentTarget.checked })} />
             </label>
             <p>{ELIGIBILITY_HELP}</p>

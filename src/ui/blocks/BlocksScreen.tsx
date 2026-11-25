@@ -24,7 +24,7 @@ export function BlocksScreen({ settings }: { settings: Settings }) {
       <p class="pref-eyebrow"><svg class="pref-dot" width="6" height="6" viewBox="0 0 6 6" aria-hidden="true" focusable="false"><circle cx="3" cy="3" r="3" fill="currentColor" /></svg>Training library</p>
       <h1>My Blocks</h1>
       <p class="pref-lead">Your favorite pieces, ready to mix and match.</p>
-      <a class="btn primary" href="#/blocks/new"><PlusIcon /> New block</a>
+      <a class="btn primary block-new" href="#/blocks/new"><PlusIcon /> New block</a>
       {rows && rows.length === 0 && (
         <section class="block-empty">
           <span class="block-empty-icon" aria-hidden="true"><LayersIcon /></span>
@@ -43,7 +43,7 @@ export function BlocksScreen({ settings }: { settings: Settings }) {
       </section>
       {(rows ?? []).map((row) => (
         <section key={row.id} class="card">
-          <a href={`#/blocks/${row.id}`}>{row.name}</a>
+          <a class="block-name" href={`#/blocks/${row.id}`}>{row.name}</a>
           <p>{row.stations.length} stations · {row.durationSec / 60} min · {kindLabel(row.kind)}</p>
           <button type="button" onClick={() => { void deleteLibraryBlock(db, row.id); }}>Remove {row.name}</button>
         </section>

@@ -9,6 +9,7 @@ import { findOpenLiftSession, findStaleOpenLifts } from './lift';
 import { findOpenMixedSession, mixedOptions, rateMixedSession, startMixedSession, updateMixedSession } from './mixedSession';
 import { COACHED_TEMPLATE, MIXED_AT, MIXED_TEMPLATE, PRIOR_LIFT, PRIOR_SET } from './mixedSession.test-fixture';
 import { settings } from './p4-test-utils';
+import { WORKOUT_PRESETS } from './presets';
 import { loadRingInput } from './plan';
 import { saveAsMine } from './templates';
 import { openTestDb } from './test-utils';
@@ -690,4 +691,15 @@ test('an active coached block rechecks equipment pairing while keeping its deadl
   expect((await current(id)).mixed!.timers).toEqual(original.timers);
   await action(id, { type: 'expire' }, rotation.durationSec * 1000);
   expect((await current(id)).mixed!.cursor.stage).toBe('review');
+});
+
+test('starting another preset discards an untouched open session but keeps one with progress', async () => {
+  const [a, b, c] = WORKOUT_PRESETS;
+  const first = await startMixedSession(db, { presetId: a!.id }, at());
+  const second = await startMixedSession(db, { presetId: b!.id }, at(1000));
+  expect(await db.sessions.get(first)).toBeUndefined();
+  await action(second, { type: 'skip' }, 2000);
+  const third = await startMixedSession(db, { presetId: c!.id }, at(3000));
+  expect(await db.sessions.get(second)).toBeDefined();
+  expect(await db.sessions.get(third)).toBeDefined();
 });

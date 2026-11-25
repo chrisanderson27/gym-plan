@@ -31,7 +31,7 @@ export function WorkoutPreview({ ordered, onClose, fallbackFocus, children }: {
       <div class="workout-preview">
         <header class="workout-dialog-head">
           <div>
-            <h2>{ordered.name}</h2>
+            <h2 class="workout-preview-name">{ordered.name}</h2>
             <p class="workout-meta">{orderedDurationLabel(ordered.blocks)} · {ordered.blocks.length} {ordered.blocks.length === 1 ? 'block' : 'blocks'}</p>
           </div>
           <button type="button" class="workout-close" aria-label="Close preview" onClick={onClose}><CloseIcon /></button>

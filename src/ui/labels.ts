@@ -181,3 +181,6 @@ export function workoutBlockName(block: OrderedBlock) {
   if (block.kind === 'recovery') return 'Cool-down';
   return mixedBlockName(block);
 }
+
+/** Longest workout or block name the builders accept. */
+export const NAME_MAX = 60;

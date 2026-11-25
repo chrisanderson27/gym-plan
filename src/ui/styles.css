@@ -400,7 +400,7 @@ html { scroll-padding-bottom: calc(var(--tab-height) + var(--s-2) + env(safe-are
 .activity-icon { color: var(--activity-color); display: inline-flex; align-items: center; }
 .week-strip { display: grid; grid-template-columns: repeat(7, 1fr); list-style: none; margin: 0; padding: 0; }
 .week-strip li { display: grid; justify-items: center; align-content: center; gap: var(--s-1); min-height: var(--tap); border-radius: var(--s-2); }
-.week-strip [aria-current='date'] { box-shadow: inset 0 0 0 2px var(--color-link); font-weight: var(--weight-semibold); }
+.week-strip [aria-current='date'] { box-shadow: inset 0 0 0 2px var(--shell-action-active); font-weight: var(--weight-semibold); }
 .hero {
   display: grid; align-items: end; padding: var(--s-3); min-height: 240px;
   border-radius: var(--s-3); background: var(--color-surface); border: 1px solid var(--color-border-subtle);
@@ -507,7 +507,8 @@ button.block-station { border-radius: var(--radius); }
 /* Progress (P5) */
 .progress-screen > .card { margin: var(--s-3) 0; }
 .progress-workouts { display: grid; gap: var(--s-1); }
-.progress-workouts > .btn { justify-self: start; margin: 0; }
+.progress-workouts > .btn { justify-self: start; margin: 0; border-radius: 10px; border-color: var(--shell-line); color: var(--shell-ink); font-weight: 800; font-size: 13px; }
+.progress-workouts h2 { color: var(--shell-ink); }
 .history-cards {
   display: grid; gap: var(--s-1); list-style: none; padding: 0; margin: var(--s-2) 0;
 }
@@ -531,7 +532,7 @@ button.block-station { border-radius: var(--radius); }
 .ring-history li { display: grid; justify-items: center; gap: var(--s-1); border-radius: var(--radius); }
 .ring-history svg { max-width: 100%; }
 .ring-history [data-state='current'] {
-  box-shadow: inset 0 0 0 2px var(--color-link); color: var(--color-text-primary); font-weight: var(--weight-semibold);
+  box-shadow: inset 0 0 0 2px var(--shell-action-active); color: var(--color-text-primary); font-weight: var(--weight-semibold);
 }
 .trend-chart { display: block; }
 .trend-chart text { fill: var(--color-text-secondary); font-size: var(--text-12); }
@@ -609,6 +610,7 @@ button.block-station { border-radius: var(--radius); }
   width: 5ch; flex: 0 1 auto; min-width: 0; max-width: 100%; margin: 0; padding: 0; border: 0; background: transparent;
 }
 .block-chip select { width: 7ch; }
+.block-chip input::placeholder { color: var(--shell-secondary); }
 .block-row {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%; margin: 12px 0 0; border-radius: 10px;
@@ -709,6 +711,8 @@ button.block-station { border-radius: var(--radius); }
 .workout-actions .primary:hover:not(:disabled), .workouts .workout-new:hover:not(:disabled), .workouts .workout-save:hover:not(:disabled) {
   background: var(--shell-action); color: var(--shell-ink);
 }
+.block-new:not(:disabled), .block-new:visited { color: var(--shell-ink); background: var(--shell-lime); border-color: var(--shell-action-active); }
+.block-new:hover { background: var(--shell-action); color: var(--shell-ink); }
 .workouts .workout-save:disabled { background: var(--shell-tab-wash); color: var(--shell-secondary); }
 .workout-actions button:not(.primary):not(:disabled), .workout-actions .btn:not(.primary) {
   background: var(--shell-bg); color: var(--shell-ink); border-color: var(--shell-line);
@@ -984,3 +988,8 @@ html:has(.training-screen + .tab-bar) {
 .training-trend strong { color: var(--shell-exclude); font: 700 13px/20px var(--font-mono); }
 .training-trend .trend-chart { width: calc(100% - 2 * clamp(22px, 10.5vw, 42px)); height: 76px; margin-inline: auto; }
 .training-trend .trend-line { stroke: var(--shell-exclude); stroke-width: 2.5; }
+
+/* Long names never break headers: clamp to two lines */
+.session-bar h1, .workout-card h2, .workout-card h3, .block-name, .workout-preview-name {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
+}
