@@ -1,7 +1,12 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { FULL_WORKOUT_MIN_SEC, orderedDurationSec } from '../engine/templates';
 import { buildExport, importExport, parseExport } from './backup';
 import { loadCardioSnapshot } from './cardio';
+
+vi.mock('./cardio', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./cardio')>();
+  return { ...original, loadCardioSnapshot: vi.fn(original.loadCardioSnapshot) };
+});
 import { MixedInputError, ShortWorkoutError, startMixedSession, updateMixedSession, rateMixedSession } from './mixedSession';
 import { settings } from './p4-test-utils';
 import { loadRingInput } from './plan';
@@ -136,13 +141,16 @@ test('the preview note appears only when a guardrail would shorten the run', asy
   expect((await acceptedPlanNotes(db, [run(3300)], at()))[0]).toMatch(/running limits/);
 });
 
-test('a run in a lower-body workout says it becomes a bike, and a malformed block is not swallowed', async () => {
+test('a run in a lower-body workout says it becomes a bike, and a malformed block falls back with a warning', async () => {
   const { acceptedPlanNotes } = await import('./mixedSession');
   const run: OrderedBlock = { id: 'r', kind: 'run', name: 'Run', runKind: 'easy', modality: 'run', durationSec: 1200 };
   const squat: OrderedBlock = { id: 's', kind: 'strength', exerciseId: 'leg-press', sets: 3, repMin: 8, repMax: 10 };
   expect((await acceptedPlanNotes(db, [squat, run], at()))[1]).toMatch(/bike instead of run/);
   expect((await acceptedPlanNotes(db, [run], at()))[0]).toBeUndefined();
-  await expect(acceptedPlanNotes(db, [null as unknown as OrderedBlock], at())).rejects.toBeInstanceOf(TypeError);
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  expect(await acceptedPlanNotes(db, [null as unknown as OrderedBlock], at())).toEqual([undefined]);
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining('acceptedPlanNotes'), expect.any(TypeError));
+  warn.mockRestore();
 });
 
 test('the preview card shows the planned bike, not the authored run, on a lower-body day', async () => {
@@ -160,9 +168,12 @@ test('the preview card shows the planned bike, not the authored run, on a lower-
 test('a throwing run planner does not blank the preview: cards fall back to the authored modality', async () => {
   const { workoutPreview } = await import('./mixedSession');
   const { runExerciseId } = await import('../content/stationDemos');
-  let reads = 0;
-  const run = { id: 'r', kind: 'run', name: 'Run', runKind: 'easy', durationSec: 1200,
-    get modality() { if (reads++ === 0) throw new Error('planner boom'); return 'run'; } } as unknown as OrderedBlock;
+  const run: OrderedBlock = { id: 'r', kind: 'run', name: 'Run', runKind: 'easy', modality: 'run', durationSec: 1200 };
+  const boom = new Error('planner boom');
+  vi.mocked(loadCardioSnapshot).mockRejectedValueOnce(boom);
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   const cards = await workoutPreview(db, [run], at());
   expect(cards[0]![0]!.exerciseId).toBe(runExerciseId('run'));
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining('workoutPreview'), boom);
+  warn.mockRestore();
 });

@@ -139,11 +139,19 @@ export async function workoutPreview(db: GymDb, blocks: OrderedBlock[], now = ne
 /** The blocks Start would plan today (run modality can swap on a lower-body day), or undefined when it cannot plan them. */
 async function plannedRuns(db: GymDb, g: Gym, blocks: OrderedBlock[], now: Date) {
   if (!blocks.some((b) => b.kind === 'run')) return undefined;
+  return (await tryPrepareOrderedStart(db, g, blocks, now, 'workoutPreview'))?.blocks;
+}
+
+/**
+ * Best-effort planning shared by the preview paths. Expected MixedInputErrors fall back silently; anything else is a
+ * planner bug, so it falls back too but is logged with console.warn (the app has no other diagnostics channel).
+ */
+async function tryPrepareOrderedStart(db: GymDb, g: Gym, blocks: OrderedBlock[], now: Date, label: string) {
   try {
-    return prepareOrderedStart(g, { name: 'preview', blocks }, 'preview', now, false, await loadCardioSnapshot(db, now))?.blocks;
+    const runInputs = blocks.some((b) => b.kind === 'run') ? await loadCardioSnapshot(db, now) : undefined;
+    return prepareOrderedStart(g, { name: 'preview', blocks }, 'preview', now, false, runInputs);
   } catch (error) {
-    // A preview is best-effort: any planner failure falls back to the authored modality.
-    if (!(error instanceof MixedInputError)) console.warn('workoutPreview: planning failed, using authored run modality', error);
+    if (!(error instanceof MixedInputError)) console.warn(`${label}: planning failed, falling back to the authored plan`, error);
     return undefined;
   }
 }
@@ -152,14 +160,8 @@ async function plannedRuns(db: GymDb, g: Gym, blocks: OrderedBlock[], now: Date)
 export async function acceptedPlanNotes(db: GymDb, blocks: OrderedBlock[], now = new Date()): Promise<(string | undefined)[]> {
   if (!blocks.length) return [];
   const g = await loadMixedGym(db, now);
-  const runInputs = blocks.some((b) => b.kind === 'run') ? await loadCardioSnapshot(db, now) : undefined;
-  let prepared: ReturnType<typeof prepareOrderedStart>;
-  try {
-    prepared = prepareOrderedStart(g, { name: 'preview', blocks }, 'preview', now, false, runInputs);
-  } catch (error) {
-    if (!(error instanceof MixedInputError)) throw error;
-    return blocks.map(() => undefined);
-  }
+  const prepared = await tryPrepareOrderedStart(db, g, blocks, now, 'acceptedPlanNotes');
+  if (!prepared) return blocks.map(() => undefined);
   return blocks.map((block) => {
     if (block.kind === 'strength') {
       const sets = prepared?.mixed.strength[block.id]?.sets;

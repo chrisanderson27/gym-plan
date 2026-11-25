@@ -161,7 +161,7 @@ export const runWorkoutChoices: OrderedRunBlock[] = [
   { id: 'run-intervals-20', kind: 'run', name: 'Run intervals · 20 min', runKind: 'intervals', modality: 'run', durationSec: 1200 },
 ];
 
-/** Maps a legacy (non-ordered) saved workout into an editable draft. Interval, circuit and swim blocks are not carried over. */
+/** Maps a legacy (non-ordered) saved workout into an editable draft. Circuits become self-paced blocks; interval and swim blocks are not carried over. */
 export function legacyWorkoutDraft(runnable: { name: string; blocks: Block[] }, makeId = newId): { draft: OrderedPrescription; dropped: string[] } {
   const blocks: OrderedBlock[] = [];
   const dropped: string[] = [];
@@ -178,6 +178,11 @@ export function legacyWorkoutDraft(runnable: { name: string; blocks: Block[] }, 
       const sec = b.repeats * b.segments.reduce((n, seg) => n + (seg.sec ?? 0), 0);
       blocks.push({ id: makeId(), kind: 'run', name: b.runKind === 'intervals' ? 'Run intervals' : 'Easy run', runKind: b.runKind === 'intervals' ? 'intervals' : 'easy',
         modality: b.modality === 'bike' || b.modality === 'row' ? b.modality : 'run', durationSec: Math.min(3600, Math.max(300, Math.round(sec))) });
+    } else if (b.kind === 'circuit' && b.stations.length) {
+      const stations = b.stations.slice(0, 6).map(({ exerciseId, equipmentId, load, target }): OrderedStation => ({
+        slotId: makeId(), exerciseId, target: { unit: target.unit, amount: target.amount },
+        ...(load === undefined ? {} : { load }), ...(equipmentId === undefined ? {} : { equipmentId }) }));
+      blocks.push({ id: makeId(), kind: 'self-paced', name: b.label ?? 'Circuit', durationSec: Math.min(3600, Math.max(60, Math.round(b.durationSec))), stations });
     } else dropped.push(b.kind);
   }
   return { draft: { name: runnable.name, blocks }, dropped: [...new Set(dropped)] };
