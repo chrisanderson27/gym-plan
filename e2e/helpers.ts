@@ -1,28 +1,32 @@
 import { expect, type Page } from '@playwright/test';
-import { ACTIVITIES, type Activity } from '../src/engine/plan/activities';
-import type { GoalDirection } from '../src/data/types';
+import type { Activity } from '../src/engine/plan/activities';
 
 export const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-interface OnboardingOptions {
-  bodyweight?: string;
+interface FirstLaunchOptions {
   activities?: Activity[];
-  direction?: GoalDirection;
-  target?: string;
 }
 
-export async function onboard(page: Page, { bodyweight = '247.2', activities = [...ACTIVITIES], direction = 'lose', target = '220' }: OnboardingOptions = {}) {
+/** First launch: the app seeds default settings and opens on Today. `activities` overwrites the stored list when given. */
+export async function onboard(page: Page, { activities }: FirstLaunchOptions = {}) {
   await page.goto('./');
-  await page.getByRole('button', { name: 'Get started' }).click();
-  for (const activity of ACTIVITIES) {
-    if (!activities.includes(activity)) await page.getByTestId(`onb-act-${activity}`).click();
-  }
-  await page.getByRole('button', { name: 'Next' }).click();
-  await page.getByLabel('Bodyweight (lb)').fill(bodyweight);
-  await page.getByRole('button', { name: 'Next' }).click();
-  await page.getByRole('group', { name: 'Goal direction' }).getByRole('button', { name: direction }).click();
-  await page.getByLabel('Target weight (lb)').fill(target);
-  await page.getByRole('button', { name: 'Start' }).click();
+  await expect(page.getByTestId('hero')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Get started' })).toHaveCount(0);
+  if (!activities) return;
+  await page.evaluate((list) => new Promise<void>((resolve, reject) => {
+    const open = indexedDB.open('gym-plan');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const tx = db.transaction('settings', 'readwrite');
+      const store = tx.objectStore('settings');
+      const read = store.get('settings');
+      read.onsuccess = () => store.put({ ...read.result, activities: list, updatedAt: new Date().toISOString() });
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    };
+  }), activities);
+  await page.reload();
   await expect(page.getByTestId('hero')).toBeVisible();
 }
 

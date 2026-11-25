@@ -91,7 +91,7 @@ export function SwimScreen() {
     <main class="screen">
       <header class="bar">
         <h1>Swim</h1>
-        <a class="gear" href="#/">Home</a>
+        <a class="gear" href="#/settings">Preferences</a>
         <MoreMenu feedback={{ kind: 'workout', context: { templateId: workout.id } }} />
       </header>
       <section class="plan-card" data-activity="swim" data-testid="swim-plan">

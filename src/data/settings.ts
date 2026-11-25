@@ -1,8 +1,8 @@
 import { EQUIPMENT_PREFS } from '../content/equipment-prefs';
 import { localDate } from '../engine/dates';
-import { enabled, type Activity } from '../engine/plan/activities';
+import { enabled } from '../engine/plan/activities';
 import type { GymDb } from './db';
-import type { GoalDirection, PoolUnit, Settings } from './types';
+import type { PoolUnit, Settings } from './types';
 
 export const DEFAULT_POOL_LENGTH = 25;
 
@@ -41,39 +41,22 @@ export async function toggleUnavailableEquipment(
   });
 }
 
-export interface OnboardingInput {
-  bodyweightLb: number;
-  goalWeightLb: number;
-  goalDirection: GoalDirection;
-  activities: Activity[];
-}
-
-export function onboardingGoalError(bodyweightLb: number, goalWeightLb: number, direction: GoalDirection): string | undefined {
-  if (!Number.isFinite(goalWeightLb) || goalWeightLb <= 0) return 'Enter a target weight.';
-  if (direction === 'lose' && goalWeightLb >= bodyweightLb) return 'Target weight must be below your bodyweight.';
-  if (direction === 'gain' && goalWeightLb <= bodyweightLb) return 'Target weight must be above your bodyweight.';
-}
-
-export async function completeOnboarding(db: GymDb, input: OnboardingInput, now = new Date()): Promise<void> {
-  const error = onboardingGoalError(input.bodyweightLb, input.goalWeightLb, input.goalDirection);
-  if (error) throw new Error(error);
-  const iso = now.toISOString();
-  const today = localDate(now);
-  await db.transaction('rw', db.settings, db.bodyLogs, async () => {
+/**
+ * First launch: seed a default row so Today opens with no setup questions. No goal, activities or weight row are written;
+ * the epoch updatedAt makes any imported settings row win on a new device.
+ */
+export async function ensureDefaultSettings(db: GymDb, now = new Date()): Promise<void> {
+  await db.transaction('rw', db.settings, async () => {
+    if (await db.settings.get('settings')) return;
     await db.settings.put({
       id: 'settings',
-      goalWeightLb: input.goalWeightLb,
-      startWeightLb: input.bodyweightLb,
       daysPerWeek: 5,
-      goalDirection: input.goalDirection,
-      activities: input.activities,
       weightUnit: 'lb',
       distanceUnit: 'mi',
-      programStart: today,
-      onboardedAt: iso,
+      programStart: localDate(now),
+      onboardedAt: now.toISOString(),
       backupAt: null,
-      updatedAt: iso,
+      updatedAt: new Date(0).toISOString(),
     });
-    await db.bodyLogs.put({ date: today, weightLb: input.bodyweightLb, protein: false });
   });
 }

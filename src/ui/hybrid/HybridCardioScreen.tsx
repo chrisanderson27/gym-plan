@@ -28,7 +28,7 @@ export function HybridCardioScreen({ sessionId }: { sessionId: string }) {
       <main class="screen">
         <header class="bar">
           <h1>Session not found</h1>
-          <a href="#/hybrid">Back to Hybrid</a>
+          <a href="#/">Back to Today</a>
           <MoreMenu feedback={{ kind: 'workout', context: {} }} />
         </header>
       </main>

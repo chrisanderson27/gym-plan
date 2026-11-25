@@ -1,13 +1,10 @@
 import { expect, it, vi } from 'vitest';
-import { BURN_TEMPLATES } from '../../content/burn-templates';
 import { useLiveQuery } from '../../data/live';
 import type { Runnable } from '../../data/templates';
-import { BurnScreen, burnBudgets } from '../cardio/BurnScreen';
 import { TemplateRunScreen } from './TemplateRunScreen';
 
 vi.mock('../../data/live', () => ({ useLiveQuery: vi.fn() }));
 
-const templateId = BURN_TEMPLATES[1]!.id;
 const blocks: Runnable['blocks'] = [
   { id: 'warmup', kind: 'lift', warmup: true, exerciseId: 'rower', sets: 1, repMin: 0, repMax: 0 },
   {
@@ -17,25 +14,14 @@ const blocks: Runnable['blocks'] = [
 ];
 
 it.each([
-  { source: { sessionId: 'history-burn' }, storedId: templateId, expectedId: templateId },
-  { source: { templateId: 'saved-burn' }, storedId: 'saved-burn', expectedId: undefined },
-])('opens a fresh Burn plan for $storedId even when the source starts with a lift block', ({ source, storedId, expectedId }) => {
-  const run: Runnable = { type: 'burn', templateId: storedId, name: 'Prior Burn', blocks };
+  { sessionId: 'history-burn' },
+  { templateId: 'saved-burn' },
+])('a legacy Burn row repeats through the conversion state, not a standalone chooser (%o)', (source) => {
+  const run: Runnable = { type: 'burn', templateId: 'saved-burn', name: 'Prior Burn', blocks };
   vi.mocked(useLiveQuery).mockReturnValue({ run, snap: {} });
 
   const screen = TemplateRunScreen(source);
-  expect(screen.type).toBe(BurnScreen);
-  expect(screen.props).toEqual({ templateId: expectedId, minBudgetMin: 45 });
-});
-
-it('a fresh Burn Repeat never offers a budget under the 45-minute floor', () => {
-  expect(burnBudgets(45)).toEqual([45, 55, 60]);
-  expect(burnBudgets()).toContain(30);
-});
-
-it('the standalone Burn route never offers a budget under the 45-minute floor', async () => {
-  const { CardioRoutes } = await import('../cardio/CardioRoutes');
-  const screen = CardioRoutes({ route: '/burn', settings: {} as never });
-  expect(screen.type).toBe(BurnScreen);
-  expect(screen.props).toMatchObject({ minBudgetMin: 45 });
+  expect(typeof screen.type).toBe('function');
+  expect((screen.type as { name: string }).name).toBe('LegacyAgain');
+  expect(screen.props.run).toBe(run);
 });

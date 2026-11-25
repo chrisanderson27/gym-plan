@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ACTIVITIES } from '../src/engine/plan/activities';
+import { openLegacyLift } from './fixtures';
 import { chooseAnother, emojiText, expectTrainingInventory, localDay, onboard, pageWidth, primaryCount, seedBackup, tooSmall } from './helpers';
 
 const now = new Date(2026, 10, 19, 12);
@@ -26,27 +26,7 @@ async function screenRules(page: Page) {
   await expect(page.locator('[data-testid^="feedback-"]:not([role="dialog"] *, [data-testid="developer"] *)')).toHaveCount(0);
 }
 
-test('legacy onboarding needs an activity and Maintain prefills its target', async ({ page }) => {
-  await page.goto('./');
-  await page.getByRole('button', { name: 'Get started' }).click();
-  for (const activity of ACTIVITIES) await page.getByTestId(`onb-act-${activity}`).click();
-  await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled();
-  await expect(page.getByRole('status')).toHaveText('Choose at least one activity.');
-  await page.getByTestId('onb-act-burn').click();
-  await page.getByRole('button', { name: 'Next' }).click();
-  await page.getByLabel('Bodyweight (lb)').fill('205');
-  await page.getByRole('button', { name: 'Next' }).click();
-  await expect(page.getByLabel('Target weight (lb)')).toBeEmpty();
-  await page.getByRole('button', { name: 'Maintain' }).click();
-  await expect(page.getByLabel('Target weight (lb)')).toHaveValue('205');
-  await page.getByRole('button', { name: 'Start' }).click();
-  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'unavailable');
-  await expect(page.getByTestId('weekly-goal')).toContainText('0 of 2 sessions');
-  await expectTrainingInventory(page);
-  await chooseAnother(page);
-});
-
-for (const theme of ['light', 'dark'] as const) {
+for (const theme of ['light'] as const) {
   test(`Today states and screen rules at 390×844 in ${theme}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.clock.setFixedTime(now);
@@ -54,22 +34,10 @@ for (const theme of ['light', 'dark'] as const) {
       await screenRules(page);
       await page.screenshot({ scale: 'css', path: testInfo.outputPath(`${name}-${theme}.png`) });
     };
-    await page.goto('./');
-    await expect(page.getByRole('button', { name: 'Get started' })).toBeVisible();
-    await page.locator('html').evaluate((html, value) => html.setAttribute('data-theme', value), theme);
-    await capture('onboarding-welcome');
-    await page.getByRole('button', { name: 'Get started' }).click();
-    await capture('onboarding-activities');
-    await page.getByRole('button', { name: 'Next' }).click();
-    await capture('onboarding-bodyweight');
-    await page.getByLabel('Bodyweight (lb)').fill('247.2');
-    await page.getByRole('button', { name: 'Next' }).click();
-    await capture('onboarding-goal');
-    await page.getByLabel('Target weight (lb)').fill('220');
-    await page.getByRole('button', { name: 'Start' }).click();
+    await onboard(page);
+    await capture('first-launch');
 
     await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }).click();
-    await page.getByLabel('Appearance').selectOption(theme);
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     const developer = page.getByTestId('developer');
     await expect(developer).not.toHaveAttribute('open', '');
@@ -136,39 +104,31 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('Progress opens History, Workouts, Blocks and weekly volume', async ({ page }) => {
+test('Progress opens History, Workouts and Blocks, with no weekly volume link', async ({ page }) => {
   await onboard(page);
   for (const [name, heading] of [
-    ['All history', 'History'], ['Workouts', 'My Workouts'], ['Blocks', 'My Blocks'], ['Weekly volume', /Week \d+ volume/],
+    ['All history', 'History'], ['Workouts', 'My Workouts'], ['Blocks', 'My Blocks'],
   ] as const) {
     await page.goto('./#/progress');
     await expectTrainingInventory(page);
     await page.locator('main').getByRole('link', { name, exact: true }).click();
     await expect(page.locator('main h1')).toContainText(heading);
   }
+  await page.goto('./#/progress');
+  await expect(page.getByTestId('progress-link-volume')).toHaveCount(0);
 });
 
-test('run links select long and intervals directly and after an in-app route change', async ({ page }) => {
+test('standalone run URLs redirect to Workouts', async ({ page }) => {
   await onboard(page);
-  await page.goto('./#/run/long');
-  await expect(page.getByTestId('run-kind')).toContainText('Long');
-  await page.goto('./#/run/intervals');
-  await expect(page.getByTestId('run-kind')).toContainText('Intervals');
-  await page.goto('./#/run');
-  await expect(page.getByTestId('run-kind')).toContainText('Easy');
-  await page.evaluate(() => { location.hash = '#/run/long'; });
-  await expect(page.getByTestId('run-kind')).toContainText('Long');
-  await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
+  for (const url of ['./#/run', './#/run/long', './#/run/intervals']) {
+    await page.goto(url);
+    await expect(page).toHaveURL(/#\/workouts$/);
+    await expect(page.getByRole('heading', { name: 'My Workouts', exact: true })).toBeVisible();
+  }
 });
 
-test('a 205 lb gain trend has not reached 220 lb', async ({ page }) => {
-  await onboard(page, { bodyweight: '205', direction: 'gain' });
-  await page.goto('./#/weigh-in');
-  await expect(page.getByTestId('body-eta')).toHaveText('not trending up');
-});
-
-for (const theme of ['light', 'dark'] as const) {
-  test(`legacy full lift route opens the first set in ${theme}`, async ({ page }) => {
+for (const theme of ['light'] as const) {
+  test(`an open legacy lift resumes from Today to its first set in ${theme}`, async ({ page }) => {
     await page.clock.setFixedTime(now);
     await onboard(page);
     const previous = { ...session('past-lift', 3), variant: 'upper-a' };
@@ -176,15 +136,14 @@ for (const theme of ['light', 'dark'] as const) {
       settings: [settings({ activities: ['lift'], appearance: theme })], sessions: [previous], sets: [{ ...set(previous.id), exerciseId: 'leg-press' }],
     });
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    await seedBackup(page, { sessions: [openLegacyLift({ variant: 'lower-a', now, programStart: localDay(date(5)), history: [{ session: previous as never, sets: [{ ...set(previous.id), exerciseId: 'leg-press' } as never] }] })] });
     await page.getByRole('link', { name: 'Today' }).click();
-    await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'workout');
-    await page.goto('./#/lift/start/lower-a');
-    await expect(page.getByTestId('start-lift')).toBeVisible();
+    await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'resume');
     await page.evaluate(() => {
       document.body.dataset.taps = '0';
       document.addEventListener('click', () => { document.body.dataset.taps = String(Number(document.body.dataset.taps) + 1); });
     });
-    await page.getByTestId('start-lift').click();
+    await page.getByTestId('start').click();
     await expect(page).toHaveURL(/#\/lift\/session\//);
     await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
     await page.getByTestId('warmup-done').click();

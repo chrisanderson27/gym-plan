@@ -63,7 +63,6 @@ export function ProgressScreen() {
         <h2>My workouts</h2>
         <a class="btn" href="#/workouts">Workouts</a>
         <a class="btn" href="#/blocks">Blocks</a>
-        <a class="btn" href="#/progress/volume" data-testid="progress-link-volume">Weekly volume</a>
       </section>
     </div>
   </main>;

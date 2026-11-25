@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { completeOnboarding, enabledActivities, getSettings, poolOf, saveSettings, toggleUnavailableEquipment } from './settings';
+import { enabledActivities, ensureDefaultSettings, getSettings, poolOf, saveSettings, toggleUnavailableEquipment } from './settings';
 import { openTestDb } from './test-utils';
 
 const dbs: ReturnType<typeof openTestDb>[] = [];
@@ -7,42 +7,39 @@ afterEach(async () => {
   await Promise.all(dbs.splice(0).map((d) => d.delete()));
 });
 
-describe('settings', () => {
-  it.each([
-    ['lose', 260, 'below'], ['lose', 250, 'below'],
-    ['gain', 240, 'above'], ['gain', 250, 'above'],
-  ] as const)('rejects a %s target of %i lb for a 250 lb starter', async (goalDirection, goalWeightLb, side) => {
-    const db = openTestDb();
-    dbs.push(db);
-    await expect(completeOnboarding(db, { bodyweightLb: 250, goalWeightLb, goalDirection, activities: ['lift'] }))
-      .rejects.toThrow(`Target weight must be ${side} your bodyweight.`);
-    expect(await getSettings(db)).toBeUndefined();
-    expect(await db.bodyLogs.count()).toBe(0);
-  });
+const seeded = async (now = new Date(2026, 10, 1)) => {
+  const db = openTestDb();
+  dbs.push(db);
+  await ensureDefaultSettings(db, now);
+  return db;
+};
 
-  it('completeOnboarding anchors programStart to the local date and logs bodyweight', async () => {
-    const db = openTestDb();
-    dbs.push(db);
-    const now = new Date(2026, 10, 17, 9, 30); // local time
-    await completeOnboarding(db, { bodyweightLb: 247.2, goalWeightLb: 220, goalDirection: 'lose', activities: ['burn'] }, now);
+describe('settings', () => {
+  it('ensureDefaultSettings seeds a local-date row with no goal, activities or weight', async () => {
+    const db = await seeded(new Date(2026, 10, 17, 9, 30));
     const s = await getSettings(db);
     expect(s?.programStart).toBe('2026-11-17');
     expect(s?.daysPerWeek).toBe(5);
-    expect(s?.goalDirection).toBe('lose');
-    expect(enabledActivities(s)).toEqual(['burn']);
+    expect(s).not.toHaveProperty('goalWeightLb');
+    expect(s).not.toHaveProperty('activities');
+    expect(enabledActivities(s)).toEqual(['lift', 'burn', 'run', 'swim']);
     expect(poolOf(s)).toBeNull();
-    expect(s).not.toHaveProperty('poolLength');
-    expect(s).not.toHaveProperty('poolUnit');
     expect(s?.backupAt).toBeNull();
-    expect(s).not.toHaveProperty('soundCues');
-    expect(s).not.toHaveProperty('unavailableEquipment');
-    expect(s?.onboardedAt).toBe(now.toISOString());
-    expect(await db.bodyLogs.get('2026-11-17')).toEqual({ date: '2026-11-17', weightLb: 247.2, protein: false });
+    expect(s?.onboardedAt).toBeTruthy();
+    expect(s?.updatedAt).toBe(new Date(0).toISOString());
+    expect(await db.bodyLogs.count()).toBe(0);
   });
+
+  it('ensureDefaultSettings leaves an existing row untouched, even for concurrent calls', async () => {
+    const db = await seeded();
+    const before = await getSettings(db);
+    await Promise.all([ensureDefaultSettings(db, new Date(2027, 0, 1)), ensureDefaultSettings(db, new Date(2027, 0, 2))]);
+    expect(await getSettings(db)).toEqual(before);
+    expect(await db.settings.count()).toBe(1);
+  });
+
   it('saveSettings bumps updatedAt', async () => {
-    const db = openTestDb();
-    dbs.push(db);
-    await completeOnboarding(db, { bodyweightLb: 200, goalWeightLb: 190, goalDirection: 'lose', activities: ['lift', 'run'] }, new Date(2026, 10, 1));
+    const db = await seeded();
     const later = new Date(2026, 10, 2);
     await saveSettings(db, { goalWeightLb: 185 }, later);
     const s = await getSettings(db);
@@ -51,9 +48,7 @@ describe('settings', () => {
   });
 
   it('saveSettings stores sound cues and unavailable equipment', async () => {
-    const db = openTestDb();
-    dbs.push(db);
-    await completeOnboarding(db, { bodyweightLb: 200, goalWeightLb: 190, goalDirection: 'lose', activities: ['lift'] }, new Date(2026, 10, 1));
+    const db = await seeded();
     await saveSettings(db, { soundCues: false, unavailableEquipment: ['dumbbells'] }, new Date(2026, 10, 2));
     const s = await getSettings(db);
     expect(s?.soundCues).toBe(false);
@@ -61,10 +56,8 @@ describe('settings', () => {
   });
 
   it('overlapping checklist toggles both persist', async () => {
-    const db = openTestDb();
-    dbs.push(db);
+    const db = await seeded();
     const now = new Date(2026, 10, 2);
-    await completeOnboarding(db, { bodyweightLb: 200, goalWeightLb: 190, goalDirection: 'lose', activities: ['lift'] }, new Date(2026, 10, 1));
     await Promise.all([
       toggleUnavailableEquipment(db, 'dumbbells', true, now),
       toggleUnavailableEquipment(db, 'leg-press', true, now),

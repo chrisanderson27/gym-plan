@@ -3,9 +3,8 @@
 - **App:** offline-first PWA, Vite + Preact. Served for e2e by `vite preview` at
   `http://localhost:4173/gym-plan/` (Vite `base: '/gym-plan/'`).
 - **Auth:** none. Single user, all data in IndexedDB on the device.
-- **First run:** onboarding asks bodyweight, goal weight, pool unit and length. A fresh browser
-  profile always lands there; clear site data to reset.
-- **Viewport:** design target is an iPhone (one-handed, light theme default; Appearance in Settings: System/Light/Dark, `<html data-theme>` holds the preference). Prefer a ~390×844 viewport.
+- **First run:** the app opens on Today with seeded default settings; there is no onboarding, no weight/goal/activity question. The pool is asked on the first Swim (PRD 4 P8).
+- **Viewport:** design target is an iPhone (one-handed, light theme always; there is no Appearance control since PRD 4 P8). Prefer a ~390×844 viewport.
 - **Service worker:** registers with `registerType: 'prompt'`; an update shows a prompt, never reloads.
 
 ## Learned quirks
@@ -24,6 +23,7 @@ _Learned 2026-11-20 · costs: one dead end and a source lookup_
 **Where:** `#/history/<id>` → `#/again/<id>`.
 
 ### Centre Builder Save/Start before clicking
+_Obsolete since PRD 4 P8: `#/builder` redirects to `#/workouts` or `#/mine/<id>`._
 _Learned 2026-11-20 · costs: one silent missed Save and a DB check_
 **You'll see:** on `#/builder` with one block, `find testid builder-save click` prints Done but nothing saves (no navigation, `templates` store empty): the button sits at the viewport bottom under the fixed tab bar.
 **Do:** `eval "document.querySelector('[data-testid=builder-save]').scrollIntoView({block:'center'})"`, re-snapshot, click by ref; expect URL `#/progress` with the template under `my-workouts`.

@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openLegacyLift } from './fixtures';
 import { onboard, localDay, seedBackup, tooSmall, pageWidth, openFeedback, primaryCount } from './helpers';
 
 /** Onboard, then import one finished Upper A so the chest press has history (working sets, not calibration). */
-async function onboardWithHistory(page: Page) {
+async function onboardWithHistory(page: Page, { open = false }: { open?: boolean } = {}) {
   await onboard(page);
   const now = Date.now();
   const iso = (ms: number) => new Date(ms).toISOString();
@@ -12,23 +13,29 @@ async function onboardWithHistory(page: Page) {
     targetWeight: 100, targetReps: 11, weight: 100, reps: 11, painFlag: false, setKind: 'working', ts: iso(now - 4 * 86_400_000),
     ...(idx === 2 ? { rir: 1 } : {}),
   }));
+  const programStart = localDay(new Date(now - 28 * 86_400_000));
+  const past = {
+    id: sid, date: iso(now - 4 * 86_400_000), type: 'lift' as const, variant: 'upper-a' as const, blocks: [], hard: false, hardCardio: false, rpe: null,
+    durationMin: 50, notes: '', endedAt: iso(now - 4 * 86_400_000 + 3_000_000),
+  };
   await seedBackup(page, {
     settings: [{
       id: 'settings', goalWeightLb: 220, startWeightLb: 247.2, daysPerWeek: 5, poolUnit: 'yd', poolLength: 25, weightUnit: 'lb', distanceUnit: 'mi',
-      programStart: localDay(new Date(now - 28 * 86_400_000)), onboardedAt: iso(now - 29 * 86_400_000), backupAt: null, updatedAt: iso(now + 60_000),
+      programStart, onboardedAt: iso(now - 29 * 86_400_000), backupAt: null, updatedAt: iso(now + 60_000),
     }],
-    sessions: [{
-      id: sid, date: iso(now - 4 * 86_400_000), type: 'lift', variant: 'upper-a', blocks: [], hard: false, hardCardio: false, rpe: null,
-      durationMin: 50, notes: '', endedAt: iso(now - 4 * 86_400_000 + 3_000_000),
-    }],
+    // Nothing starts a legacy lift any more: seed an open one and resume it from Today.
+    sessions: [past, ...(open ? [openLegacyLift({ variant: 'upper-a', now: new Date(now), programStart, history: [{ session: past, sets: sets as never }] })] : [])],
     sets,
   });
+  if (open) {
+    await page.getByRole('link', { name: 'Today' }).click();
+    await page.getByRole('link', { name: 'Resume', exact: true }).click();
+    await expect(page).toHaveURL(/#\/lift\/session\//);
+  }
 }
 
 const ROUTES = [
-  '#/', '#/lift', '#/lift/volume', '#/lift/gym', '#/burn', '#/run', '#/swim', '#/swim/css',
-  '#/hybrid', '#/progress', '#/history', '#/weigh-in', '#/builder', '#/settings',
-  '#/progress/history', '#/progress/body', '#/progress/volume', '#/workouts',
+  '#/', '#/workouts', '#/blocks', '#/blocks/new', '#/progress', '#/progress/history', '#/settings', '#/swim', '#/swim/css',
 ];
 
 test('every tap target on the key screens is at least 56 x 56 px and no page scrolls sideways', async ({ page }) => {
@@ -49,10 +56,7 @@ test('the Settings tab has a 56 x 56 minimum target', async ({ page }) => {
 });
 
 async function openFocus(page: Page) {
-  await onboardWithHistory(page);
-  await page.goto('./#/lift');
-  await page.getByTestId('variant-upper-a').click();
-  await page.getByTestId('start-lift').click();
+  await onboardWithHistory(page, { open: true });
   await page.getByTestId('warmup-done').click();
   await expect(page.getByTestId('set-done')).toBeVisible();
 }
@@ -77,21 +81,6 @@ test('lift focus, rest, stepper and Finish sheet fit 390 px with at most one pri
   await page.getByTestId('more-finish-now').click();
   await expect(page.getByRole('dialog', { name: 'How was it?' })).toBeVisible();
   await check();
-});
-
-test('a Builder superset keeps one primary and stays within the viewport', async ({ page }) => {
-  await onboardWithHistory(page);
-  await page.goto('./#/builder');
-  await page.getByTestId('builder-name').fill('Pair test');
-  await page.getByTestId('builder-search').fill('chest press');
-  await page.getByTestId('builder-add-chest-press-machine').click();
-  await page.getByTestId('builder-search').fill('row');
-  await page.getByTestId('builder-add-seated-cable-row').click();
-  await page.getByTestId('builder-pair-0').click();
-  await expect(page.getByTestId('builder-pair-0')).toHaveAttribute('aria-pressed', 'true');
-  expect(await tooSmall(page)).toEqual([]);
-  expect(await pageWidth(page)).toBeLessThanOrEqual(390);
-  expect(await primaryCount(page)).toBe(1);
 });
 
 test('a burst of stepper taps is kept and a repeated Done logs only one set', async ({ page }) => {
@@ -187,10 +176,7 @@ test('the hero title, activity and reason share one left edge', async ({ page })
 });
 
 test('Feedback list reads as words, wraps long text, and never widens the page', async ({ page }) => {
-  await onboardWithHistory(page);
-  await page.goto('./#/lift');
-  await page.getByTestId('variant-upper-a').click();
-  await page.getByTestId('start-lift').click();
+  await onboardWithHistory(page, { open: true });
   await openFeedback(page);
   await page.getByTestId('feedback-tag-too-easy').click();
   await page.getByLabel('Notes').fill('x'.repeat(240));
@@ -207,10 +193,7 @@ test('Feedback list reads as words, wraps long text, and never widens the page',
 });
 
 test('sheets open as a bottom overlay, take focus, and close on Escape or the backdrop', async ({ page }) => {
-  await onboardWithHistory(page);
-  await page.goto('./#/lift');
-  await page.getByTestId('variant-upper-a').click();
-  await page.getByTestId('start-lift').click();
+  await onboardWithHistory(page, { open: true });
   await openFeedback(page);
   const dialog = page.getByRole('dialog', { name: 'Feedback' });
   await expect(dialog).toBeVisible();

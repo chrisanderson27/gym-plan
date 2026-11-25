@@ -339,7 +339,7 @@ const ROW_SHAPES: Record<StoreName, (v: unknown, snapshot?: BackupSnapshot) => b
     context: shape({ sessionId: opt(str), exerciseId: opt(str), setId: opt(str), equipmentId: opt(str), screen: opt(str), templateId: opt(str) }), ref: opt(str),
   }),
   settings: shape({
-    id: oneOf('settings'), goalWeightLb: num, daysPerWeek: num, poolUnit: opt(oneOf(...POOL_UNITS)), poolLength: opt(num),
+    id: oneOf('settings'), goalWeightLb: opt(num), daysPerWeek: num, poolUnit: opt(oneOf(...POOL_UNITS)), poolLength: opt(num),
     activities: opt((v) => Array.isArray(v) && v.length > 0 && activityArray(v)),
     goalDirection: opt(oneOf(...GOAL_DIRECTIONS)),
     weightUnit: oneOf('lb'), distanceUnit: oneOf('mi'), programStart: localDate, onboardedAt: iso,

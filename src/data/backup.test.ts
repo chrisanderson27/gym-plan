@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { GymDb } from './db';
 import { ROUND_TRIP_EXCLUDE, buildExport, importExport, markBackedUp, parseExport, ImportError } from './backup';
 import { newId } from './ids';
+import { ensureDefaultSettings } from './settings';
 import { saveOrderedWorkout } from './templates';
 import { floored } from './test-utils';
 import { startMixedSession, updateMixedSession } from './mixedSession';
@@ -156,6 +157,36 @@ describe('export/import', () => {
     const fresh = open();
     await importExport(fresh, fileWith(settings({ goalWeightLb: 230 })));
     expect((await fresh.settings.get('settings'))?.backupAt).toBe(exportedAt);
+  });
+
+  it('a default-seeded local row loses to any imported settings row', async () => {
+    const db = open();
+    await ensureDefaultSettings(db, new Date(2026, 10, 1));
+    await importExport(db, { schemaVersion: 1, exportedAt: '2026-11-12T00:00:00.000Z', appVersion: 't', stores: { settings: [settings({ soundCues: false })] } });
+    const row = await db.settings.get('settings');
+    expect(row?.soundCues).toBe(false);
+    expect(row?.programStart).toBe('2026-11-01');
+  });
+
+  it('a settings row without goalWeightLb exports, validates and re-imports', async () => {
+    const src = open();
+    await ensureDefaultSettings(src, new Date(2026, 10, 1));
+    const text = JSON.stringify(await buildExport(src, new Date('2026-11-12T00:00:00.000Z'), 't'));
+    const dst = open();
+    await importExport(dst, parseExport(text).file);
+    expect(await dst.settings.get('settings')).not.toHaveProperty('goalWeightLb');
+  });
+
+  it('a v1 file with weights, templates and legacy sessions imports onto a default-seeded db intact', async () => {
+    const src = open();
+    await seed(src);
+    const file = await buildExport(src, new Date('2026-11-12T00:00:00.000Z'), 't');
+    const dst = open();
+    await ensureDefaultSettings(dst, new Date(2026, 10, 1));
+    await importExport(dst, parseExport(JSON.stringify(file)).file);
+    const [a, b] = [await dump(src), await dump(dst)];
+    for (const name of ['sessions', 'sets', 'bodyLogs', 'templates', 'runs', 'swims']) expect(b[name]).toEqual(a[name]);
+    expect((await dst.settings.get('settings'))?.goalWeightLb).toBe(220);
   });
 
   it('buildExport does not write; markBackedUp does', async () => {

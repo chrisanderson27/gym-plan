@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadBodyLogs, saveBodyLog } from './body';
 import type { GymDb } from './db';
-import { completeOnboarding } from './settings';
 import { openTestDb } from './test-utils';
 
 const dbs: GymDb[] = [];
@@ -27,10 +26,9 @@ describe('saveBodyLog', () => {
     await expect(saveBodyLog(db, '2026-11-12', { waistIn: 400 })).rejects.toThrow('Waist');
     expect(await loadBodyLogs(db)).toEqual([]);
   });
-  it('merges into the onboarding row', async () => {
+  it('merges into an existing weigh-in row', async () => {
     const db = open();
-    const now = new Date('2026-11-12T09:00:00');
-    await completeOnboarding(db, { bodyweightLb: 250, goalWeightLb: 220, goalDirection: 'lose', activities: ['lift'] }, now);
+    await db.bodyLogs.put({ date: '2026-11-12', weightLb: 250, protein: false });
     await saveBodyLog(db, '2026-11-12', { waistIn: 44 });
     expect(await db.bodyLogs.get('2026-11-12')).toEqual({ date: '2026-11-12', weightLb: 250, waistIn: 44, protein: false });
   });

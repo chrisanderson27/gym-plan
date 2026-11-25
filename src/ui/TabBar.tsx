@@ -12,7 +12,7 @@ function activeTab(route: string) {
   if (route === '/' || route.startsWith('/workout/summary/')) return '/';
   if (route === '/workouts' || route === '/settings') return route;
   if (/^\/blocks(\/|$)/.test(route)) return '/blocks';
-  if (/^\/(progress|history|builder)(\/|$)/.test(route)) return '/progress';
+  if (/^\/(progress|history)(\/|$)/.test(route)) return '/progress';
 }
 
 export const showTabs = (route: string) => !!activeTab(route);

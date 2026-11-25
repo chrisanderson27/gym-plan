@@ -12,8 +12,8 @@ const sessions = (page: Page) => persistedRows<Session>(page, 'sessions');
 
 async function seedDefaultSettings(page: Page, activities?: Settings['activities']) {
   await page.goto('./#/');
-  await expect(page.getByRole('button', { name: 'Get started' })).toBeVisible();
-  // Keep the transition-era bootstrap marker without creating a weigh-in or weight goal.
+  await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
+  // Overwrite the seeded default row; no weigh-in or weight goal is created.
   const settings: Omit<Settings, 'goalWeightLb'> = {
     id: 'settings', daysPerWeek: 5, weightUnit: 'lb', distanceUnit: 'mi',
     programStart: localDay(now), onboardedAt: now.toISOString(), backupAt: null, updatedAt: now.toISOString(),
@@ -169,9 +169,10 @@ test('unavailable Today offers Workouts and preferences, and Progress preserves 
   await expect(preferences).toBeFocused();
   await preferences.press('Enter');
   await expect(page).toHaveURL(/#\/settings$/);
-  const lift = page.getByRole('group', { name: 'Activities' }).getByRole('button', { name: 'Lift', exact: true });
-  await lift.click();
-  await expect(lift).toHaveAttribute('aria-pressed', 'true');
+  // The activity chips left Preferences (PRD 4 P8); re-enabling Lift now arrives through a restored backup.
+  await expect(page.getByRole('group', { name: 'Activities' })).toHaveCount(0);
+  const [stored] = await persistedRows<Settings>(page, 'settings');
+  await seedBackup(page, { settings: [{ ...stored, activities: ['run', 'lift'], updatedAt: new Date(Date.now() + 60_000).toISOString() }] });
   expect((await persistedRows<Settings>(page, 'settings'))[0]?.activities).toEqual(['run', 'lift']);
   await nav.getByRole('link', { name: 'Today' }).click();
   await expect(page.getByTestId('hero')).toContainText('Lower A');

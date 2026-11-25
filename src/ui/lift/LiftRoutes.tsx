@@ -1,18 +1,8 @@
-import type { LiftVariant, Settings } from '../../data/types';
-import { GymScreen } from './GymScreen';
-import { LiftHome } from './LiftHome';
+import type { Settings } from '../../data/types';
 import { SessionScreen } from './SessionScreen';
-import { VolumeScreen } from './VolumeScreen';
 
-const VARIANTS: LiftVariant[] = ['upper-a', 'upper-b', 'lower-a', 'lower-b'];
-
+/** Only the legacy resume route is left: every standalone lift chooser redirects in canonicalRoute. */
 export function LiftRoutes({ route }: { route: string; settings: Settings }) {
-  const parts = route.split('/').filter(Boolean); // ['lift', ...]
-  const [, sub, arg] = parts;
-  if (sub === 'calibrate' && VARIANTS.includes(arg as LiftVariant)) return <LiftHome key={route} autoStart={arg as LiftVariant} />;
-  if (sub === 'start' && VARIANTS.includes(arg as LiftVariant)) return <LiftHome key={route} initial={arg as LiftVariant} blocks />;
-  if (sub === 'session' && arg) return <SessionScreen key={arg} sessionId={arg} />;
-  if (sub === 'volume') return <VolumeScreen />;
-  if (sub === 'gym') return <GymScreen />;
-  return <LiftHome key={route} />;
+  const [, sub, arg] = route.split('/').filter(Boolean);
+  return sub === 'session' && arg ? <SessionScreen key={arg} sessionId={arg} /> : null;
 }

@@ -16,10 +16,9 @@ test('returning to Today and tapping Resume keeps one unfinished lift', async ({
   await seedBackup(page, { sessions: [{
     ...lift('past-lift', new Date('2026-11-16T10:00:00-05:00'), 'upper-a'),
     endedAt: '2026-11-16T15:40:00.000Z', durationMin: 40,
-  }] });
+  }, lift('open-lift', new Date('2026-11-19T00:30:00-05:00'), 'lower-a')] });
   await page.getByRole('link', { name: 'Today' }).click();
-  await page.goto('./#/lift/start/lower-a');
-  await page.getByTestId('start-lift').click();
+  await page.getByRole('link', { name: 'Resume', exact: true }).click();
   await expect(page).toHaveURL(/#\/lift\/session\/[^/]+$/);
   const sessionUrl = page.url();
 

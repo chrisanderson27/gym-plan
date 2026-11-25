@@ -64,7 +64,7 @@ export function BurnSessionScreen({ sessionId }: { sessionId: string }) {
 
   if (!data) return <main class="screen"><h1>Burn</h1></main>;
   if (!session || session.type !== 'burn') {
-    return <main class="screen"><h1>Session not found</h1><a class="btn" href="#/burn">Back to Burn</a></main>;
+    return <main class="screen"><h1>Session not found</h1><a class="btn" href="#/">Back to Today</a></main>;
   }
 
   const { snapshot } = data;

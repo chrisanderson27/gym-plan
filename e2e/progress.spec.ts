@@ -116,7 +116,7 @@ test('seeded history renders as cards with PRs from earlier sessions', async ({ 
   await expect(page.getByRole('heading', { name: 'Session not found' })).toBeVisible();
 });
 
-for (const theme of ['light', 'dark'] as const) {
+for (const theme of ['light'] as const) {
   test(`Progress screen rules at 390×844 in ${theme}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await seed(page, { ...history, bodyLogs }, {
@@ -126,8 +126,6 @@ for (const theme of ['light', 'dark'] as const) {
     for (const [route, ready, label] of [
       ['progress', 'progress-streak', 'overview'],
       ['progress/history', 'history-newer', 'history'],
-      ['progress/body', 'trend-chart', 'body'],
-      ['progress/volume', 'volume-chest', 'volume'],
     ]) {
       await page.goto('./#/' + route);
       await expect(page.getByTestId(ready!)).toBeVisible();
@@ -150,36 +148,25 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('the legacy weigh-in route still updates the read-only Progress trend', async ({ page }) => {
+test('the legacy weigh-in routes land on the read-only Progress trend', async ({ page }) => {
   await seed(page, { bodyLogs });
-  await page.goto('./#/progress/body');
-  await expect(page.getByRole('heading', { name: 'Weigh-in', exact: true })).toBeVisible();
-  const line = page.getByTestId('trend-line');
-  const trend = page.getByTestId('body-trend');
-  await expect(line).toHaveAttribute('data-last', /\d/);
-  const before = (await line.getAttribute('data-last'))!;
-  const trendBefore = (await trend.textContent())!;
-  await page.getByTestId('body-weight').fill(String(Number(before) - 5));
-  await page.getByTestId('body-save').click();
-  await expect(line).not.toHaveAttribute('data-last', before);
-  await expect(trend).not.toHaveText(trendBefore);
-  const after = (await line.getAttribute('data-last'))!;
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Progress' }).click();
-  const card = page.getByTestId('progress-body');
-  await expect(card.getByRole('img')).toHaveAccessibleName(`Bodyweight trend ${after} lb`);
-  await expect(card.getByTestId('trend-line')).toHaveAttribute('data-last', after);
+  for (const url of ['./#/progress/body', './#/weigh-in']) {
+    await page.goto(url);
+    await expect(page).toHaveURL(/#\/progress$/);
+    const card = page.getByTestId('progress-body');
+    await expect(card.getByTestId('trend-line')).toHaveAttribute('data-last', /\d/);
+    await expect(card.locator('input')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Log', exact: true })).toHaveCount(0);
+  }
   await expectTrainingInventory(page);
 });
 
-test('the legacy Builder holds Save until the workout reaches 45 minutes', async ({ page }) => {
+test('the legacy Builder URLs redirect to Workouts and the saved workout', async ({ page }) => {
+  await onboard(page);
   await page.goto('./#/builder');
-  await page.getByTestId('builder-name').fill('Chest press practice');
-  await page.getByTestId('builder-search').fill('chest press');
-  await page.getByTestId('builder-add-chest-press-machine').click();
-  // One exercise is far under the shared 45-minute floor, so Save and Start wait for more work.
-  await expect(page.getByTestId('builder-save')).toBeDisabled();
-  await expect(page.getByTestId('builder-start')).toBeDisabled();
-  await expect(page.getByTestId('builder-hint')).toContainText('45 minutes');
+  await expect(page).toHaveURL(/#\/workouts$/);
+  await page.goto('./#/builder/x');
+  await expect(page).toHaveURL(/#\/mine\/x$/);
 });
 
 test('ring history shows closed weeks and the same streak as Today', async ({ page }) => {
@@ -230,10 +217,10 @@ test('old routes redirect without a Back bounce and rest links to Workouts', asy
   await page.goto('./#/history');
   await expect(page).toHaveURL(/#\/progress\/history$/);
   await page.goto('./#/weigh-in');
-  await expect(page).toHaveURL(/#\/progress\/body$/);
+  await expect(page).toHaveURL(/#\/progress$/);
   await expect(page.getByRole('navigation', { name: 'Main' })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/#\/progress\/history$/);
   await page.goto('./#/lift/volume');
-  await expect(page).toHaveURL(/#\/progress\/volume$/);
+  await expect(page).toHaveURL(/#\/progress$/);
 });

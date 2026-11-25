@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { onboard, localDay, seedBackup, openFeedback } from './helpers';
+import { onboard, localDay, persistedRows, seedBackup, openFeedback } from './helpers';
 
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -58,27 +58,30 @@ test('simulated week: pick respects 48 h and the 2-hard-session cap', async ({ p
   await expect(pick).not.toContainText('Burn');
   await expect(pick).not.toContainText('Intervals');
 
-  // A lower session is still reachable directly.
+  // The old standalone lift chooser is gone: the direct URL lands on Today.
   await page.goto('./#/lift/start/lower-b');
-  await expect(page.getByTestId('start-lift')).toBeVisible();
-  await expect(page.getByTestId('variant-lower-b')).toHaveClass(/on/);
+  await expect(page).toHaveURL(/#\/$/);
   testInfo.annotations.push({ type: 'covered', description: 'AC1' });
 });
 
 test('hybrid: lift then cardio is one session, with feedback', async ({ page }, testInfo) => {
   await onboard(page);
   const now = Date.now();
+  // Nothing starts a legacy hybrid any more: seed one open row and resume it from Today.
+  const open: Row = {
+    ...liftSession('open-hybrid', 'upper-a', now - 30 * 60_000), type: 'hybrid', endedAt: undefined, durationMin: 0,
+    blocks: [
+      { id: 'lift', kind: 'lift', exerciseId: 'chest-press-machine', equipmentId: 'pin-stack', sets: 3, repMin: 8, repMax: 12, targetWeight: 100 },
+      { id: 'run', kind: 'run', modality: 'bike', runKind: 'easy', repeats: 1, segments: [{ role: 'run', sec: 1200 }] },
+    ],
+  };
   await seed(page, {
-    sessions: [liftSession('01HZZZZZZZZZZZZZZZZZZZZZU1', 'upper-a', now - 4 * DAY)],
+    sessions: [liftSession('01HZZZZZZZZZZZZZZZZZZZZZU1', 'upper-a', now - 4 * DAY), open],
     sets: setsFor('01HZZZZZZZZZZZZZZZZZZZZZU1', 'chest-press-machine', 'pin-stack', now - 4 * DAY, 100, 11),
   });
-
-  await page.goto('./#/hybrid');
-  await page.getByTestId('hybrid-variant-upper-a').click();
-  const plannedLifts = await page.locator('ul.plan').first().locator('li').count();
-  const cardioPlan = await page.getByTestId('hybrid-cardio').innerText();
-  await page.getByTestId('hybrid-start').click();
-  await expect(page).toHaveURL(/\/hybrid\/session\//);
+  await page.getByRole('link', { name: 'Today' }).click();
+  await page.getByRole('link', { name: 'Resume', exact: true }).click();
+  await expect(page).toHaveURL(/\/hybrid\/session\/open-hybrid$/);
   const cardioUrl = page.url().replace('/hybrid/session/', '/hybrid/cardio/');
 
   // Gap g5: the P5 feedback button is live inside the hybrid session.
@@ -87,7 +90,6 @@ test('hybrid: lift then cardio is one session, with feedback', async ({ page }, 
   await page.getByTestId('feedback-save').click();
   await expect(page.getByRole('status').filter({ hasText: 'Feedback saved' }).first()).toBeVisible();
 
-  await page.getByTestId('warmup-done').click();
   const ex = 'chest-press-machine';
   for (const i of [0, 1, 2]) {
     await expect(page.getByTestId(`set-weight-${ex}-${i}`)).toBeVisible();
@@ -95,17 +97,7 @@ test('hybrid: lift then cardio is one session, with feedback', async ({ page }, 
   }
   await page.getByTestId(`rir-${ex}-1`).click();
   await page.getByTestId('step-next').click();
-  for (let i = 1; i < plannedLifts; i++) {
-    // Only chest press has seeded history. The other planned lifts use the calibration ladder.
-    const log = page.getByTestId(/^cal-log-/);
-    const exerciseId = (await log.getAttribute('data-testid'))!.slice('cal-log-'.length);
-    await log.click();
-    await page.getByTestId(`cal-3-${exerciseId}`).click();
-    await expect(page.getByTestId(`cal-result-${exerciseId}`)).toBeVisible();
-    await page.getByTestId('step-next').click();
-  }
-  const cardioHandoff = cardioPlan.replace(/^Then (.+) (\d+ min)/, '$1 · $2');
-  await expect(page.getByTestId('hybrid-next')).toHaveText(cardioHandoff);
+  await expect(page.getByTestId('hybrid-next')).toContainText('Bike');
   await page.getByTestId('finish').click();
   await expect(page).toHaveURL(cardioUrl);
   await expect(page.getByTestId('more')).toBeVisible();
@@ -114,6 +106,7 @@ test('hybrid: lift then cardio is one session, with feedback', async ({ page }, 
   await page.getByTestId('rpe-5').click();
   await page.getByTestId('run-save').click();
   await expect(page.getByTestId('hero')).toBeVisible();
+  expect((await persistedRows<{ type: string; endedAt?: string }>(page, 'sessions')).filter((row) => row.type === 'hybrid' && !row.endedAt)).toEqual([]);
 
   await page.goto('./#/history');
   const first = page.locator('[data-testid^="history-"]').first();
@@ -122,43 +115,10 @@ test('hybrid: lift then cardio is one session, with feedback', async ({ page }, 
   await page.getByTestId('save-mine').click();
   await expect(page.getByRole('status').filter({ hasText: 'Saved to Mine' })).toBeVisible();
 
-  await page.goto('./#/hybrid');
-  await expect(page.getByTestId('mine-row')).toBeVisible();
-
   await page.goto('./#/history');
   await page.locator('[data-testid^="history-"]').first().click();
   await page.getByTestId('again').click();
   await expect(page.getByTestId('legacy-again')).toBeVisible();
   await expect(page.getByTestId('legacy-build')).toBeVisible();
   testInfo.annotations.push({ type: 'covered', description: 'AC1' });
-});
-
-test('body: weigh-in shows trend and rate', async ({ page }, testInfo) => {
-  await onboard(page);
-  const now = Date.now();
-  // 60 days at −0.25 lb/day: the EMA needs ~6 weeks to settle on the true slope (−1.75 lb/wk).
-  const rows: Row[] = Array.from({ length: 60 }, (_, k) => {
-    const back = 60 - k;
-    return { date: localDay(new Date(now - back * DAY)), weightLb: Math.round((246.75 + 0.25 * (back - 1)) * 100) / 100, protein: false };
-  });
-  await seed(page, { bodyLogs: rows });
-
-  await page.goto('./#/weigh-in');
-  await page.getByTestId('body-weight').fill('246.2');
-  await page.getByTestId('body-save').click();
-  await expect(page.getByTestId('body-trend')).toBeVisible();
-  await expect(page.getByTestId('body-rate')).toContainText('lb/wk');
-  await expect(page.getByTestId('body-rate')).toContainText('in band');
-  await expect(page.getByTestId('body-eta')).toContainText('220');
-  testInfo.annotations.push({ type: 'covered', description: 'AC1' });
-});
-
-test('builder will not add the same exercise twice', async ({ page }) => {
-  await onboard(page, { bodyweight: '247' });
-  await page.goto('./#/builder');
-  await page.getByTestId('builder-search').fill('chest press');
-  const add = page.getByTestId('builder-add-chest-press-machine');
-  await add.click();
-  await expect(add).toBeDisabled();
-  await expect(page.getByTestId('builder-block-1')).toHaveCount(0);
 });

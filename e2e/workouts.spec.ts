@@ -301,8 +301,7 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   try {
     const fresh = await context.newPage();
     await fresh.goto('./');
-    await expect(button(fresh, 'Get started')).toBeVisible();
-    // Settings imports require onboarding. The frozen update makes the incoming settings win.
+    // The seeded default row has an epoch updatedAt, so the incoming settings win.
     await fresh.clock.setFixedTime(new Date(+at - 1000));
     await onboard(fresh);
     await fresh.goto('./#/settings');
@@ -369,13 +368,11 @@ test('v1 lift edit and legacy cardio keep their direct and offline library route
   await seedBackup(page, { templates });
   await openWorkouts(page);
   await expect(saved(page).getByRole('article')).toHaveCount(2);
-  // The legacy builder route still opens, but Save follows the shared 45-minute floor.
+  // The legacy builder route is gone: it redirects to the saved workout's Repeat screen.
   await page.goto('./#/builder/legacy-lift');
-  await expect(page.getByTestId('builder-pair-0')).toHaveAttribute('aria-pressed', 'true');
-  await page.getByTestId('builder-name').fill('Old paired lifts edited');
-  await expect(page.getByTestId('builder-save')).toBeDisabled();
-  await expect(page.getByTestId('builder-hint')).toContainText('45 minutes');
-  await openWorkouts(page);
+  await expect(page).toHaveURL(/#\/mine\/legacy-lift$/);
+  await expect(page.getByTestId('legacy-again')).toBeVisible();
+  await page.goto('./#/workouts');
   await controlledOffline(page, context, info);
   await button(suggestions(page).getByRole('article', { name: 'Full-Body Strength' }), 'Preview').click();
   const starter = page.getByRole('dialog', { name: 'Preview Full-Body Strength' });
@@ -441,6 +438,5 @@ test('refreshes stale previews and offers repair or Skip for unsupported prescri
   await expect(editor).toHaveCount(0);
   await expect(button(saved(page).getByRole('article', { name: 'Old rotation' }), 'Start workout')).toBeEnabled();
   await page.goto('./#/builder/old-rotation');
-  await expect(page.getByRole('alert')).toContainText('cannot be edited');
-  await expect(page.getByTestId('builder-save')).toHaveCount(0);
+  await expect(page).toHaveURL(/#\/mine\/old-rotation$/);
 });

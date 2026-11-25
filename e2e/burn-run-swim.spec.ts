@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { Session } from '../src/data/types';
-import { emojiText, onboard, pageWidth, primaryCount, seedBackup, tooSmall } from './helpers';
+import { openLegacyBurn } from './fixtures';
+import { emojiText, localDay, onboard, pageWidth, primaryCount, seedBackup, tooSmall } from './helpers';
 
 test.use({ viewport: { width: 390, height: 844 }, timezoneId: 'America/New_York' });
 
@@ -18,11 +19,15 @@ const sessions = (page: Page) => page.evaluate(() => new Promise<Session[]>((res
   };
 }));
 
+/** Nothing starts a legacy Burn any more: seed one open row by backup and resume it from Today. */
 async function startBurn(page: Page) {
   await page.clock.install();
   await onboard(page, { activities: ['burn'] });
-  await page.goto('./#/burn');
-  await page.getByTestId('burn-start').click();
+  const now = new Date();
+  await seedBackup(page, { sessions: [openLegacyBurn({ now, programStart: localDay(now) })] });
+  await page.getByRole('link', { name: 'Today' }).click();
+  await page.getByRole('link', { name: 'Resume', exact: true }).click();
+  await expect(page).toHaveURL(/#\/burn\/session\//);
   await expect(page.getByTestId('burn-warmup-remaining')).toBeVisible();
 }
 
@@ -103,39 +108,14 @@ test('old interval Burn renders in history and still runs on the timer', async (
   await expect(page.getByTestId('legacy-again')).toBeVisible();
   await expect(page.getByTestId('legacy-build')).toBeVisible();
   await page.goto('./#/burn');
-  await expect(page.getByText('Last Burn')).toBeVisible();
-});
-
-test('Run puts interval controls in the bottom thumb zone and labels the end confirm', async ({ page }) => {
-  await onboard(page, { activities: ['run'] });
-  await page.goto('./#/run');
-  await expect(page.getByTestId('run-plan')).toBeVisible();
-  expect(await primaryCount(page)).toBe(1);
-  await page.getByTestId('run-change').click();
-  await page.getByTestId('run-kind-intervals').click();
-  await page.getByRole('button', { name: 'Done' }).click();
-  await expect(page.getByTestId('run-kind')).toContainText('Intervals');
-
-  await page.getByTestId('run-start').click();
-  await expect(page.getByTestId('timer')).toBeVisible();
-  await page.getByTestId('timer-start').click();
-  for (const id of ['timer-pause', 'timer-skip', 'timer-end']) {
-    const target = page.getByTestId(id);
-    await expect(target).toBeVisible();
-    const bounds = (await target.boundingBox())!;
-    expect(bounds.y).toBeGreaterThanOrEqual(844 * 0.6);
-    expect(bounds.height).toBeGreaterThanOrEqual(56);
-  }
-  await expect(page.getByTestId('timer-skip')).toHaveText('Skip step');
-  await page.getByTestId('timer-end').click();
-  await expect(page.getByTestId('timer-end-confirm')).toHaveText('Stop and log');
-  await expect(page.getByRole('button', { name: 'Back to timer' })).toBeVisible();
+  await expect(page).toHaveURL(/#\/workouts$/);
 });
 
 test('Swim uses plain-language notation and saves elapsed minutes from Start', async ({ page }) => {
   await page.clock.install();
   await onboard(page, { activities: ['swim'] });
-  await page.goto('./#/swim');
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await page.getByTestId('pref-swim-open').click();
   await page.getByRole('button', { name: 'Save pool' }).click();
   await expect(page.getByTestId('swim-card')).toContainText(/\d+ × \d+ yd freestyle · (easy|steady)/);
   expect(await primaryCount(page)).toBe(1);

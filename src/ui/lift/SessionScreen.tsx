@@ -94,7 +94,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
   if (!data) return <main class="screen"><h1>Session</h1></main>;
   const { session, sets, snapshot, templateName, blocked } = data;
   if (!session) {
-    return <main class="screen"><h1>Session not found</h1><a class="btn" href="#/lift">Back to Lift</a></main>;
+    return <main class="screen"><h1>Session not found</h1><a class="btn" href="#/">Back to Today</a></main>;
   }
 
   if (session.mixed) {

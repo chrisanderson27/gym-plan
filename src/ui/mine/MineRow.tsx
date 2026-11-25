@@ -1,6 +1,6 @@
 import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
-import { editableLiftTemplate, listMine } from '../../data/templates';
+import { listMine } from '../../data/templates';
 import type { SessionType } from '../../data/types';
 import { orderedDurationMin, templateDurationMin } from '../../engine/templates';
 
@@ -23,7 +23,6 @@ export function MineRow({ types, title = 'Mine' }: { types: SessionType[]; title
               <span class="row-label">{t.name}</span>
               {min > 0 && <span class="row-meta">{min} min</span>}
             </a>
-            {editableLiftTemplate(t) && <a class="btn" href={'#/builder/' + t.id}>edit</a>}
           </li>
           );
         })}

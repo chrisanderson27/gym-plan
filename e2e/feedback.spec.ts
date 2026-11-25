@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
+import { openLegacyLift } from './fixtures';
 import { onboard, localDay, seedBackup, openFeedback } from './helpers';
 
 test('workout feedback from More, cardio entry points, JSONL export, and the pose demo', async ({ page }, testInfo) => {
@@ -13,21 +14,33 @@ test('workout feedback from More, cardio entry points, JSONL export, and the pos
     targetWeight: 100, targetReps: 11, weight: 100, reps: 11, painFlag: false, setKind: 'working', ts: iso(now - 4 * 86_400_000),
     ...(idx === 2 ? { rir: 1 } : {}),
   }));
+  const programStart = localDay(new Date(now - 28 * 86_400_000));
+  const past = {
+    id: sid, date: iso(now - 4 * 86_400_000), type: 'lift' as const, variant: 'upper-a' as const, blocks: [], hard: false, hardCardio: false, rpe: null,
+    durationMin: 50, notes: '', endedAt: iso(now - 4 * 86_400_000 + 3_000_000),
+  };
   await seedBackup(page, {
     settings: [{
       id: 'settings', goalWeightLb: 220, startWeightLb: 247.2, daysPerWeek: 5, poolUnit: 'yd', poolLength: 25, weightUnit: 'lb', distanceUnit: 'mi',
-      programStart: localDay(new Date(now - 28 * 86_400_000)), onboardedAt: iso(now - 29 * 86_400_000), backupAt: null, updatedAt: iso(now + 60_000),
+      programStart, onboardedAt: iso(now - 29 * 86_400_000), backupAt: null, updatedAt: iso(now + 60_000),
     }],
-    sessions: [{
-      id: sid, date: iso(now - 4 * 86_400_000), type: 'lift', variant: 'upper-a', blocks: [], hard: false, hardCardio: false, rpe: null,
-      durationMin: 50, notes: '', endedAt: iso(now - 4 * 86_400_000 + 3_000_000),
-    }],
+    sessions: [past],
     sets,
   });
 
-  await page.goto('./#/lift');
-  await page.getByTestId('variant-upper-a').click();
-  await page.getByTestId('start-lift').click();
+  // AC2: reachable from a standard mixed workout, started from Today.
+  await page.getByRole('link', { name: 'Today' }).click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page).toHaveURL(/#\/workout\/session\//);
+  await expect(page.getByTestId('more')).toBeVisible();
+
+  // A legacy lift open before the upgrade is resumed from Today (nothing starts one any more).
+  await seedBackup(page, {
+    sessions: [openLegacyLift({ variant: 'upper-a', now: new Date(now), programStart, history: [{ session: past, sets: sets as never }] })],
+  });
+  await page.getByRole('link', { name: 'Today' }).click();
+  await page.getByRole('link', { name: /^Resume Upper/ }).click();
+  await expect(page).toHaveURL(/#\/lift\/session\//);
 
   await page.getByTestId('warmup-done').click();
   const ex = 'chest-press-machine';
@@ -48,14 +61,7 @@ test('workout feedback from More, cardio entry points, JSONL export, and the pos
   await expect(page.getByRole('status').filter({ hasText: 'Feedback saved' }).first()).toBeVisible();
   await expect(page.getByTestId('more')).toBeFocused();
 
-  // AC2: reachable from Burn (plan and warm-up), run and swim.
-  await page.goto('./#/burn');
-  await expect(page.getByTestId('more')).toBeVisible();
-  await page.getByTestId('burn-start').click();
-  await expect(page.getByTestId('burn-warmup-remaining')).toBeVisible();
-  await expect(page.getByTestId('more')).toBeVisible();
-  await page.goto('./#/run');
-  await expect(page.getByTestId('more')).toBeVisible();
+  // AC2: and from Swim.
   await page.goto('./#/swim');
   await expect(page.getByTestId('more')).toBeVisible();
 

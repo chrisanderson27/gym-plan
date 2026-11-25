@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from 'preact/hooks';
-import { BURN_TEMPLATES } from '../../content/burn-templates';
 import { copyWorkoutBlock, legacyWorkoutDraft } from '../../data/workoutChoices';
-import { FULL_WORKOUT_MIN_SEC, workoutShortfallSec } from '../../engine/templates';
+import { workoutShortfallSec } from '../../engine/templates';
 import { loadCardioSnapshot, saveSwim, type CardioSnapshot } from '../../data/cardio';
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
@@ -14,7 +13,6 @@ import { localDate } from '../../engine/dates';
 import { latestCss } from '../../engine/swim/css';
 import { generateSwim } from '../../engine/swim/generator';
 import { weekIndex } from '../../engine/week';
-import { BurnScreen } from '../cardio/BurnScreen';
 import { SwimCard } from '../cardio/SwimCard';
 import { SwimLog } from '../cardio/SwimLog';
 import { PoolSheet } from '../PoolSheet';
@@ -42,10 +40,7 @@ export function TemplateRunScreen(src: { templateId: string } | { sessionId: str
   }
   if (run.ordered) return <MixedAgain source={src} ordered={run.ordered} />;
   const first = run.blocks.find((b) => b.kind !== 'lift' || !b.warmup);
-  if (run.type === 'burn' && run.blocks.some((b) => b.kind === 'circuit')) {
-    return <BurnScreen templateId={BURN_TEMPLATES.some((t) => t.id === run.templateId) ? run.templateId : undefined} minBudgetMin={FULL_WORKOUT_MIN_SEC / 60} />;
-  }
-  if (run.blocks.some((b) => b.kind === 'lift') || first?.kind === 'interval' || first?.kind === 'run') return <LegacyAgain run={run} />;
+  if (run.type === 'burn' || run.blocks.some((b) => b.kind === 'lift') || first?.kind === 'interval' || first?.kind === 'run') return <LegacyAgain run={run} />;
   if (first?.kind === 'swim') return <SwimAgain run={run} snap={snap} />;
   return <main class="screen"><header class="bar"><h1>Nothing to run</h1><MoreMenu feedback={{ kind: 'workout', context: {} }} /></header></main>;
 }

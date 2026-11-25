@@ -437,7 +437,8 @@ export type GoalDirection = typeof GOAL_DIRECTIONS[number];
 
 export interface Settings {
   id: 'settings';
-  goalWeightLb: number;
+  /** Goal editing was removed in PRD 4 P8; old rows keep the value. */
+  goalWeightLb?: number;
   startWeightLb?: number;
   daysPerWeek: number;
   activities?: Activity[];

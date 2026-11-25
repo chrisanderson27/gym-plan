@@ -3,6 +3,7 @@ import { SEED_EQUIPMENT } from '../src/content';
 import { liftDayInputFrom } from '../src/data/liftday';
 import type { CircuitBlock, LiftVariant, Session, SetRow } from '../src/data/types';
 import { generateLiftDay } from '../src/engine/block/generate';
+import { openLegacyLift } from './fixtures';
 import { emojiText, onboard, pageWidth, primaryCount, seedBackup, tooSmall } from './helpers';
 
 test.use({ viewport: { width: 390, height: 844 }, timezoneId: 'America/New_York' });
@@ -29,8 +30,9 @@ const readStore = <T,>(page: Page, store: 'sessions' | 'sets') => page.evaluate(
   };
 }), store);
 
-async function setup(page: Page, { theme = 'light', runningClock = false, programStart = '2026-10-22' }: {
+async function setup(page: Page, { theme = 'light', runningClock = false, programStart = '2026-10-22', open }: {
   theme?: 'light' | 'dark';
+  open?: LiftVariant;
   runningClock?: boolean;
   programStart?: string;
 } = {}) {
@@ -48,16 +50,17 @@ async function setup(page: Page, { theme = 'light', runningClock = false, progra
     if (main?.kind === 'lift' && main.equipmentId) pairs.set(main.exerciseId, { ...main, equipmentId: main.equipmentId });
   }
   pairs.set('chest-press-machine', { exerciseId: 'chest-press-machine', equipmentId: 'pin-stack' });
+  const history = [...pairs.values()].flatMap(({ exerciseId, equipmentId }) => [0, 1, 2].map((idx) => row(exerciseId, equipmentId, idx)));
   await seedBackup(page, {
     settings: [{
       id: 'settings', goalWeightLb: 220, daysPerWeek: 5, poolUnit: 'yd', poolLength: 25, weightUnit: 'lb', distanceUnit: 'mi',
       programStart, onboardedAt: prior, updatedAt: '2026-11-20T00:00:00.000Z', backupAt: null, activities: ['lift'], appearance: theme,
     }],
-    sessions: [previous],
-    sets: [...pairs.values()].flatMap(({ exerciseId, equipmentId }) => [0, 1, 2].map((idx) => row(exerciseId, equipmentId, idx))),
+    sessions: [previous, ...(open ? [openLegacyLift({ variant: open, now, programStart, history: [{ session: previous, sets: history }] })] : [])],
+    sets: history,
   });
   await page.getByRole('link', { name: 'Today' }).click();
-  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'workout');
+  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', open ? 'resume' : 'workout');
   await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
 }
 
@@ -77,16 +80,15 @@ const openChange = async (page: Page, id: string) => {
   await page.getByTestId(`more-${id}`).click();
 };
 
-for (const theme of ['light', 'dark'] as const) {
-  test(`legacy lift starts the planned workout and advances to a working set in ${theme}`, async ({ page }, testInfo) => {
-    await setup(page, { theme });
-    await page.goto('./#/lift/start/lower-a');
-    await expect(page.getByTestId('start-lift')).toBeVisible();
+for (const theme of ['light'] as const) {
+  test(`legacy lift resumes the planned workout and advances to a working set in ${theme}`, async ({ page }, testInfo) => {
+    await setup(page, { theme, open: 'lower-a' });
     await page.evaluate(() => {
       document.body.dataset.taps = '0';
       document.addEventListener('click', () => { document.body.dataset.taps = String(Number(document.body.dataset.taps) + 1); });
     });
-    await page.getByTestId('start-lift').click();
+    await page.getByTestId('start').click();
+    await expect(page).toHaveURL(/#\/lift\/session\//);
     await expect(page.getByTestId('plan-min')).toHaveText(/\d+ min total/);
     await page.getByTestId('warmup-done').click();
     await expect(page.getByTestId('set-done')).toBeInViewport();
@@ -128,9 +130,8 @@ for (const theme of ['light', 'dark'] as const) {
   });
 
   test(`a running block saves rounds, partial work and a clock-safe swap in ${theme}`, async ({ page }, testInfo) => {
-    await setup(page, { theme, runningClock: true });
-    await page.goto('./#/lift/start/lower-a');
-    await page.getByTestId('start-lift').click();
+    await setup(page, { theme, runningClock: true, open: 'lower-a' });
+    await page.getByTestId('start').click();
     await page.getByTestId('warmup-done').click();
     await expect(page.getByTestId('set-done')).toBeVisible();
     const sessionId = page.url().split('/').at(-1);
@@ -203,10 +204,8 @@ for (const theme of ['light', 'dark'] as const) {
 }
 
 test('a seeded chest press PR celebrates unless reduced motion is on', async ({ page }, testInfo) => {
-  await setup(page);
-  await page.goto('./#/lift');
-  await page.getByTestId('variant-upper-a').click();
-  await page.getByTestId('start-lift').click();
+  await setup(page, { open: 'upper-a' });
+  await page.getByTestId('start').click();
   await page.getByTestId('warmup-done').click();
   const exercise = 'chest-press-machine';
   for (const idx of [0, 1]) {
@@ -240,11 +239,10 @@ for (const reducedMotion of ['no-preference', 'reduce'] as const) {
   test(`Right saves RPE 7, shows the closed ring and returns to Today with ${reducedMotion}`, async ({ page }, testInfo) => {
     await page.emulateMedia({ reducedMotion });
     // Put Monday's saved lift in the same program week as Thursday's new lift.
-    await setup(page, { programStart: '2026-10-19' });
+    await setup(page, { programStart: '2026-10-19', open: 'lower-a' });
     const weeklyGoal = page.getByTestId('weekly-goal');
     await expect(weeklyGoal).toContainText('1 of 2 sessions');
-    await page.goto('./#/lift/start/lower-a');
-    await page.getByTestId('start-lift').click();
+    await page.getByTestId('start').click();
     await page.getByTestId('warmup-done').click();
     await page.getByTestId('set-done').click();
     const id = page.url().split('/').at(-1);
@@ -328,18 +326,4 @@ test('a hybrid hands off to cardio after its lift step using the same session id
   await expect(page.getByTestId('hybrid-next')).toContainText('Bike');
   await page.getByTestId('finish').click();
   await expect(page).toHaveURL(/#\/hybrid\/cardio\/hybrid-session$/);
-});
-
-test('the calibration route keeps the ladder and can advance to the next exercise', async ({ page }) => {
-  await onboard(page, { activities: ['lift'] });
-  await page.goto('./#/lift/calibrate/upper-a');
-  await page.getByTestId('warmup-done').click();
-  const log = page.locator('[data-testid^="cal-log-"]');
-  await expect(log).toHaveCount(1);
-  const exercise = (await log.getAttribute('data-testid'))?.slice('cal-log-'.length);
-  await log.click();
-  await page.getByTestId(`cal-3-${exercise}`).click();
-  await expect(page.getByTestId(`cal-result-${exercise}`)).toBeVisible();
-  await page.getByTestId('step-next').click();
-  await expect(page.getByTestId(`exercise-${exercise}`)).toHaveCount(0);
 });

@@ -1,8 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
-import { onboard } from './helpers';
+import { onboard, persistedRows } from './helpers';
 
-test('first run: onboarding then Today with a hero and the tab bar', async ({ page }) => {
+test('first launch opens Today with a hero and the tab bar, no setup questions', async ({ page }) => {
   await onboard(page);
+  await expect(page.locator('main input')).toHaveCount(0);
+  await expect(page.getByTestId('onb-act-lift')).toHaveCount(0);
+  const [settings] = await persistedRows<{ goalWeightLb?: number }>(page, 'settings');
+  expect(settings?.goalWeightLb).toBeUndefined();
+  expect(await persistedRows(page, 'bodyLogs')).toEqual([]);
   await expect(page.getByTestId('hero')).toContainText('Lower A');
   await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'workout');
   await expect(page.getByRole('button', { name: 'Start workout' })).toBeEnabled();
@@ -10,43 +15,21 @@ test('first run: onboarding then Today with a hero and the tab bar', async ({ pa
 });
 
 test('settings backup downloads and restores into a fresh context', async ({ page, browser }, testInfo) => {
-  // The second device onboards first: import keeps local settings that are newer than the file's
-  // (merge rule D3), so the backup's settings must be the more recent edit to win.
+  // The second device first-launches with a default row (epoch updatedAt), so the backup's settings win without any ordering trick.
   const context = await browser.newContext({ ...testInfo.project.use });
   const fresh = await context.newPage();
-  await onboard(fresh, { bodyweight: '180', target: '170' });
-
-  const storedGoalOf = (p: Page) => () =>
-    p.evaluate(
-      () =>
-        new Promise<number | undefined>((resolve) => {
-          const open = indexedDB.open('gym-plan');
-          open.onsuccess = () => {
-            const get = open.result.transaction('settings').objectStore('settings').get('settings');
-            get.onsuccess = () => { resolve((get.result as { goalWeightLb?: number } | undefined)?.goalWeightLb); open.result.close(); };
-            get.onerror = () => resolve(undefined);
-          };
-          open.onerror = () => resolve(undefined);
-        }),
-    );
-  // The destination edits its own goal first (older than the backup), so its input is dirty when the newer backup lands.
-  await fresh.getByRole('link', { name: 'Settings' }).click();
-  const freshGoal = fresh.getByLabel('Goal weight (lb)');
-  await freshGoal.fill('190');
-  await freshGoal.blur();
-  await expect.poll(storedGoalOf(fresh), { timeout: 10_000 }).toBe(190);
-  await expect(freshGoal).toHaveValue('190');
+  await onboard(fresh);
 
   await onboard(page);
   await page.getByRole('link', { name: 'Settings' }).click();
-  const goal = page.getByLabel('Goal weight (lb)');
-  const storedGoal = storedGoalOf(page);
-  // One real edit: fill, then blur (the browser's own `change`). The save is asynchronous, so poll the stored value
-  // until it lands; nothing is ever re-filled, so a lost edit fails here.
-  await goal.fill('215');
-  await goal.blur();
-  await expect.poll(storedGoal, { timeout: 10_000 }).toBe(215);
-  await expect(goal).toHaveValue('215');
+  // A real edit through the UI: switch a cue off and exclude a piece of equipment, then back it up.
+  await page.getByLabel('Sound cues').uncheck();
+  await page.getByLabel('Dumbbells').uncheck();
+  const storedOf = (p: Page) => async () => {
+    const [row] = await persistedRows<{ soundCues?: boolean; unavailableEquipment?: string[]; programStart: string }>(p, 'settings');
+    return JSON.stringify([row?.soundCues, row?.unavailableEquipment]);
+  };
+  await expect.poll(storedOf(page), { timeout: 10_000 }).toBe(JSON.stringify([false, ['dumbbells']]));
   await expect(page.getByText('Last backup: never')).toBeVisible();
 
   const [download] = await Promise.all([
@@ -57,9 +40,14 @@ test('settings backup downloads and restores into a fresh context', async ({ pag
   await download.saveAs(saved);
   await expect(page.getByText('Last backup: today')).toBeVisible();
 
+  await fresh.goto('./#/settings');
   await fresh.locator('input[type=file]').setInputFiles(saved);
   await expect(fresh.getByRole('status').filter({ hasText: 'Imported' })).toBeVisible();
-  await expect(fresh.getByLabel('Goal weight (lb)')).toHaveValue('215');
+  await expect.poll(storedOf(fresh), { timeout: 10_000 }).toBe(JSON.stringify([false, ['dumbbells']]));
+  await expect(fresh.getByLabel('Sound cues')).not.toBeChecked();
+  const [original] = await persistedRows<{ programStart: string }>(page, 'settings');
+  const [restored] = await persistedRows<{ programStart: string }>(fresh, 'settings');
+  expect(restored?.programStart).toBe(original?.programStart);
   await context.close();
 });
 
@@ -87,7 +75,7 @@ test('offline readiness: precache, manifest and (when available) offline reload'
   await page.evaluate(() => navigator.serviceWorker.ready);
   await context.setOffline(true);
   await page.reload();
-  await expect(page.locator('h1')).toHaveText('gym-plan');
+  await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
 });
 
 test('CSP is present and nothing violates it', async ({ page, request }) => {
@@ -97,6 +85,6 @@ test('CSP is present and nothing violates it', async ({ page, request }) => {
   page.on('console', (m) => {
     if (/content security policy|refused to/i.test(m.text())) violations.push(m.text());
   });
-  await onboard(page, { bodyweight: '200', target: '190' });
+  await onboard(page);
   expect(violations).toEqual([]);
 });

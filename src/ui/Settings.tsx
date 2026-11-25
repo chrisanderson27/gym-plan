@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { EXERCISES, exerciseById } from '../content';
 import { EQUIPMENT_PREFS } from '../content/equipment-prefs';
 import { buildExport, ImportError, importExport, markBackedUp, parseExport } from '../data/backup';
@@ -6,7 +6,7 @@ import { db } from '../data/db';
 import { setNotAtMyGym } from '../data/lift';
 import { useLiveQuery } from '../data/live';
 import { enabledActivities, poolOf, saveSettings, toggleUnavailableEquipment } from '../data/settings';
-import type { Appearance, PoolUnit, Settings as SettingsRow } from '../data/types';
+import type { PoolUnit, Settings as SettingsRow } from '../data/types';
 import { daysBetween, localDate } from '../engine/dates';
 import type { Activity } from '../engine/plan/activities';
 import { weekIndex } from '../engine/week';
@@ -14,8 +14,7 @@ import { isStandalone } from '../platform/display';
 import { deliverFile, backupFileName } from '../platform/share';
 import { isPersisted } from '../platform/storage';
 import { FeedbackList } from './feedback/FeedbackList';
-import { CalendarIcon, ChevronIcon, PersonIcon, PlusIcon, WorkoutsIcon } from './icons';
-import { ActivityChoices, DirectionChoices } from './Onboarding';
+import { ArrowRightIcon, CalendarIcon, ChevronIcon, PersonIcon, PlusIcon, WorkoutsIcon } from './icons';
 import { PoolSheet } from './PoolSheet';
 import { Sheet } from './Sheet';
 
@@ -48,13 +47,6 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
   useEffect(() => {
     isPersisted().then(setPersisted);
   }, []);
-
-  // Local draft so live-query renders never reset a field mid-edit; it follows the stored goal (e.g. after an import) whenever the field is not focused.
-  const [goalDraft, setGoalDraft] = useState(String(settings.goalWeightLb));
-  const goalFocused = useRef(false);
-  useEffect(() => {
-    if (!goalFocused.current) setGoalDraft(String(settings.goalWeightLb));
-  }, [settings.goalWeightLb]);
 
   const backupLabel = (() => {
     if (!settings.backupAt) return 'never';
@@ -152,19 +144,37 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
         </label>
         <label class="check pref-cue">
           <span class="pref-copy">
-            <span class="pref-cue-title">Running</span>
-            <span class="pref-cue-sub">Show easy run plans in your workout choices.</span>
-          </span>
-          <input type="checkbox" checked={activities.includes('run')} onChange={(e) => toggleActivity('run', e.currentTarget.checked)} />
-        </label>
-        <label class="check pref-cue">
-          <span class="pref-copy">
             <span class="pref-cue-title">Swimming</span>
             <span class="pref-cue-sub">Show simple lap-pool sessions.</span>
           </span>
           <input type="checkbox" checked={activities.includes('swim')} onChange={(e) => toggleActivity('swim', e.currentTarget.checked)} />
         </label>
         {activityError && <p role="status">Keep at least one activity enabled.</p>}
+        {activities.includes('swim') && (
+          <>
+            <a class="training-link" href="#/swim" data-testid="pref-swim-open">Open lap swim <ArrowRightIcon /></a>
+            {pool ? (
+              <>
+                <label>
+                  Pool unit
+                  <select value={pool.poolUnit} onChange={(e) => saveSettings(db, { poolUnit: e.currentTarget.value as PoolUnit })}>
+                    <option value="yd">yards</option>
+                    <option value="m">meters</option>
+                  </select>
+                </label>
+                <label>
+                  Pool length
+                  <input inputMode="decimal" value={pool.poolLength} onChange={(e) => { const v = Number(e.currentTarget.value); if (Number.isFinite(v) && v > 0) saveSettings(db, { poolLength: v }); }} />
+                </label>
+              </>
+            ) : (
+              <>
+                <button type="button" class="btn" onClick={() => setShowPool(true)}>Set pool</button>
+                {showPool && <PoolSheet onClose={() => setShowPool(false)} />}
+              </>
+            )}
+          </>
+        )}
       </section>
 
       {excludeOpen && (
@@ -177,64 +187,6 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
           </div>
         </Sheet>
       )}
-
-      <h2>Appearance</h2>
-      <label>
-        Appearance
-        <select data-testid="appearance" value={settings.appearance ?? 'light'} onChange={(e) => saveSettings(db, { appearance: e.currentTarget.value as Appearance })}>
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-      </label>
-
-      <h2>Goals</h2>
-      <DirectionChoices direction={settings.goalDirection ?? 'lose'} onChange={(goalDirection) => saveSettings(db, { goalDirection })} />
-      <label>
-        Goal weight (lb)
-        <input
-          inputMode="decimal"
-          value={goalDraft}
-          onFocus={() => { goalFocused.current = true; }}
-          onBlur={() => { goalFocused.current = false; }}
-          onInput={(e) => setGoalDraft(e.currentTarget.value)}
-          onChange={(e) => { const v = Number(e.currentTarget.value); if (Number.isFinite(v) && v > 0) saveSettings(db, { goalWeightLb: v }); }}
-        />
-      </label>
-      <h2>Activities</h2>
-      <ActivityChoices activities={enabledActivities(settings)} onChange={(activities) => {
-        setActivityError(!activities.length);
-        if (activities.length) void saveSettings(db, { activities });
-      }} />
-      {activityError && <p role="status">Keep at least one activity enabled.</p>}
-
-      <h2>Pool</h2>
-      {pool ? (
-        <>
-          <label>
-            Pool unit
-            <select value={pool.poolUnit} onChange={(e) => saveSettings(db, { poolUnit: e.currentTarget.value as PoolUnit })}>
-              <option value="yd">yards</option>
-              <option value="m">meters</option>
-            </select>
-          </label>
-          <label>
-            Pool length
-            <input inputMode="decimal" value={pool.poolLength} onChange={(e) => { const v = Number(e.currentTarget.value); if (Number.isFinite(v) && v > 0) saveSettings(db, { poolLength: v }); }} />
-          </label>
-        </>
-      ) : (
-        <>
-          <p>Set on first swim</p>
-          <button type="button" class="btn" onClick={() => setShowPool(true)}>Set pool</button>
-          {showPool && <PoolSheet onClose={() => setShowPool(false)} />}
-        </>
-      )}
-      <h2>Program start</h2>
-      <label>
-        Program start (week 1)
-        <input type="date" value={settings.programStart} onChange={(e) => { if (e.currentTarget.value) saveSettings(db, { programStart: e.currentTarget.value }); }} />
-      </label>
 
       <h2>Backup</h2>
       <p>Last backup: {backupLabel}</p>
