@@ -16,7 +16,10 @@ import { dayOf } from './format';
 
 const staleDate = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
-export function BurnScreen({ templateId }: { templateId?: string }) {
+/** Budgets a Burn can start with. A fresh Repeat passes the 45-minute floor so it never offers a shorter one. */
+export const burnBudgets = (minMin = 0) => BURN_BUDGETS_MIN.filter((m) => m >= minMin);
+
+export function BurnScreen({ templateId, minBudgetMin }: { templateId?: string; minBudgetMin?: number }) {
   const [picked, setPicked] = useState<string>();
   const [budgetMin, setBudgetMin] = useState<number>(BURN_DEFAULT_MIN);
   const [changing, setChanging] = useState(false);
@@ -91,7 +94,7 @@ export function BurnScreen({ templateId }: { templateId?: string }) {
             ))}
           </div>
           <div class="chips">
-            {BURN_BUDGETS_MIN.map((m) => (
+            {burnBudgets(minBudgetMin).map((m) => (
               <button key={m} type="button" class={m === budgetMin ? 'chip on' : 'chip'} aria-pressed={m === budgetMin}
                 data-testid={`burn-budget-${m}`} onClick={() => setBudgetMin(m)}>{m} min</button>
             ))}

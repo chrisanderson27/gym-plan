@@ -1,6 +1,7 @@
 import { exerciseById } from './index';
 import { SEED_EQUIPMENT } from './equipment';
 import { POSES } from './poses';
+import type { CardioModality, OrderedRunModality } from '../data/types';
 
 /**
  * Movements this phase can put on a live card or offer as a swap.
@@ -63,8 +64,13 @@ function verifiedPose(exerciseId: string, equipment: { id: string; kind: string;
 }
 
 /** Demo for a running segment. Outdoor or treadmill running needs no gear, so only machines go through availability. */
-export function runDemo(modality: 'run' | 'bike' | 'row'): { poseId: string; exerciseId?: string; coached?: boolean } {
+export function runDemo(modality: OrderedRunModality): { poseId: string; exerciseId?: string; coached?: boolean } {
   if (modality === 'bike') return { poseId: 'air-bike', exerciseId: 'air-bike', coached: true };
   if (modality === 'row') return { poseId: 'rower', exerciseId: 'rower' };
   return { poseId: 'run' };
+}
+
+/** The movement a run block shows for any modality. Run, treadmill and the rest need no gear, so they share the treadmill. */
+export function runExerciseId(modality: CardioModality) {
+  return (modality === 'bike' || modality === 'row' ? runDemo(modality).exerciseId : undefined) ?? 'treadmill';
 }

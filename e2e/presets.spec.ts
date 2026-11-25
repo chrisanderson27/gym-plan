@@ -88,7 +88,7 @@ test('a hybrid preset runs its run and strength segments, logs the run and resum
   await button(page, 'Finish block').click();
   const review = page.getByTestId('run-review');
   await review.getByLabel('Distance (mi)').fill('1.5');
-  await review.getByLabel('Effort (RPE 1–10)').fill('6');
+  await review.getByTestId('rpe-6').click();
   await button(review, 'Continue').click();
 
   await expect(page.getByRole('heading', { name: 'Chest press machine' })).toBeVisible();

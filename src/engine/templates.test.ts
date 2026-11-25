@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Block, IntervalBlock, LiftBlock, OrderedBlock } from '../data/types';
-import { FULL_WORKOUT_MIN_SEC, moveBlock, orderedBlockMinutes, orderedBlockSeconds, orderedDurationMin, orderedDurationSec, newLiftBlock, workoutShortfallSec, pairWithNext, removeBlock, templateDurationMin, toTemplateBlocks, unpair } from './templates';
+import { FULL_WORKOUT_MIN_SEC, moveBlock, orderedBlockMinutes, orderedBlockSeconds, orderedDurationMin, orderedDurationSec, newLiftBlock, shortfallLabel, workoutShortfallSec, pairWithNext, removeBlock, templateDurationMin, toTemplateBlocks, unpair } from './templates';
 
 let n = 0;
 const mk = () => 'id' + n++;
@@ -96,5 +96,15 @@ describe('workoutShortfallSec', () => {
   });
   it('leaves legacy template minutes unchanged', () => {
     expect(templateDurationMin([lift('a', { sets: 3 })])).toBe(Math.round(3 * 2));
+  });
+});
+
+describe('shortfallLabel', () => {
+  it('rounds up to whole seconds before splitting, never showing :60', () => {
+    expect(shortfallLabel(179.5)).toBe('3:00');
+    expect(shortfallLabel(59.2)).toBe('1:00');
+    expect(shortfallLabel(0.5)).toBe('0:01');
+    expect(shortfallLabel(2700)).toBe('45:00');
+    expect(shortfallLabel(125)).toBe('2:05');
   });
 });

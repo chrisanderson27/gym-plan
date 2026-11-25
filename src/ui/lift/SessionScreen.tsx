@@ -27,10 +27,11 @@ import { FinishSheet } from '../session/FinishSheet';
 import { PrBanner } from '../session/PrBanner';
 import { RestTimer } from '../session/RestTimer';
 import { blockChangeItems, exerciseChangeItems } from '../session/changeItems';
-import { useDemoPlayback } from '../pose/playback';
+import { resolveDemoPlayback, useDemoChoice } from '../pose/playback';
 import { PoseView, PosePlaybackButton } from '../slots/PoseView';
 import { useNow, useWakeLock } from '../session/hooks';
 import { CalibrationCard } from './CalibrationCard';
+import { demoLineup } from './demoLineup';
 import { EquipmentSheet } from './EquipmentSheet';
 import { FocusLift } from './FocusLift';
 import { SwapSheet } from './SwapSheet';
@@ -80,6 +81,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
   const [record, setRecord] = useState<{ pr: PR; name: string; key: string } | null>(null);
   const [error, setError] = useState('');
   const now = useNow(1000);
+  const demoChoice = useDemoChoice();
   useWakeLock(!!data?.session && !data.session.endedAt && !data.session.mixed);
   const steps = sessionSteps(data?.session?.blocks ?? []);
   const index = i ?? resumeIndex(steps, data?.sets ?? []);
@@ -169,7 +171,10 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
     };
   }) : [];
   const candidate = cards.find(({ block, calibrating }) => !calibrating && !done(block));
-  const demo = useDemoPlayback(`lift-step:${candidate?.block.id ?? ''}`, candidate ? [candidate.block.exerciseId] : []);
+  const demoIds = demoLineup(cards.map(({ block, calibrating }) => ({
+    blockId: block.id, exerciseId: block.exerciseId, calibrating, hasPose: !!exerciseById.get(block.exerciseId)?.poseId,
+  })), candidate?.block.id);
+  const demo = resolveDemoPlayback(demoChoice, `lift-step:${cards.map(({ block }) => block.id).join('|')}`, demoIds);
   const calibrationAdvance = cards.filter(({ calibrating }) => calibrating).at(-1);
   const cardFor = ({ block, mine, calibrating }: (typeof cards)[number]) => {
     const props = {
@@ -181,7 +186,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
     };
     const key = `${block.id}|${block.exerciseId}|${block.equipmentId}`;
     return calibrating
-      ? <CalibrationCard key={key} {...props} advance={!candidate && calibrationAdvance?.block === block ? { label: advanceLabel, onClick: onAdvance } : undefined} />
+      ? <CalibrationCard key={key} {...props} demo={demo} advance={!candidate && calibrationAdvance?.block === block ? { label: advanceLabel, onClick: onAdvance } : undefined} />
       : <FocusLift key={key} {...props} primary={candidate?.block === block} onLogged={(row) => logged(block, row)} />;
   };
 

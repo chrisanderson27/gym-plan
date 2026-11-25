@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { BURN_TEMPLATES } from '../../content/burn-templates';
 import { useLiveQuery } from '../../data/live';
 import type { Runnable } from '../../data/templates';
-import { BurnScreen } from '../cardio/BurnScreen';
+import { BurnScreen, burnBudgets } from '../cardio/BurnScreen';
 import { TemplateRunScreen } from './TemplateRunScreen';
 
 vi.mock('../../data/live', () => ({ useLiveQuery: vi.fn() }));
@@ -25,5 +25,10 @@ it.each([
 
   const screen = TemplateRunScreen(source);
   expect(screen.type).toBe(BurnScreen);
-  expect(screen.props).toEqual({ templateId: expectedId });
+  expect(screen.props).toEqual({ templateId: expectedId, minBudgetMin: 45 });
+});
+
+it('a fresh Burn Repeat never offers a budget under the 45-minute floor', () => {
+  expect(burnBudgets(45)).toEqual([45, 55, 60]);
+  expect(burnBudgets()).toContain(30);
 });

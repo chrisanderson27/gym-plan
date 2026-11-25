@@ -9,12 +9,11 @@ import { pickSubstitute } from '../../engine/lift/generator';
 import { painSwapOffer } from '../../engine/lift/pain';
 import { calibrationLanding, calibrationStart } from '../../engine/lift/progression';
 import { stepBy } from '../../engine/lift/steps';
-import { useDemoPlayback } from '../pose/playback';
 import { PoseView, PosePlaybackButton } from '../slots/PoseView';
 import type { CardProps } from './FocusLift';
 import { Stepper } from './Stepper';
 
-export function CalibrationCard(p: CardProps & { advance?: { label: string; onClick: () => void } }) {
+export function CalibrationCard(p: CardProps & { demo: { playingId: string | null; toggle: (id: string) => void }; advance?: { label: string; onClick: () => void } }) {
   const { block, snapshot, session } = p;
   const ex = exerciseById.get(block.exerciseId);
   const eq = block.equipmentId ? snapshot.equipment.get(block.equipmentId) : undefined;
@@ -56,7 +55,7 @@ export function CalibrationCard(p: CardProps & { advance?: { label: string; onCl
     setWeight(null);
   };
 
-  const { playingId, toggle } = useDemoPlayback(`calibration:${block.id}`, [block.exerciseId]);
+  const { playingId, toggle } = p.demo;
 
   const answer = async (rir: 1 | 3, goHeavier: boolean) => {
     if (!last) return;

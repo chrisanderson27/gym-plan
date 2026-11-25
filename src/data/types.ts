@@ -239,12 +239,13 @@ export type OrderedCoachedBlock = ExecutableCoachedBlock | (OrderedCoachedBase &
   transitionSec?: undefined;
 });
 /** A running segment. Planned through generateRun and hybridCardio at Start. */
+export type OrderedRunModality = 'run' | 'bike' | 'row';
 export interface OrderedRunBlock {
   id: string;
   kind: 'run';
   name: string;
   runKind: 'easy' | 'intervals';
-  modality: 'run' | 'bike' | 'row';
+  modality: OrderedRunModality;
   durationSec: number;
 }
 export type OrderedBlock = OrderedTimedBlock | OrderedStrengthBlock | OrderedSelfPacedBlock | OrderedCoachedBlock | OrderedRunBlock;

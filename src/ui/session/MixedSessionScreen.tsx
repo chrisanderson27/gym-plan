@@ -17,6 +17,9 @@ import { useDemoPlayback } from '../pose/playback';
 import { MoreMenu } from '../MoreMenu';
 import { navigate } from '../router';
 import { Sheet } from '../Sheet';
+import { RpeChips } from '../cardio/RpeChips';
+import { runReviewActuals, startedClock } from './runReview';
+import { runExerciseId } from '../../content/stationDemos';
 import { PosePlaybackButton, PoseView } from '../slots/PoseView';
 import './mixed.css';
 
@@ -28,7 +31,6 @@ type Retry = { action: Action; expected: MixedCursor; closeEditor?: boolean };
 const FRESH_CUE_MS = 1000;
 const blockKind = (block: OrderedBlock) => block.kind === 'coached' ? 'Coached rotation'
   : block.kind === 'self-paced' ? 'Self-paced circuit' : block.kind === 'run' ? 'Running' : block.kind;
-const runExercise = (modality: CardioModality) => modality === 'bike' ? 'air-bike' : modality === 'row' ? 'rower' : 'treadmill';
 const stationIdentity = (s: EffectiveStation, poseId?: string) => `${s.slotId}:${s.exerciseId}:${s.equipmentId ?? ''}:${poseId ?? ''}`;
 
 export function MixedSessionScreen({ id }: { id: string }) {
@@ -255,7 +257,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
           <h2 ref={reviewHeading} tabIndex={-1}>Review block</h2>
           {clock && <p>{formatClock(Math.floor((clock.frozenElapsedMs ?? 0) / 1000))} elapsed</p>}
           {strength && <p>{setSlot ? `${setSlot} of ${strength.sets} sets logged` : 'Skipped'}</p>}
-          {block.kind === 'run' && clock?.startedAt !== null
+          {block.kind === 'run' && startedClock(clock)
             ? <RunReviewForm elapsedSec={Math.floor((clock?.frozenElapsedMs ?? 0) / 1000)} modality={acceptedRun?.modality ?? block.modality} finish={finish} busy={busy} submit={submit} />
             : <ReviewForm draft={clock?.startedAt === null ? undefined : draft} stations={stations} finish={finish} busy={busy} submit={submit} />}
         </section>
@@ -313,7 +315,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
               <p class="num" role="timer" aria-label="Segment time left">{formatClock(Math.ceil(segment.remainingMs / 1000))}</p>
               {segment.next && <p><b>Next:</b> {segment.next.label}</p>}
             </div>}
-            <MixedDemo key={`${block.id}:${(acceptedRun?.modality ?? block.modality)}:${options?.poseId}`} scope={block.id} exerciseId={runExercise(acceptedRun?.modality ?? block.modality)} poseId={options?.poseId || undefined} />
+            <MixedDemo key={`${block.id}:${(acceptedRun?.modality ?? block.modality)}:${options?.poseId}`} scope={block.id} exerciseId={runExerciseId(acceptedRun?.modality ?? block.modality)} poseId={options?.poseId || undefined} />
             {options && !ready && <p>Movement unavailable</p>}
           </>}
           <div class="mixed-live-actions actions">
@@ -366,22 +368,22 @@ function RunReviewForm({ elapsedSec, modality, finish, busy, submit }: {
   const [distance, setDistance] = useState('');
   const [minutes, setMinutes] = useState(String(Math.max(1, Math.round(elapsedSec / 60))));
   const [mode, setMode] = useState<CardioModality>(modality);
-  const [rpe, setRpe] = useState('5');
+  const [rpe, setRpe] = useState<number | null>(null);
   const [pain, setPain] = useState(false);
-  const valid = Number(minutes) > 0 && (distance === '' || Number(distance) >= 0);
+  const actuals = runReviewActuals({ distance, minutes, modality: mode, rpe, pain });
   return (
     <form class="mixed-fields" data-testid="run-review" onSubmit={(event) => {
       event.preventDefault();
-      if (!valid) return;
-      void submit({ type: 'continue', run: { distanceMi: distance === '' ? 0 : Number(distance), durationSec: Math.round(Number(minutes) * 60), modality: mode, rpe: Number(rpe), painFlag: pain } });
+      if (actuals) void submit({ type: 'continue', run: actuals });
     }}>
       <label>Distance (mi)<input type="number" inputMode="decimal" min="0" step="any" value={distance} onInput={(e) => setDistance(e.currentTarget.value)} /></label>
       <label>Duration (min)<input type="number" inputMode="decimal" min="0.5" step="any" required value={minutes} onInput={(e) => setMinutes(e.currentTarget.value)} /></label>
       <label>Modality<select value={mode} onChange={(e) => setMode(e.currentTarget.value as CardioModality)}>
         {RUN_MODALITIES.map((m) => <option key={m} value={m}>{modalityName(m)}</option>)}</select></label>
-      <label>Effort (RPE 1–10)<input type="number" inputMode="numeric" min="1" max="10" step="1" required value={rpe} onInput={(e) => setRpe(e.currentTarget.value)} /></label>
+      <p>Effort (RPE 1–10)</p>
+      <RpeChips value={rpe} onChange={setRpe} />
       <label class="check"><input type="checkbox" checked={pain} onChange={(e) => setPain(e.currentTarget.checked)} />Pain during this block</label>
-      <button type="submit" class="primary" disabled={busy || !valid}>{finish ? 'Finish workout' : 'Continue'}</button>
+      <button type="submit" class="primary" disabled={busy || !actuals}>{finish ? 'Finish workout' : 'Continue'}</button>
     </form>
   );
 }

@@ -7,7 +7,7 @@ import type { OrderedBlock, OrderedPrescription } from '../../data/types';
 import { validAuthoredWorkout } from '../../data/validate';
 import { WORKOUT_PRESETS } from '../../data/presets';
 import { copyWorkoutBlock, libraryWorkoutBlock, runWorkoutChoices, starterWorkoutBlocks, strengthWorkoutChoices, workoutBlockContent } from '../../data/workoutChoices';
-import { moveBlock, workoutShortfallSec } from '../../engine/templates';
+import { moveBlock, shortfallLabel, workoutShortfallSec } from '../../engine/templates';
 import { BlocksIcon, BookmarkIcon, CloseIcon, FlameIcon, LiftIcon, PlusIcon, RunIcon, SwapIcon, WindIcon } from '../icons';
 import { orderedDurationLabel, workoutBlockKind, workoutBlockName } from '../labels';
 import { Sheet } from '../Sheet';
@@ -28,8 +28,6 @@ const presetChoices = (() => {
     return [{ id: choiceKey({ id: `${preset.id}:${block.id}` }, 'preset'), block }];
   }));
 })();
-
-const shortfallText = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.ceil(sec % 60)).padStart(2, '0')}`;
 
 export function WorkoutEditor({ edit, initial, onSaved, onClose, fallbackFocus }: {
   edit?: { id: string; baseline: OrderedPrescription }; initial?: OrderedPrescription; onSaved?: (id: string) => void;
@@ -171,7 +169,7 @@ export function WorkoutEditor({ edit, initial, onSaved, onClose, fallbackFocus }
           {!moreStrength && <li><button type="button" class="workout-more" onClick={() => setMoreStrength(true)}>More strength blocks</button></li>}
         </ul>
         <p class="workout-floor" role="status" aria-live="polite" data-short={shortfall > 0 ? 'true' : 'false'}>
-          {shortfall > 0 ? `Add at least ${shortfallText(shortfall)} to reach 45 minutes.` : 'Meets the 45-minute minimum.'}
+          {shortfall > 0 ? `Add at least ${shortfallLabel(shortfall)} to reach 45 minutes.` : 'Meets the 45-minute minimum.'}
         </p>
         {error && <p class="workout-error" role="alert">{error}</p>}
         {conflict && <button type="button" disabled={!canSave || busy} onClick={() => submit(true)}>Save as new workout</button>}

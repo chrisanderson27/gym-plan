@@ -64,6 +64,12 @@ const intervalSec = (b: IntervalBlock) => b.rounds * b.phases.reduce((n, p) => n
 
 export const FULL_WORKOUT_MIN_SEC = 45 * 60;
 
+/** m:ss for a shortfall, rounded up to whole seconds first so 179.5 s reads 3:00, never 2:60. */
+export function shortfallLabel(sec: number) {
+  const whole = Math.ceil(sec);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
 export function orderedBlockSeconds(block: OrderedBlock) {
   if (block.kind === 'run') return block.durationSec;
   if (block.kind !== 'strength') return block.durationSec;

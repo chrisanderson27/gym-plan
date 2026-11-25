@@ -135,3 +135,12 @@ test('the preview note appears only when a guardrail would shorten the run', asy
   expect(await acceptedPlanNotes(db, [run(1200)], at())).toEqual([undefined]);
   expect((await acceptedPlanNotes(db, [run(3300)], at()))[0]).toMatch(/running limits/);
 });
+
+test('a run in a lower-body workout says it becomes a bike, and a malformed block is not swallowed', async () => {
+  const { acceptedPlanNotes } = await import('./mixedSession');
+  const run: OrderedBlock = { id: 'r', kind: 'run', name: 'Run', runKind: 'easy', modality: 'run', durationSec: 1200 };
+  const squat: OrderedBlock = { id: 's', kind: 'strength', exerciseId: 'leg-press', sets: 3, repMin: 8, repMax: 10 };
+  expect((await acceptedPlanNotes(db, [squat, run], at()))[1]).toMatch(/bike instead of run/);
+  expect((await acceptedPlanNotes(db, [run], at()))[0]).toBeUndefined();
+  await expect(acceptedPlanNotes(db, [null as unknown as OrderedBlock], at())).rejects.toBeInstanceOf(TypeError);
+});

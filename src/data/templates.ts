@@ -8,7 +8,7 @@ import { pickSubstitute } from '../engine/lift/generator';
 import { deloadState } from '../engine/lift/deload';
 import { summarizeLiftSession } from '../engine/lift/session';
 import { generateRun } from '../engine/run/generator';
-import { toTemplateBlocks, workoutShortfallSec } from '../engine/templates';
+import { shortfallLabel, toTemplateBlocks, workoutShortfallSec } from '../engine/templates';
 import { isRampInWeek, weekIndex } from '../engine/week';
 import { loadCardioSnapshot } from './cardio';
 import type { GymDb } from './db';
@@ -72,7 +72,7 @@ export async function saveOrderedWorkout(db: GymDb, draft: OrderedPrescription,
   if (!validAuthoredWorkout(ordered)) throw new WorkoutSaveError('Enter a name and add 1–30 valid blocks. Replace or remove any coached block missing its schedule.');
   const shortfall = workoutShortfallSec(ordered.blocks);
   if (shortfall > 0) {
-    throw new WorkoutSaveError(`Add at least ${Math.floor(shortfall / 60)}:${String(Math.ceil(shortfall % 60)).padStart(2, '0')} to reach 45 minutes.`);
+    throw new WorkoutSaveError(`Add at least ${shortfallLabel(shortfall)} to reach 45 minutes.`);
   }
   const id = edit?.id ?? newId();
   await db.transaction('rw', db.templates, async () => {

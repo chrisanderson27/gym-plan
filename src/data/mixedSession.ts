@@ -1,7 +1,7 @@
 import { exerciseById } from '../content';
 import { EQUIPMENT_PREFS } from '../content/equipment-prefs';
 import { RUN_FORMATS } from '../content/run-formats';
-import { COACHED_EXERCISE_IDS, PHASE3_EXERCISE_IDS, coachedEquipmentId, coachedPose, phase3EquipmentId, phase3Pose, runDemo } from '../content/stationDemos';
+import { COACHED_EXERCISE_IDS, PHASE3_EXERCISE_IDS, coachedEquipmentId, coachedPose, phase3EquipmentId, phase3Pose, runDemo, runExerciseId } from '../content/stationDemos';
 import { coachedSchedule, initialCoached, nextCoached, projectCoached, sameCoachedPhase } from '../engine/block/coached';
 import { elapsedClamped, finishClock, pauseClock, reconcileClock, resumeClock, startClock } from '../engine/block/session';
 import { stationUnits } from '../engine/block/progression';
@@ -126,7 +126,7 @@ export async function workoutPreview(db: GymDb, blocks: OrderedBlock[], now = ne
     }
     if (block.kind === 'run') {
       const demo = runDemo(block.modality);
-      if (!demo.exerciseId) return [{ exerciseId: 'treadmill', equipmentId: undefined, equipmentName: undefined, poseId: demo.poseId, status: undefined }];
+      if (!demo.exerciseId) return [{ exerciseId: runExerciseId(block.modality), equipmentId: undefined, equipmentName: undefined, poseId: demo.poseId, status: undefined }];
       return [describe(demo.exerciseId, undefined, true, !!demo.coached)];
     }
     return block.exerciseId ? [describe(block.exerciseId)] : [];
@@ -141,7 +141,8 @@ export async function acceptedPlanNotes(db: GymDb, blocks: OrderedBlock[], now =
   let prepared: ReturnType<typeof prepareOrderedStart>;
   try {
     prepared = prepareOrderedStart(g, { name: 'preview', blocks }, 'preview', now, false, runInputs);
-  } catch {
+  } catch (error) {
+    if (!(error instanceof MixedInputError)) throw error;
     return blocks.map(() => undefined);
   }
   return blocks.map((block) => {
@@ -152,7 +153,9 @@ export async function acceptedPlanNotes(db: GymDb, blocks: OrderedBlock[], now =
     if (block.kind === 'run') {
       const run = prepared?.blocks.find((b): b is RunBlock => b.kind === 'run' && b.id === block.id);
       const sec = run ? runTotalMs(runPhases(run)) / 1000 : block.durationSec;
-      return sec < block.durationSec - 30 ? `Today: ${Math.round(sec / 60)} min run within your running limits.` : undefined;
+      const swapped = run && run.modality !== block.modality ? `Today: ${run.modality} instead of ${block.modality} on a lower-body day.` : undefined;
+      const shorter = sec < block.durationSec - 30 ? `Today: ${Math.round(sec / 60)} min run within your running limits.` : undefined;
+      return [swapped, shorter].filter(Boolean).join(' ') || undefined;
     }
     return undefined;
   });

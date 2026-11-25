@@ -23,7 +23,15 @@ export function nextChoice(input: Omit<PlaybackInput, 'choice'> & { choice: Play
 
 /** Demo playback state for one surface. It never touches the clock, drafts or logged results. */
 export function useDemoPlayback(scope: string, ids: readonly string[], active?: string | null) {
-  const [choice, setChoice] = useState<PlaybackChoice | null>(null);
+  return resolveDemoPlayback(useState<PlaybackChoice | null>(null), scope, ids, active);
+}
+
+/** The state half of useDemoPlayback, so a screen can call it before its early returns and resolve once its lineup is known. */
+export function useDemoChoice() {
+  return useState<PlaybackChoice | null>(null);
+}
+
+export function resolveDemoPlayback([choice, setChoice]: ReturnType<typeof useDemoChoice>, scope: string, ids: readonly string[], active?: string | null) {
   const input = { scope, ids, active, choice };
   return {
     playingId: resolvePlaying(input),
