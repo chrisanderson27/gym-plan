@@ -69,7 +69,7 @@ export function MixedSummaryScreen({ id }: { id: string }) {
         <span class="mixed-complete-mark"><CheckIcon /></span>
         <p class="pref-eyebrow">Workout complete</p>
         <h1>{summaryHeadline(completed).flatMap((line, i) => i ? [<br key={`br${i}`} />, line] : [line])}</h1>
-        <p>{mixed.prescription.name} · {completed} {completed === 1 ? 'block' : 'blocks'} finished · {sets.length} {sets.length === 1 ? 'set' : 'sets'} logged{skipped > 0 && ` · ${skipped} skipped`}</p>
+        <p class="mixed-completion-name">{mixed.prescription.name} · {completed} {completed === 1 ? 'block' : 'blocks'} finished · {sets.length} {sets.length === 1 ? 'set' : 'sets'} logged{skipped > 0 && ` · ${skipped} skipped`}</p>
       </section>
       <section class="mixed-summary-card" aria-label="Weekly goal">
         <p class="pref-eyebrow">Weekly goal</p>

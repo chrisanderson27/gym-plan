@@ -231,4 +231,5 @@ it('long workout names clamp and wrap in runner header, Today hero, history, lin
     expect(rule.split('{')[0]).toContain(selector);
   }
   expect(rule).toMatch(/line-clamp: 2[^}]*overflow-wrap: anywhere/);
+  expect(css).toMatch(/\.today-hero-detail, \.mixed-completion-name \{[^}]*line-clamp: 3[^}]*overflow-wrap: anywhere/);
 });

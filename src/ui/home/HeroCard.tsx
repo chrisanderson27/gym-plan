@@ -34,7 +34,7 @@ export function HeroCard({ state, title, detail, durationSec, blockCount, estima
     <div data-testid="hero-state" data-state={state}>
       {eyebrow && <p class="today-hero-label">{eyebrow}</p>}
       <h2>{title}</h2>
-      {detail && <p>{detail}</p>}
+      {detail && <p class="today-hero-detail">{detail}</p>}
       {durationSec !== undefined && <div class="today-hero-meta">
         <div>
           <span><TimerIcon />{estimated ? `${estimatedMinutesLabel(durationSec)} estimated` : durationLabel(durationSec)}</span>
