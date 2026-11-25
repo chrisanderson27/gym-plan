@@ -142,7 +142,8 @@ async function plannedRuns(db: GymDb, g: Gym, blocks: OrderedBlock[], now: Date)
   try {
     return prepareOrderedStart(g, { name: 'preview', blocks }, 'preview', now, false, await loadCardioSnapshot(db, now))?.blocks;
   } catch (error) {
-    if (!(error instanceof MixedInputError)) throw error;
+    // A preview is best-effort: any planner failure falls back to the authored modality.
+    if (!(error instanceof MixedInputError)) console.warn('workoutPreview: planning failed, using authored run modality', error);
     return undefined;
   }
 }

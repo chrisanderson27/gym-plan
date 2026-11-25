@@ -2,16 +2,16 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { exerciseById, SEED_EQUIPMENT } from '../content';
 import { COACHED_EXERCISE_IDS, coachedEquipmentId, coachedPose, PHASE3_EXERCISE_IDS, phase3EquipmentId, phase3Pose } from '../content/stationDemos';
 import { stationUnits } from '../engine/block/progression';
-import { orderedDurationSec } from '../engine/templates';
+import { orderedDurationSec, workoutShortfallSec } from '../engine/templates';
 import { setPreferredEquipment } from './lift';
 import { toBlockExercise } from './liftday';
 import { mixedOptions, startMixedSession, updateMixedSession, workoutPreview } from './mixedSession';
 import { settings } from './p4-test-utils';
-import { saveOrderedWorkout } from './templates';
+import { saveOrderedWorkout, WorkoutSaveError } from './templates';
 import { floored, openTestDb } from './test-utils';
 import type { OrderedSelfPacedBlock, OrderedStation } from './types';
 import { WORKOUT_PRESETS, matchingSuggestion } from './presets';
-import { LEGACY_SUGGESTIONS, copyWorkoutBlock, libraryWorkoutBlock, starterWorkoutBlocks, strengthWorkoutChoices, workoutBlockContent } from './workoutChoices';
+import { LEGACY_SUGGESTIONS, copyWorkoutBlock, legacyWorkoutDraft, libraryWorkoutBlock, starterWorkoutBlocks, strengthWorkoutChoices, workoutBlockContent } from './workoutChoices';
 const suggestedWorkouts = LEGACY_SUGGESTIONS;
 
 let db: ReturnType<typeof openTestDb>;
@@ -197,4 +197,16 @@ test('copies a recommendation-off library row by value with fresh, independent d
   expect(copy.stations!.map((station) => station.slotId)).not.toEqual(other.stations!.map((station) => station.slotId));
   row.stations[0]!.target.amount = 20;
   expect(copy.stations![0]!.target.amount).toBe(7);
+});
+
+test.each([
+  ['burn', [{ id: 'b', kind: 'circuit', role: 'block', podId: 'turf', label: 'Block A', durationSec: 480, targetRounds: 3, stations: [], log: { completedRounds: 3, actualDurationSec: 480, stations: [] } }]],
+  ['run', [{ id: 'r', kind: 'run', runKind: 'easy', modality: 'run', repeats: 1, segments: [{ sec: 1200 }] }]],
+  ['hybrid', [{ id: 'l', kind: 'lift', exerciseId: 'leg-press', sets: 3, repMin: 8, repMax: 10 },
+    { id: 'r', kind: 'run', runKind: 'easy', modality: 'run', repeats: 1, segments: [{ sec: 600 }] }]],
+])('"Build a 45-minute version" of a legacy %s row stays under the floor until extended, and cannot be saved short', async (_type, blocks) => {
+  const { draft } = legacyWorkoutDraft({ name: 'Old', blocks } as never);
+  expect(workoutShortfallSec(draft.blocks)).toBeGreaterThan(0);
+  await expect(saveOrderedWorkout(db, draft)).rejects.toThrow(WorkoutSaveError);
+  expect(await db.templates.count()).toBe(0);
 });

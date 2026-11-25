@@ -156,3 +156,13 @@ test('the preview card shows the planned bike, not the authored run, on a lower-
   expect(alone.exerciseId).toBe(runExerciseId('run'));
   expect(lower.exerciseId).not.toBe(alone.exerciseId);
 });
+
+test('a throwing run planner does not blank the preview: cards fall back to the authored modality', async () => {
+  const { workoutPreview } = await import('./mixedSession');
+  const { runExerciseId } = await import('../content/stationDemos');
+  let reads = 0;
+  const run = { id: 'r', kind: 'run', name: 'Run', runKind: 'easy', durationSec: 1200,
+    get modality() { if (reads++ === 0) throw new Error('planner boom'); return 'run'; } } as unknown as OrderedBlock;
+  const cards = await workoutPreview(db, [run], at());
+  expect(cards[0]![0]!.exerciseId).toBe(runExerciseId('run'));
+});
