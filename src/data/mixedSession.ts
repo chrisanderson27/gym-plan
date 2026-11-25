@@ -100,6 +100,7 @@ export function missingCoachedSchedule(block: OrderedBlock) {
 
 export async function workoutPreview(db: GymDb, blocks: OrderedBlock[], now = new Date()) {
   const g = await loadMixedGym(db, now);
+  const planned = await plannedRuns(db, g, blocks, now);
   return blocks.map((block) => {
     const describe = (exerciseId: string, equipmentId?: string, supported = true, forceCoached = false) => {
       const coached = forceCoached || block.kind === 'coached';
@@ -125,12 +126,25 @@ export async function workoutPreview(db: GymDb, blocks: OrderedBlock[], now = ne
       return (block.stations ?? []).map((station) => describe(station.exerciseId, station.equipmentId, stationUnitMatches(station)));
     }
     if (block.kind === 'run') {
-      const demo = runDemo(block.modality);
-      if (!demo.exerciseId) return [{ exerciseId: runExerciseId(block.modality), equipmentId: undefined, equipmentName: undefined, poseId: demo.poseId, status: undefined }];
+      const swapped = planned?.find((b): b is RunBlock => b.kind === 'run' && b.id === block.id)?.modality;
+      const modality = swapped === 'bike' || swapped === 'row' ? swapped : block.modality;
+      const demo = runDemo(modality);
+      if (!demo.exerciseId) return [{ exerciseId: runExerciseId(modality), equipmentId: undefined, equipmentName: undefined, poseId: demo.poseId, status: undefined }];
       return [describe(demo.exerciseId, undefined, true, !!demo.coached)];
     }
     return block.exerciseId ? [describe(block.exerciseId)] : [];
   });
+}
+
+/** The blocks Start would plan today (run modality can swap on a lower-body day), or undefined when it cannot plan them. */
+async function plannedRuns(db: GymDb, g: Gym, blocks: OrderedBlock[], now: Date) {
+  if (!blocks.some((b) => b.kind === 'run')) return undefined;
+  try {
+    return prepareOrderedStart(g, { name: 'preview', blocks }, 'preview', now, false, await loadCardioSnapshot(db, now))?.blocks;
+  } catch (error) {
+    if (!(error instanceof MixedInputError)) throw error;
+    return undefined;
+  }
 }
 
 /** What Start would accept today for each block, read-only. Safety guardrails can shorten sets or run seconds below the prescription. */

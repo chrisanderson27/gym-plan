@@ -32,3 +32,10 @@ it('a fresh Burn Repeat never offers a budget under the 45-minute floor', () => 
   expect(burnBudgets(45)).toEqual([45, 55, 60]);
   expect(burnBudgets()).toContain(30);
 });
+
+it('the standalone Burn route never offers a budget under the 45-minute floor', async () => {
+  const { CardioRoutes } = await import('../cardio/CardioRoutes');
+  const screen = CardioRoutes({ route: '/burn', settings: {} as never });
+  expect(screen.type).toBe(BurnScreen);
+  expect(screen.props).toMatchObject({ minBudgetMin: 45 });
+});

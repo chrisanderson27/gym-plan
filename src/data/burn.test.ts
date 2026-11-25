@@ -99,3 +99,15 @@ it('finishes a stale Burn at its planned duration and preserves the first finish
     await db.delete();
   }
 });
+
+it.each([30, 45])('a fresh Burn at budget %i plans at least the shared 45-minute floor for every template', async (budgetMin) => {
+  const db = openTestDb();
+  try {
+    for (const t of BURN_TEMPLATES) {
+      const plan = await planBurn(db, { templateId: t.id, budgetMin }, START);
+      expect(plan.totalMin, t.id).toBeGreaterThanOrEqual(45);
+    }
+  } finally {
+    await db.delete();
+  }
+});

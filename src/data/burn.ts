@@ -4,6 +4,7 @@ import { BURN_TEMPLATES, type BurnTemplate } from '../content/burn-templates';
 import { estimateBurnMinutes, generateBurn, nextBurnTemplate, type BurnInput } from '../engine/burn';
 import { BURN_DEFAULT_MIN, RESUME_WINDOW_HOURS } from '../engine/config';
 import { localDate } from '../engine/dates';
+import { FULL_WORKOUT_MIN_SEC } from '../engine/templates';
 import { classifyHard } from '../engine/hard';
 import type { LiftSnapshot } from '../engine/lift/types';
 import { weekIndex } from '../engine/week';
@@ -12,6 +13,8 @@ import { newId } from './ids';
 import { findOpenLiftSession, findStaleOpenLifts, loadLiftSnapshot } from './lift';
 import { getSettings } from './settings';
 import { BLOCK_EXERCISES, BODYWEIGHT_IDS, blockEquipmentResolver } from './liftday';
+
+const BURN_FLOOR_SEARCH_MIN = 15;
 
 type BurnOptions = { templateId?: string; budgetMin?: number };
 
@@ -48,7 +51,15 @@ export async function planBurn(db: GymDb, { templateId, budgetMin = BURN_DEFAULT
   const id = BURN_TEMPLATES.some((t) => t.id === templateId)
     ? templateId : nextBurnTemplate(BURN_TEMPLATES.map((t) => t.id), lastBurnDone(snapshot));
   const template = BURN_TEMPLATES.find((t) => t.id === id)!;
-  return { template, ...generateBurn(burnInputFrom(snapshot, template, budgetMin, HOME_GYM, blocked)) };
+  // Shared 45-minute floor: a fresh Burn counts its planned blocks, so raise the budget until the plan itself reaches it.
+  const floorMin = FULL_WORKOUT_MIN_SEC / 60;
+  let budget = Math.max(budgetMin, floorMin);
+  let plan = generateBurn(burnInputFrom(snapshot, template, budget, HOME_GYM, blocked));
+  while (plan.totalMin < floorMin && budget < floorMin + BURN_FLOOR_SEARCH_MIN) {
+    budget += 1;
+    plan = generateBurn(burnInputFrom(snapshot, template, budget, HOME_GYM, blocked));
+  }
+  return { template, ...plan };
 }
 
 export function startOrResumeBurn(db: GymDb, options: BurnOptions = {}, now = new Date()): Promise<string> {

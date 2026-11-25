@@ -144,3 +144,15 @@ test('a run in a lower-body workout says it becomes a bike, and a malformed bloc
   expect((await acceptedPlanNotes(db, [run], at()))[0]).toBeUndefined();
   await expect(acceptedPlanNotes(db, [null as unknown as OrderedBlock], at())).rejects.toBeInstanceOf(TypeError);
 });
+
+test('the preview card shows the planned bike, not the authored run, on a lower-body day', async () => {
+  const { workoutPreview } = await import('./mixedSession');
+  const { runExerciseId } = await import('../content/stationDemos');
+  const run: OrderedBlock = { id: 'r', kind: 'run', name: 'Run', runKind: 'easy', modality: 'run', durationSec: 1200 };
+  const squat: OrderedBlock = { id: 's', kind: 'strength', exerciseId: 'leg-press', sets: 3, repMin: 8, repMax: 10 };
+  const lower = (await workoutPreview(db, [squat, run], at()))[1]![0]!;
+  const alone = (await workoutPreview(db, [run], at()))[0]![0]!;
+  expect(lower.exerciseId).toBe(runExerciseId('bike'));
+  expect(alone.exerciseId).toBe(runExerciseId('run'));
+  expect(lower.exerciseId).not.toBe(alone.exerciseId);
+});
