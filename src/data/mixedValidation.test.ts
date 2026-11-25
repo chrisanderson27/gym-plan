@@ -44,3 +44,10 @@ test('incomplete legacy schedules stay readable while authored writes require th
   expect(validAuthoredWorkout(old.ordered)).toBe(false);
   expect(validAuthoredWorkout(COACHED_TEMPLATE.ordered!)).toBe(true);
 });
+
+test('equipment steps must be finite and non-negative on import, while empty and zero steps stay readable', () => {
+  const row = { id: 'e', name: 'E', kind: 'machine', steps: [0, 10, 20] };
+  expect(() => validateRows('equipment', [row])).not.toThrow();
+  expect(() => validateRows('equipment', [{ ...row, steps: [] }])).not.toThrow();
+  for (const steps of [[-10, 20], [10, Infinity], [10, NaN]]) expect(() => validateRows('equipment', [{ ...row, steps }])).toThrow('malformed');
+});

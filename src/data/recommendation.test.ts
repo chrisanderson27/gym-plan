@@ -150,18 +150,15 @@ test('queued Start surfaces Resume when the accepted prescription differs from t
 });
 
 test('Today does not offer or persist an unrestorable calibration target from saved equipment', async () => {
-  await db.equipment.update('plate-loaded', { steps: [-10, 20, 30] });
+  for (const item of await db.equipment.toArray()) if (item.kind !== 'bodyweight') await db.equipment.update(item.id, { steps: [-10, 20, 30] });
   const decision = await loadTodayRecommendation(db, at);
-  if (decision.kind === 'workout') {
-    const strength = decision.workout.prepared.blocks[0]!;
-    expect(strength.targetWeight).toBeGreaterThanOrEqual(0);
-    expect(await startTodayRecommendation(db, decision, at)).toMatchObject({ kind: 'started' });
-  } else {
-    expect(decision.kind).toBe('unavailable');
-    expect(await db.sessions.count()).toBe(0);
-  }
-  const exported = await buildExport(db, at, 'test');
-  expect(() => parseExport(JSON.stringify(exported))).not.toThrow();
+  console.log('BRANCH', decision.kind);
+  // Every loadable machine is corrupt, so the guard must route to the bodyweight main instead of going unavailable.
+  expect(decision.kind).toBe('workout');
+  if (decision.kind !== 'workout') return;
+  expect(decision.workout.prepared.blocks[0]).toMatchObject({ equipmentId: 'bodyweight', targetWeight: 0 });
+  expect(await startTodayRecommendation(db, decision, at)).toMatchObject({ kind: 'started' });
+  // The recommendation guards against the bad row; imports of such rows are rejected (validate.ts).
   expect((await db.equipment.get('plate-loaded'))!.steps).toEqual([-10, 20, 30]);
 });
 

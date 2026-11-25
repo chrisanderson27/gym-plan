@@ -298,7 +298,7 @@ function validMixed(row: Rec, backup?: BackupSnapshot): boolean {
 const ROW_SHAPES: Record<StoreName, (v: unknown, snapshot?: BackupSnapshot) => boolean> = {
   exerciseOverrides: shape({ exerciseId: str, notAtMyGym: bool, preferredEquipmentId: opt(str) }),
   equipment: shape({
-    id: str, name: str, kind: oneOf('machine', 'barbell', 'db', 'kb', 'cable', 'cardio', 'bodyweight'), steps: arr(num),
+    id: str, name: str, kind: oneOf('machine', 'barbell', 'db', 'kb', 'cable', 'cardio', 'bodyweight'), steps: arr(nonnegative),
   }),
   sessions: (v, snapshot) => isRec(v) && validMixed(v, snapshot) && shape({
     id: str, date: iso, type: oneOf(...SESSION_TYPES), blocks: arr(block), hard: bool, hardCardio: bool,
