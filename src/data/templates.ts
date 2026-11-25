@@ -1,6 +1,7 @@
 import { BURN_TEMPLATES } from '../content/burn-templates';
 import { RUN_FORMATS } from '../content/run-formats';
 import { LIFT_TEMPLATES, exerciseById } from '../content';
+import { phase3EquipmentId, phase3Pose } from '../content/stationDemos';
 import { localDate } from '../engine/dates';
 import { hybridCardio } from '../engine/hybrid';
 import { pickSubstitute } from '../engine/lift/generator';
@@ -100,10 +101,24 @@ export async function loadRunnable(db: GymDb, src: { templateId: string } | { se
   }
   const s = await db.sessions.get(src.sessionId);
   if (!s) return null;
+  const mixed = s.mixed;
+  let ordered = mixed?.prescription;
+  if (mixed?.sourceId.startsWith('today:')) {
+    const blocks = await Promise.all(mixed.prescription.blocks.map(async (block) => {
+      if (block.kind !== 'strength' || block.equipmentId !== phase3EquipmentId(block.exerciseId)
+        || !Object.hasOwn(mixed.strength, block.id)) return block;
+      const accepted = mixed.strength[block.id]!;
+      if (accepted.exerciseId !== block.exerciseId || !accepted.equipmentId || accepted.equipmentId === block.equipmentId) return block;
+      const item = await db.equipment.get(accepted.equipmentId);
+      // Keep the physical pair instantiated at Start. A later movement swap is not the accepted plan.
+      return item && !item.builtin && phase3Pose(block.exerciseId, item) ? { ...block, equipmentId: item.id } : block;
+    }));
+    ordered = { ...mixed.prescription, blocks };
+  }
   return {
     type: s.type, blocks: toTemplateBlocks(s.blocks, newId), ...(s.templateId ? { templateId: s.templateId } : {}),
     ...(s.variant ? { variant: s.variant } : {}), name: s.mixed?.prescription.name ?? defaultName(s.type, s.variant, s.templateId, s.date),
-    ...(s.mixed ? { ordered: s.mixed.prescription } : {}),
+    ...(ordered ? { ordered } : {}),
   };
 }
 

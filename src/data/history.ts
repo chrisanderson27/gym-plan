@@ -113,7 +113,7 @@ async function priorWorkingSets(db: GymDb, ids: string[], pairs: [string, string
     .filter((set): set is SetRow => !!set && isWorking(set));
 }
 
-async function priorPRs(db: GymDb, entries: HistorySession[], newestDate: string, completedOnly = false): Promise<PR[][]> {
+async function priorPRs(db: GymDb, entries: HistorySession[], newestDate: string): Promise<PR[][]> {
   const entryIds = new Set(entries.map(({ session }) => session.id));
   const pairs = new Map<string, [string, string]>();
   const keys = new Set<string>();
@@ -141,7 +141,7 @@ async function priorPRs(db: GymDb, entries: HistorySession[], newestDate: string
     return [...entries, ...[...circuits, ...setSessions].flatMap((session) =>
       session ? [{ session, sets: setsBy.get(session.id) ?? [] }] : [])];
   });
-  return entries.map((entry) => sessionPRs(entry, prior.filter(({ session }) => session.date < entry.session.date && (!completedOnly || !!session.endedAt))));
+  return entries.map((entry) => sessionPRs(entry, prior.filter(({ session }) => session.date < entry.session.date)));
 }
 
 export async function listHistory(db: GymDb, page = 0, size = HISTORY_PAGE, completedOnly = false): Promise<HistoryItem[]> {
@@ -157,7 +157,7 @@ export async function listHistory(db: GymDb, page = 0, size = HISTORY_PAGE, comp
   ]);
   const setsBy = groupSets(sets);
   const entries = rows.map((session) => ({ session, sets: setsBy.get(session.id) ?? [] }));
-  const prs = await priorPRs(db, entries, newest.date, completedOnly);
+  const prs = await priorPRs(db, entries, newest.date);
   const runBy = new Map(runs.map((r) => [r.sessionId, r]));
   const swimBy = new Map(swims.map((r) => [r.sessionId, r]));
   return entries.map(({ session, sets }, index) => {

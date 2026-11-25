@@ -99,8 +99,7 @@ export function RecommendedLineup({ recommendation }: { recommendation: TodayRec
               {block.rirTarget !== undefined && ` · RIR ${block.rirTarget}`}
               {block.restSec !== undefined && ` · ${block.restSec} s rest`}</p>}
             {station && <p>Target {stationTargetLine(move.exerciseId, station.target.amount, station.target.unit, station.load)}</p>}
-            <PoseView exerciseId={move.exerciseId} poseId={move.poseId} running={active === key}
-              omitCue={station && move.exerciseId === 'dead-bug' ? '8 per side' : undefined} />
+            <PoseView exerciseId={move.exerciseId} poseId={move.poseId} running={active === key} />
           </article>;
         })}
       </>,

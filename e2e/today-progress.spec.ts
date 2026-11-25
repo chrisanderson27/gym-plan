@@ -31,6 +31,8 @@ async function seedDefaultSettings(page: Page, activities?: Settings['activities
     };
   }), settings);
   await page.reload();
+  // Let the boot redirect settle so later hash navigation is not overridden.
+  await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
 }
 
 async function warmOffline(page: Page) {
@@ -230,10 +232,21 @@ test('saved work agrees in Today, Progress and History after an offline reload a
   await page.getByRole('spinbutton', { name: 'Reps' }).fill('9');
   await page.getByRole('button', { name: 'Log set' }).click();
   await expect(page.getByText('1 of 1 sets logged')).toBeVisible();
+  const runner = page.url();
+  await page.goto(`./#/history/${open!.id}`);
+  const pendingStrength = page.getByTestId(`mixed-result-${blocks[1]!.id}`);
+  await expect(pendingStrength).toContainText('In progress');
+  await expect(pendingStrength).toContainText('70 lb × 9');
+  await page.getByRole('link', { name: 'Resume workout', exact: true }).click();
+  await expect(page).toHaveURL(runner);
   await proceed.click();
 
   await ready.click();
   await expect(page.getByRole('button', { name: 'Next' })).toBeVisible();
+  const liveDeadBug = page.locator('.gym-card[data-exercise-id="dead-bug"]');
+  await expect(liveDeadBug).toContainText('5 reps / side');
+  await expect(liveDeadBug).toContainText('Low back stays flat on the floor');
+  await expect(liveDeadBug).not.toContainText('8 per side');
   const rotation = blocks[2]!;
   if (rotation.kind !== 'coached') throw new Error('Expected the coached block after strength');
   await page.clock.fastForward(rotation.durationSec * 1000);
@@ -301,9 +314,46 @@ test('saved work agrees in Today, Progress and History after an offline reload a
   await expect(page.getByRole('heading', { name: 'Preparation' })).toBeVisible();
   const rows = await sessions(page);
   expect(rows).toHaveLength(2);
+  const equipmentId = open!.mixed!.strength[blocks[1]!.id]!.equipmentId;
+  const original = open!.mixed!.prescription;
   expect(rows.find((row) => row.id !== open!.id)).toMatchObject({
-    rpe: null, variant: 'lower-a', mixed: { prescription: open!.mixed!.prescription, results: {} },
+    rpe: null, variant: 'lower-a', mixed: {
+      prescription: { ...original, blocks: original.blocks.map((block) => block.kind === 'strength' ? { ...block, equipmentId } : block) },
+      results: {}, strength: { [blocks[1]!.id]: { equipmentId, targetWeight: 70 } },
+    },
   });
+});
+
+test('Today keeps restored circuit actuals visible when one saved pose does not match', async ({ page }) => {
+  await page.clock.setFixedTime(now);
+  await seedDefaultSettings(page);
+  const block = {
+    id: 'core', kind: 'self-paced' as const, name: 'Restored core circuit', durationSec: 480,
+    stations: [
+      { slotId: 'bug', exerciseId: 'dead-bug', equipmentId: 'bodyweight', target: { unit: 'reps' as const, amount: 6 } },
+      { slotId: 'plank', exerciseId: 'plank', equipmentId: 'bodyweight', target: { unit: 'sec' as const, amount: 20 } },
+    ],
+  };
+  const stations = block.stations.map((station) => ({ ...station, poseId: 'plank' }));
+  const started = now.getTime() - 60_000;
+  const row: Session = {
+    id: 'restored-circuit', type: 'custom', date: new Date(started).toISOString(), endedAt: now.toISOString(),
+    rpe: null, hard: false, hardCardio: false, durationMin: 1, notes: '', blocks: [],
+    mixed: {
+      kind: 'ordered', sourceId: 'template:core', prescription: { name: block.name, blocks: [block] }, strength: {},
+      cursor: { blockId: block.id, stage: 'review', setSlot: 0 },
+      stations: { core: stations }, drafts: { core: { rounds: 1, tapped: 1 } },
+      timers: { core: { startedAt: started, pausedAt: null, pausedMs: 0, durationMs: 480_000, frozenElapsedMs: 60_000 } },
+      results: { core: { status: 'completed', rounds: 1, elapsedMs: 60_000, stations } },
+    },
+  };
+  await seedBackup(page, { sessions: [row] }, 2);
+  await page.getByRole('link', { name: 'Today', exact: true }).click();
+  await expect(lineup(page)).toContainText('1 round');
+  const deadBug = lineup(page).locator('.logged-movement').filter({ hasText: 'Dead bug' });
+  await expect(deadBug).toContainText('6 reps / side');
+  await expect(deadBug.getByTestId('logged-pose')).toHaveCount(0);
+  await expect(lineup(page).getByTestId('logged-pose')).toHaveCount(1);
 });
 
 test('prior and current week use program-start dates, completed starts and Burn-only distinct days', async ({ page }) => {

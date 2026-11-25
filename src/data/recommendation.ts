@@ -2,12 +2,13 @@ import { exerciseById, LIFT_TEMPLATES } from '../content';
 import { coachedSchedule, COACHED_TRANSITION_SEC, COACHED_WORK_SEC } from '../engine/block/coached';
 import { generateLiftDay } from '../engine/block/generate';
 import { DEFAULT_LIFT_BUDGET_MIN, JOINT_FRIENDLY_WEEKS, LIFT_DAY_SHAPES, SEC_PER_UNIT } from '../engine/config';
+import { muscleReadiness } from '../engine/lift/readiness';
 import { enabled } from '../engine/plan/activities';
 import { rankToday } from '../engine/plan/pick';
 import type { BudgetLine, Candidate, PlanInput } from '../engine/plan/types';
 import { FULL_WORKOUT_MIN_SEC, orderedDurationSec } from '../engine/templates';
 import type { GymDb } from './db';
-import { findOpenLiftSession } from './lift';
+import { findOpenLiftSession, LIFT_EXERCISES } from './lift';
 import { liftDayInputFrom, liftDaySeed } from './liftday';
 import { availableDemo, findOpenMixedSession, loadMixedGym, prepareOrderedStart, resolveStation, workoutPreview, writePreparedOrdered } from './mixedSession';
 import { loadPlanInput } from './plan';
@@ -16,6 +17,7 @@ import { snapshotValue, validAuthoredWorkout } from './validate';
 import { copyWorkoutBlock, libraryWorkoutBlock, todayAccessorySlots, todayPreparation, todayRecovery } from './workoutChoices';
 
 type Gym = Awaited<ReturnType<typeof loadMixedGym>>;
+type AccessorySlot = Pick<Extract<OrderedBlock, { kind: 'coached' | 'self-paced' }>, 'id' | 'kind' | 'durationSec'>;
 type Prescription = {
   prepared: NonNullable<ReturnType<typeof prepareOrderedStart>>;
   variant: LiftVariant;
@@ -39,31 +41,25 @@ export function todaySessionRoute(s: Session) {
   return s.mixed ? `/workout/session/${s.id}` : `/${s.type === 'custom' ? 'lift' : s.type}/session/${s.id}`;
 }
 
-export async function findTodayOpen(db: GymDb, now: Date) {
-  return (await findOpenMixedSession(db)) ?? await findOpenLiftSession(db, now, ['lift', 'custom', 'burn', 'hybrid']);
+export function findTodayLegacyOpen(db: GymDb, now: Date) {
+  return findOpenLiftSession(db, now, ['lift', 'custom', 'burn', 'hybrid']);
 }
 
-function safeAccessory(g: Gym, exerciseId: string, reduced: boolean) {
-  const exercise = exerciseById.get(exerciseId);
-  return !!exercise && (g.week > JOINT_FRIENDLY_WEEKS || exercise.jointFriendly)
-    && exercise.impact !== 'high' && exercise.impact !== 'med'
-    && (!reduced || exerciseId !== 'goblet-squat');
-}
-
-function generatedAccessory(g: Gym, variant: LiftVariant, main: string, id: string, minutes: number, slot: number, reduced: boolean): OrderedBlock | null {
+function generatedAccessory(g: Gym, variant: LiftVariant, main: string, source: AccessorySlot, slot: number, reduced: boolean,
+  safeAccessory: (exerciseId: string) => boolean): OrderedBlock | null {
   const upper = variant.startsWith('upper');
   const lanes = todayAccessorySlots[upper ? 'upper' : 'lower'];
-  const coached = slot === 0;
+  const coached = source.kind === 'coached';
   const order = slot === 0 ? [0, 1, 2, 3] : slot === 1 ? [0, 2, 1] : slot === 2 ? [1, 2, 3] : [3, 2, 0];
   const stations: OrderedStation[] = [];
   for (const lane of order) {
     for (const exerciseId of lanes[lane]!) {
-      if (exerciseId === main || stations.some((s) => s.exerciseId === exerciseId) || !safeAccessory(g, exerciseId, reduced)) continue;
+      if (exerciseId === main || stations.some((s) => s.exerciseId === exerciseId) || !safeAccessory(exerciseId)) continue;
       const ex = exerciseById.get(exerciseId)!;
       const unit = ex.prescription.unit === 'reps' || ex.prescription.unit === 'amrap' ? 'reps' : 'sec';
       const repCap = coached ? Math.floor(COACHED_WORK_SEC / SEC_PER_UNIT.reps / (perSide.has(exerciseId) ? 2 : 1)) : 8;
       const amount = unit === 'reps' ? Math.min(ex.prescription.min || 6, repCap) : 20;
-      const station = { slotId: `${id}-${stations.length + 1}`, exerciseId, target: { unit, amount } } as const;
+      const station = { slotId: `${source.id}-${stations.length + 1}`, exerciseId, target: { unit, amount } } as const;
       if (resolveStation(g, station, exerciseId, coached)) {
         stations.push(station);
         break;
@@ -72,13 +68,14 @@ function generatedAccessory(g: Gym, variant: LiftVariant, main: string, id: stri
   }
   if (stations.length < 2) return null;
   const name = [upper ? 'Upper-body technique rotation' : 'Legs & core technique rotation', 'Controlled movement circuit', 'Core & posture circuit', 'Easy movement circuit'][slot]!;
-  const base = { id, name, durationSec: minutes * 60, stations };
+  const base = { ...source, name, stations };
   return coached
     ? { ...base, kind: 'coached', workSec: COACHED_WORK_SEC, restSec: reduced ? 30 : 20, transitionSec: COACHED_TRANSITION_SEC }
     : { ...base, kind: 'self-paced' };
 }
 
-function checkedReplacement(g: Gym, row: LibraryBlock, source: OrderedBlock, main: string, variant: LiftVariant, reduced: boolean) {
+function checkedReplacement(row: LibraryBlock, source: AccessorySlot, main: string, variant: LiftVariant, reduced: boolean,
+  safeAccessory: (exerciseId: string) => boolean) {
   if (source.kind !== row.kind || row.stations.length < 2 || row.durationSec > source.durationSec) return;
   const focus = variant.startsWith('lower') ? ['squat', 'hinge', 'lunge', 'carry-core'] : ['horizontal-push', 'horizontal-pull', 'vertical-push', 'vertical-pull', 'carry-core'];
   const occupied = new Set(row.stations.map((s) => s.exerciseId));
@@ -86,7 +83,7 @@ function checkedReplacement(g: Gym, row: LibraryBlock, source: OrderedBlock, mai
   const exercises = row.stations.map((s) => exerciseById.get(s.exerciseId));
   if (exercises.filter((e) => e?.group === 'conditioning').length > 1
     || !exercises.some((e) => e && focus.includes(e.group))) return;
-  if (row.stations.some(({ exerciseId, target, load }) => !safeAccessory(g, exerciseId, reduced)
+  if (row.stations.some(({ exerciseId, target, load }) => !safeAccessory(exerciseId)
     || target.amount <= 0 || target.amount > ({ reps: 15, sec: 45, cal: 0, m: 30 }[target.unit])
     || (load !== undefined && load > (reduced ? 0 : 15)))) return;
 
@@ -105,11 +102,20 @@ async function liftRecommendation(db: GymDb, input: PlanInput, candidate: Candid
   const variant = candidate.variant!;
   const g = await loadMixedGym(db, now);
   const dayInput = liftDayInputFrom(g.snapshot, variant, DEFAULT_LIFT_BUDGET_MIN, liftDaySeed(input.today, variant, DEFAULT_LIFT_BUDGET_MIN));
-  const mainCandidates = LIFT_TEMPLATES[variant].slots.flatMap((slot) => slot.candidates)
+  const gymMains = new Map(LIFT_TEMPLATES[variant].slots.flatMap((slot) => slot.candidates)
     .filter((id) => g.week > JOINT_FRIENDLY_WEEKS || exerciseById.get(id)?.jointFriendly)
-    .filter((id) => !!availableDemo(g, id));
+    .flatMap((id) => {
+      const demo = availableDemo(g, id);
+      if (!demo) return [];
+      const { equipmentId } = demo;
+      if (g.snapshot.equipment.get(equipmentId)!.steps.some((load) => !Number.isFinite(load) || load < 0)
+        || g.snapshot.history.some(({ session, sets }) => !session.flags?.deload && sets.some((set) =>
+          set.exerciseId === id && set.equipmentId === equipmentId && set.setKind !== 'warmup'
+          && (!Number.isFinite(set.weight) || set.weight < 0)))) return [];
+      return [[id, equipmentId] as const];
+    }));
+  const mainCandidates = [...gymMains.keys()];
   if (!mainCandidates.length) return;
-  const gymMains = new Map(mainCandidates.map((id) => [id, availableDemo(g, id)!.equipmentId]));
   const liftDay = generateLiftDay({
     ...dayInput, mainCandidates,
     resolveEquipmentId: (id, item, week) => gymMains.get(id) ?? dayInput.resolveEquipmentId(id, item, week),
@@ -120,21 +126,29 @@ async function liftRecommendation(db: GymDb, input: PlanInput, candidate: Candid
   const prefix = `${input.today}-${variant}`;
   const strength: OrderedBlock = { id: `${prefix}-strength`, kind: 'strength', exerciseId, equipmentId, sets, repMin, repMax, restSec };
   const reduced = liftDay.deload || liftDay.rampIn || !input.hasLiftHistory;
-  const circuits = LIFT_DAY_SHAPES[0].map((minutes, slot) => generatedAccessory(g, variant, exerciseId, `${prefix}-circuit-${slot + 1}`, minutes, slot, reduced));
-  if (circuits.some((b) => !b)) return;
-  const blocks: OrderedBlock[] = [{ ...todayPreparation, id: `${prefix}-prep` }, strength, ...circuits.flatMap((b) => b ?? []),
-    { ...todayRecovery, id: `${prefix}-recovery` }];
+  const readiness = muscleReadiness(g.snapshot, LIFT_EXERCISES);
+  const safeAccessory = (id: string) => {
+    const exercise = exerciseById.get(id);
+    return !!exercise && (g.week > JOINT_FRIENDLY_WEEKS || exercise.jointFriendly)
+      && exercise.impact !== 'high' && exercise.impact !== 'med' && (!reduced || id !== 'goblet-squat')
+      && [...exercise.primary, ...exercise.secondary].every((muscle) => readiness.get(muscle)?.ready !== false);
+  };
+  const slots = LIFT_DAY_SHAPES[0].map((minutes, index): AccessorySlot => ({
+    id: `${prefix}-circuit-${index + 1}`, kind: index === 0 ? 'coached' : 'self-paced', durationSec: minutes * 60,
+  }));
+  const circuits = slots.map((slot, index) => generatedAccessory(g, variant, exerciseId, slot, index, reduced, safeAccessory));
   const name = `${candidate.title} · ${variant.startsWith('lower') ? 'Legs & Core' : 'Upper Body & Core'}`;
-  const prepare = (draft: OrderedBlock[]) => {
-    const ordered = { name, blocks: draft };
+  const prepare = (accessories: (OrderedBlock | null)[]) => {
+    if (accessories.some((block) => block === null)) return null;
+    const blocks = [{ ...todayPreparation, id: `${prefix}-prep` }, strength, ...accessories.flatMap((block) => block ?? []),
+      { ...todayRecovery, id: `${prefix}-recovery` }];
+    const ordered = { name, blocks };
     if (!validAuthoredWorkout(ordered)) return null;
     const prepared = prepareOrderedStart(g, ordered, sourceId, now, true);
-    if (!prepared) return null;
+    if (!prepared || !validAuthoredWorkout(prepared.mixed.prescription)) return null;
     const durationSec = orderedDurationSec(prepared.mixed.prescription.blocks);
     return durationSec >= FULL_WORKOUT_MIN_SEC && durationSec <= maxLiftSec ? { prepared, durationSec } : null;
   };
-  const fallback = prepare(blocks);
-  if (!fallback) return;
   const checked = (await db.libraryBlocks.toArray()).filter((row) => row.recommend);
   const focusScore = (row: LibraryBlock) => row.stations.filter(({ exerciseId: id }) => {
     const group = exerciseById.get(id)?.group;
@@ -142,15 +156,16 @@ async function liftRecommendation(db: GymDb, input: PlanInput, candidate: Candid
       : group?.endsWith('-push') || group?.endsWith('-pull');
   }).length;
   checked.sort((a, b) => focusScore(b) - focusScore(a) || b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id));
-  for (const index of [2, 3, 4, 5]) {
+  for (const [index, slot] of slots.entries()) {
     for (const row of checked) {
-      const block = checkedReplacement(g, row, blocks[index]!, exerciseId, variant, reduced);
+      const block = checkedReplacement(row, slot, exerciseId, variant, reduced, safeAccessory);
       if (!block) continue;
-      const replacement = prepare(blocks.map((b, i) => index === i ? block : b));
+      const replacement = prepare(circuits.map((b, i) => index === i ? block : b));
       if (replacement) return { ...replacement, variant, libraryId: row.id };
     }
   }
-  return { ...fallback, variant };
+  const fallback = prepare(circuits);
+  if (fallback) return { ...fallback, variant };
 }
 
 async function resolveToday(db: GymDb, now: Date): Promise<TodayDecision> {
@@ -188,9 +203,12 @@ export function startTodayRecommendation(db: GymDb, reviewed: TodayRecommendatio
     // Sample after gaining the lock so a queued Start also observes local rollover.
     const now = at ?? new Date();
     const same = await db.sessions.where('type').equals('custom').filter((s) => !s.endedAt && s.mixed?.sourceId === reviewed.sourceId).first();
-    const open = same ?? await findTodayOpen(db, now);
+    const open = same ?? await findOpenMixedSession(db) ?? await findTodayLegacyOpen(db, now);
     if (open) {
-      if (same) return { kind: 'resume' as const, route: todaySessionRoute(open) };
+      // The accepted prescription retains the reviewed seed. Execution can materialize its instance or later swap.
+      if (same && snapshotValue(same.mixed?.prescription) === snapshotValue(reviewed.workout.prepared.mixed.prescription)) {
+        return { kind: 'resume' as const, route: todaySessionRoute(open) };
+      }
       return { kind: 'open' as const, session: open };
     }
     const current = await resolveToday(db, now);

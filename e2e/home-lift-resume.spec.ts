@@ -73,6 +73,21 @@ test('Today resumes an unfinished lift that started before midnight', async ({ p
   await expect(page).toHaveURL(/#\/lift\/session\/last-night$/);
 });
 
+test('Today offers both stored Resume actions when an ordered workout and legacy lift are open', async ({ page }) => {
+  await page.clock.setFixedTime(now);
+  await onboard(page, { activities: ['lift'] });
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page).toHaveURL(/#\/workout\/session\/[^/]+$/);
+  const ordered = new URL(page.url()).hash;
+  await seedBackup(page, { sessions: [lift('parallel-legacy', new Date('2026-11-19T00:15:00-05:00'), 'lower-b')] });
+  await page.getByRole('link', { name: 'Today', exact: true }).click();
+  await expect(page.getByRole('link', { name: 'Resume', exact: true })).toHaveAttribute('href', ordered);
+  const legacy = page.getByRole('link', { name: 'Resume Lower B', exact: true });
+  await expect(legacy).toHaveAttribute('href', '#/lift/session/parallel-legacy');
+  await legacy.click();
+  await expect(page).toHaveURL(/#\/lift\/session\/parallel-legacy$/);
+});
+
 test('an old unfinished lift can be discarded from Today', async ({ page }) => {
   await page.clock.setFixedTime(now);
   await onboard(page, { activities: ['lift'] });

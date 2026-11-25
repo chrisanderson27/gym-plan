@@ -3,7 +3,8 @@ import { db } from '../data/db';
 import { actualDurationSec, cardTitle, loadSessionDetail } from '../data/history';
 import { findStaleOpenLifts } from '../data/lift';
 import { useLiveQuery } from '../data/live';
-import { findTodayOpen, loadTodayRecommendation, startTodayRecommendation, todaySessionRoute, type TodayDecision } from '../data/recommendation';
+import { findOpenMixedSession } from '../data/mixedSession';
+import { findTodayLegacyOpen, loadTodayRecommendation, startTodayRecommendation, todaySessionRoute, type TodayDecision } from '../data/recommendation';
 import type { Session, Settings } from '../data/types';
 import { localDate } from '../engine/dates';
 import { streak } from '../engine/plan/ring';
@@ -32,8 +33,8 @@ export function Home({ settings }: { settings: Settings }) {
   const latest = useLiveQuery(() => loadTodayRecommendation(db), [day]);
   const sessions = useLiveQuery(async () => {
     const now = new Date();
-    const [open, stale] = await Promise.all([findTodayOpen(db, now), findStaleOpenLifts(db, now)]);
-    return { open, stale: stale[0] };
+    const [mixed, legacy, stale] = await Promise.all([findOpenMixedSession(db), findTodayLegacyOpen(db, now), findStaleOpenLifts(db, now)]);
+    return { open: mixed ?? legacy, legacy, stale: stale[0] };
   }, [day]);
   const doneId = input?.done?.id;
   const completed = useLiveQuery(async () => {
@@ -128,6 +129,9 @@ export function Home({ settings }: { settings: Settings }) {
             {choose}
           </HeroCard>}
         </>}
+      {sessions?.legacy && open?.mixed && <a class="btn" href={'#' + todaySessionRoute(sessions.legacy)}>
+        Resume {cardTitle(sessions.legacy)}
+      </a>}
       {!open && sessions?.stale && <a class="btn stale-lift" data-testid="stale-lift" href={'#' + todaySessionRoute(sessions.stale)}>
         Unfinished lift from {dateLabel.format(new Date(sessions.stale.date))}
       </a>}

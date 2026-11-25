@@ -1,4 +1,5 @@
 import type { ComponentChildren } from 'preact';
+import { exerciseById } from '../../content';
 import { POSES } from '../../content/poses';
 import { phase3Pose } from '../../content/stationDemos';
 import type { loadSessionDetail } from '../../data/history';
@@ -14,10 +15,10 @@ import { circuitSummary } from './circuit-summary';
 
 export type SessionDetail = NonNullable<Awaited<ReturnType<typeof loadSessionDetail>>>;
 
-function LoggedMovement({ index, name, gear, poseId, children }: {
-  index: number; name: string; gear?: string; poseId?: string; children: ComponentChildren;
+function LoggedMovement({ index, exerciseId, name, gear, poseId, children }: {
+  index: number; exerciseId: string; name: string; gear?: string; poseId?: string; children: ComponentChildren;
 }) {
-  const pose = poseId ? POSES[poseId] : undefined;
+  const pose = poseId && Object.hasOwn(POSES, poseId) && exerciseById.get(exerciseId)?.poseId === poseId ? POSES[poseId] : undefined;
   return <li class="logged-movement">
     {pose && <div class="logged-movement-figure"><StickFigure def={pose} label={name} testId="logged-pose" running={false} /></div>}
     <div class="logged-movement-detail">
@@ -52,7 +53,7 @@ export function loggedLineup({ session, sets, run, swim }: SessionDetail, equipm
     return <ol class="logged-movements">{groups.map((group, index) => {
       const set = group[0]!;
       const item = equipment.get(set.equipmentId);
-      return <LoggedMovement key={set.id} index={index} name={exerciseName(set.exerciseId)}
+      return <LoggedMovement key={set.id} index={index} exerciseId={set.exerciseId} name={exerciseName(set.exerciseId)}
         gear={nameOf(set.equipmentId)} poseId={item && phase3Pose(set.exerciseId, item)}>
         {group.map((actual) => <p class="logged-movement-value num" key={actual.id}>{setActual(actual)}</p>)}
       </LoggedMovement>;
@@ -63,10 +64,17 @@ export function loggedLineup({ session, sets, run, swim }: SessionDetail, equipm
   if (mixed) {
     for (const block of mixed.prescription.blocks) {
       const result = Object.hasOwn(mixed.results, block.id) ? mixed.results[block.id] : undefined;
-      if (!result) continue;
-      const strength = mixed.strength[block.id];
+      const strength = Object.hasOwn(mixed.strength, block.id) ? mixed.strength[block.id] : undefined;
       const rows = block.kind === 'strength' ? loggedMixedSets(session.id, block.id, sets) : [];
       for (const row of rows) used(row.equipmentId, row.exerciseId);
+      const plannedTitle = mixedBlockName(block);
+      const actualTitle = strength && exerciseName(strength.exerciseId);
+      const title = actualTitle && actualTitle !== plannedTitle ? `${plannedTitle} → ${actualTitle}` : plannedTitle;
+      if (!result) {
+        if (rows.length) blocks.push({ id: block.id, kind: block.kind, subtitle: workoutBlockKind[block.kind],
+          title, content: <><p>In progress</p>{renderSets(rows)}</> });
+        continue;
+      }
       for (const change of result.stationChanges ?? []) {
         for (const station of change.stations) if (!station.skipped) used(station.equipmentId, station.exerciseId);
       }
@@ -81,7 +89,6 @@ export function loggedLineup({ session, sets, run, swim }: SessionDetail, equipm
           }
         }
       }
-      const title = mixedBlockName(block);
       const elapsed = Math.floor(result.elapsedMs / 1000);
       const stationName = (s: NonNullable<typeof result.stations>[number]) =>
         s.swappedFromExerciseId ? `${exerciseName(s.swappedFromExerciseId)} → ${exerciseName(s.exerciseId)}` : exerciseName(s.exerciseId);
@@ -89,7 +96,7 @@ export function loggedLineup({ session, sets, run, swim }: SessionDetail, equipm
         s.skipped ? 'Skipped' : `Target ${stationTargetLine(s.exerciseId, s.target.amount, s.target.unit, s.load)}`;
       blocks.push({ id: block.id, kind: block.kind, subtitle: workoutBlockKind[block.kind],
         duration: elapsed > 0 ? durationLabel(elapsed) : undefined,
-        title: strength && exerciseName(strength.exerciseId) !== title ? `${title} → ${exerciseName(strength.exerciseId)}` : title,
+        title,
         content: <>
           <p>{result.status === 'skipped' ? 'Skipped' : 'Completed'}{block.kind !== 'strength' && ` · ${elapsed} sec`}</p>
           {(block.kind !== 'coached' || result.status !== 'skipped') && <MixedResultActuals result={result} coached={block.kind === 'coached'} />}
@@ -102,7 +109,7 @@ export function loggedLineup({ session, sets, run, swim }: SessionDetail, equipm
               [exerciseName(s.exerciseId), nameOf(s.equipmentId)].filter(Boolean).join(' · ')).join(', ')}</p>;
           })}
           {result.stations && (illustrated ? <ol class="logged-movements">{result.stations.map((s, index) =>
-            <LoggedMovement key={s.slotId} index={index} name={stationName(s)} gear={nameOf(s.equipmentId)} poseId={s.poseId}>
+            <LoggedMovement key={s.slotId} index={index} exerciseId={s.exerciseId} name={stationName(s)} gear={nameOf(s.equipmentId)} poseId={s.poseId}>
               <p class="logged-movement-value num">{stationValue(s)}</p>
             </LoggedMovement>
           )}</ol> : <ul class="plan">{result.stations.map((s) => <li key={s.slotId}>

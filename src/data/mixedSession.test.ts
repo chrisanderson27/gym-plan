@@ -34,6 +34,28 @@ afterEach(async () => {
 const current = async (id: string) => (await db.sessions.get(id))!;
 const action = async (id: string, next: Parameters<typeof updateMixedSession>[3], ms = 0) =>
   updateMixedSession(db, id, (await current(id)).mixed!.cursor, next, at(ms));
+
+test.each(['strength', 'self-paced'] as const)('restored %s IDs retain their own block state on Start and Repeat', async (kind) => {
+  const block = { ...MIXED_TEMPLATE.ordered!.blocks.find((row) => row.kind === kind)!, id: '__proto__' };
+  const template = { ...MIXED_TEMPLATE, ordered: { name: MIXED_TEMPLATE.name, blocks: [block] }, blocks: [] };
+  await db.templates.put(template);
+  const file = parseExport(JSON.stringify(await buildExport(db, at(), 'test'))).file;
+  await db.templates.delete(source.templateId);
+  await importExport(db, file);
+  const started = await startMixedSession(db, source, at());
+  const assertBlockState = async (id: string) => {
+    const mixed = (await current(id)).mixed!;
+    const maps = kind === 'strength' ? [mixed.strength] : [mixed.stations, mixed.drafts];
+    expect(maps.every((map) => Object.hasOwn(map, block.id))).toBe(true);
+    const exported = await buildExport(db, at(10_000), 'test');
+    expect(() => parseExport(JSON.stringify(exported))).not.toThrow();
+  };
+  await assertBlockState(started);
+  await action(started, { type: 'skip' }, 1000);
+  await action(started, { type: 'continue' }, 2000);
+  await assertBlockState(await startMixedSession(db, { sessionId: started }, at(3000)));
+});
+
 const roundTap = (mixed: MixedExecution) => ({
   type: 'round' as const,
   expectedTapped: mixed.drafts.circuit!.tapped,

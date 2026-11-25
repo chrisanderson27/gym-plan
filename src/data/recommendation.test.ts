@@ -3,8 +3,8 @@ import { FULL_WORKOUT_MIN_SEC, orderedDurationSec } from '../engine/templates';
 import { buildExport, importExport, parseExport } from './backup';
 import type { GymDb } from './db';
 import { setNotAtMyGym } from './lift';
-import { mixedOptions, rateMixedSession, updateMixedSession } from './mixedSession';
-import { settings } from './p4-test-utils';
+import { mixedOptions, rateMixedSession, startMixedSession, updateMixedSession } from './mixedSession';
+import { session, settings, topSets } from './p4-test-utils';
 import { loadTodayRecommendation, startTodayRecommendation } from './recommendation';
 import { openTestDb } from './test-utils';
 import type { LibraryBlock } from './types';
@@ -89,6 +89,113 @@ test('checked source is copied in stable order, unchecked and incompatible rows 
   expect((await review()).revision).toBe(offered.revision);
   await startTodayRecommendation(db, offered, at);
   expect((await db.sessions.toArray())[0]!.mixed!.prescription.blocks).toContainEqual(block);
+});
+
+test('a checked circuit can fill an eight-minute slot with too few generated stations', async () => {
+  for (const id of ['box-step-up', 'reverse-lunge', 'step-up', 'seated-cable-row', 'push-up']) {
+    await setNotAtMyGym(db, id, true);
+  }
+  await db.libraryBlocks.put(checked);
+  const offered = await review();
+  expect(offered.workout.variant).toBe('lower-a');
+  expect(offered.workout.libraryId).toBe(checked.id);
+  expect(offered.workout.prepared.mixed.prescription.blocks[3]).toMatchObject({ name: checked.name });
+});
+
+test('an upper recommendation avoids recovering lower-body muscles in its accessories', async () => {
+  const date = new Date(at.getTime() - 24 * 3_600_000).toISOString();
+  await db.settings.update('settings', { programStart: '2026-10-01' });
+  await db.sessions.put(session('recent-lower', 1, { date, endedAt: date, variant: 'lower-a' }));
+  await db.sets.put({ ...topSets('recent-lower', 1)[0]!, ts: date, exerciseId: 'leg-press', equipmentId: 'plate-loaded' });
+  await db.libraryBlocks.put({ ...checked, stations: [
+    { exerciseId: 'push-up', target: { amount: 6, unit: 'reps' } },
+    { exerciseId: 'reverse-lunge', target: { amount: 6, unit: 'reps' }, load: 10 },
+  ] });
+  const offered = await review();
+  expect(offered.workout.variant).toBe('upper-a');
+  expect(offered.workout.libraryId).toBeUndefined();
+});
+
+test('generated lower accessories skip push-ups while the chest is recovering', async () => {
+  const date = new Date(at.getTime() - 24 * 3_600_000).toISOString();
+  await db.settings.update('settings', { programStart: '2026-10-01' });
+  await db.sessions.put(session('recent-upper', 1, { date, endedAt: date, variant: 'upper-a' }));
+  await db.sets.put({ ...topSets('recent-upper', 1)[0]!, ts: date });
+  const offered = await review();
+  expect(offered.workout.variant).toBe('lower-a');
+  expect(offered.workout.lineup.flat().map((move) => move.exerciseId)).not.toContain('push-up');
+});
+
+test('queued Start surfaces Resume when the accepted prescription differs from the clicked review', async () => {
+  const oldReview = await review();
+  await db.libraryBlocks.put(checked);
+  const newReview = await review();
+  expect(newReview.sourceId).toBe(oldReview.sourceId);
+  const [accepted, stale] = await Promise.all([
+    startTodayRecommendation(db, newReview, at), startTodayRecommendation(db, oldReview, at),
+  ]);
+  const [open] = await db.sessions.toArray();
+  expect(accepted.kind).toBe('started');
+  expect(stale).toEqual({ kind: 'open', session: open });
+
+  const restored = openTestDb();
+  try {
+    await importExport(restored, parseExport(JSON.stringify(await buildExport(db, at, 'test'))).file);
+    const before = await restored.sessions.toArray();
+    expect(await startTodayRecommendation(restored, oldReview, at)).toEqual({ kind: 'open', session: before[0] });
+    expect(await restored.sessions.toArray()).toEqual(before);
+  } finally {
+    await restored.delete();
+  }
+});
+
+test('Today does not offer or persist an unrestorable calibration target from saved equipment', async () => {
+  await db.equipment.update('plate-loaded', { steps: [-10, 20, 30] });
+  const decision = await loadTodayRecommendation(db, at);
+  if (decision.kind === 'workout') {
+    const strength = decision.workout.prepared.blocks[0]!;
+    expect(strength.targetWeight).toBeGreaterThanOrEqual(0);
+    expect(await startTodayRecommendation(db, decision, at)).toMatchObject({ kind: 'started' });
+  } else {
+    expect(decision.kind).toBe('unavailable');
+    expect(await db.sessions.count()).toBe(0);
+  }
+  const exported = await buildExport(db, at, 'test');
+  expect(() => parseExport(JSON.stringify(exported))).not.toThrow();
+  expect((await db.equipment.get('plate-loaded'))!.steps).toEqual([-10, 20, 30]);
+});
+
+test('Repeat uses progression on the accepted Today machine instance', async () => {
+  const started = await startTodayRecommendation(db, await review(), at);
+  if (started.kind !== 'started') throw new Error('Workout not started');
+  const id = started.route.split('/').at(-1)!;
+  const original = (await db.sessions.get(id))!;
+  const { prescription, strength } = original.mixed!;
+  const press = prescription.blocks[1]!;
+  const equipmentId = strength[press.id]!.equipmentId;
+  expect(equipmentId).not.toBe('plate-loaded');
+  let elapsed = 0;
+  const action = async (next: Parameters<typeof updateMixedSession>[3]) =>
+    updateMixedSession(db, id, (await db.sessions.get(id))!.mixed!.cursor, next, new Date(at.getTime() + ++elapsed * 1000));
+  await action({ type: 'skip' });
+  await action({ type: 'continue' });
+  await action({ type: 'set', reps: 9, weight: 70, expectedExerciseId: 'leg-press', expectedEquipmentId: equipmentId });
+  await action({ type: 'continue' });
+  for (let index = 2; index < prescription.blocks.length; index++) {
+    await action({ type: 'skip' });
+    await action({ type: 'continue' });
+  }
+  const date = new Date(at.getTime() - 86_400_000).toISOString();
+  await db.sessions.put(session('seed-history', 1, { date, endedAt: date }));
+  await db.sets.put({ ...topSets('seed-history', 1)[0]!, ts: date, exerciseId: 'leg-press', equipmentId: 'plate-loaded', weight: 140 });
+  const next = await startMixedSession(db, { sessionId: id }, new Date(at.getTime() + 60_000));
+  const repeated = (await db.sessions.get(next))!;
+  expect(next).not.toBe(id);
+  expect(repeated).toMatchObject({ rpe: null, mixed: {
+    results: {}, strength: { [press.id]: { exerciseId: 'leg-press', equipmentId, targetWeight: 70 } },
+  } });
+  expect(await db.sets.where('sessionId').equals(next).count()).toBe(0);
+  expect((await db.sessions.get(id))!.mixed!.prescription).toEqual(prescription);
 });
 
 test('rollover, checked edit/removal, equipment and activity changes write nothing when stale', async () => {

@@ -20,7 +20,7 @@ import { loggedMixedSets, mixedSetId, reconcileMixedStrength } from './mixedSets
 import { loadRunnable, orderedStrengthToLift, replayLiftFlags } from './templates';
 import type { CoachedCheckpoint, EffectiveStation, LiftBlock, MixedCursor, MixedDraft, MixedExecution, MixedResult, MixedTimer,
   LiftVariant, OrderedBlock, OrderedPrescription, OrderedStation, OrderedStrengthBlock, Session, SetRow } from './types';
-import { snapshotValue } from './validate';
+import { isAcceptedStrength, snapshotValue } from './validate';
 
 export class MixedInputError extends Error {}
 export class StaleWorkoutError extends MixedInputError {}
@@ -215,17 +215,21 @@ export function prepareOrderedStart(g: Gym, ordered: OrderedPrescription, source
       blocks.push(lift);
       const { exerciseId, equipmentId, sets, repMin, repMax, targetWeight, rirTarget, label } = lift;
       const effective = { exerciseId, equipmentId: accepted ? equipmentId : undefined, sets, repMin, repMax, targetWeight, rirTarget, label };
-      mixed.strength[b.id] = effective;
-      if (strict) Object.assign(b, effective);
+      mixed.strength = { ...mixed.strength, [b.id]: effective };
+      if (strict) {
+        if (!isAcceptedStrength(effective)) return null;
+        Object.assign(b, effective);
+      }
     } else if ((b.kind === 'self-paced' || b.kind === 'coached') && b.stations) {
       const resolved = b.stations.map((s) => resolveStation(g, s, s.exerciseId, b.kind === 'coached'));
       if (strict && resolved.some((s, index) => !s || s.load !== b.stations![index]!.load)) return null;
-      mixed.stations[b.id] = b.stations.map((s, index) => resolved[index] ?? { ...s, poseId: undefined });
-      if (strict) b.stations = mixed.stations[b.id]!.map(({ poseId: _poseId, ...station }) => {
+      const stations = b.stations.map((s, index) => resolved[index] ?? { ...s, poseId: undefined });
+      mixed.stations = { ...mixed.stations, [b.id]: stations };
+      if (strict) b.stations = stations.map(({ poseId: _poseId, ...station }) => {
         void _poseId;
         return station;
       });
-      mixed.drafts[b.id] = { rounds: null, tapped: 0 };
+      mixed.drafts = { ...mixed.drafts, [b.id]: { rounds: null, tapped: 0 } };
     }
   }
   return { mixed, blocks, flags };

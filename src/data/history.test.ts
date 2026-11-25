@@ -67,6 +67,23 @@ describe('history', () => {
     expect((await listHistory(db)).every(({ prs }) => prs.length === 0)).toBe(true);
     expect(await loadSessionPRs(db, 'a')).toEqual([]);
   });
+  it('uses the same unfinished comparison sets for completed-only history and session detail', async () => {
+    const db = open();
+    await db.sessions.bulkPut([
+      session('unfinished', 5, { endedAt: undefined }), session('older', 3), session('latest', 1),
+    ]);
+    await db.sets.bulkPut([
+      { ...topSets('unfinished', 5)[0]!, weight: 100 },
+      { ...topSets('older', 3)[0]!, weight: 80 },
+      { ...topSets('latest', 1)[0]!, weight: 90 },
+    ]);
+    const [completed] = await listHistory(db, 0, 1, true);
+    const [all] = await listHistory(db, 0, 1);
+    expect(completed?.session.id).toBe('latest');
+    expect(completed?.prs).toEqual(all?.prs);
+    expect(completed?.prs).toEqual(await loadSessionPRs(db, 'latest'));
+    expect(completed?.prs).toEqual([]);
+  });
   it('only reads sets and sessions relevant to the current page and its PRs', async () => {
     const db = open();
     const current = session('current', 2);
