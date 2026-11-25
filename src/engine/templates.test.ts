@@ -100,11 +100,11 @@ describe('workoutShortfallSec', () => {
 });
 
 describe('shortfallLabel', () => {
-  it('rounds up to whole seconds before splitting, never showing :60', () => {
-    expect(shortfallLabel(179.5)).toBe('3:00');
-    expect(shortfallLabel(59.2)).toBe('1:00');
-    expect(shortfallLabel(0.5)).toBe('0:01');
-    expect(shortfallLabel(2700)).toBe('45:00');
-    expect(shortfallLabel(125)).toBe('2:05');
+  it('reads whole minutes rounded up, never undershooting', () => {
+    expect(shortfallLabel(179.5)).toBe('3 min');
+    expect(shortfallLabel(59.2)).toBe('1 min');
+    expect(shortfallLabel(0.5)).toBe('1 min');
+    expect(shortfallLabel(2700)).toBe('45 min');
+    expect(shortfallLabel(2160)).toBe('36 min');
   });
 });

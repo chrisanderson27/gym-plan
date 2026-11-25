@@ -217,3 +217,18 @@ describe('design tokens: no colour literals outside tokens.css', () => {
     expect(hits).toEqual([]);
   });
 });
+
+it('sticky header surface is fully opaque', async () => {
+  const { readFileSync } = await import('node:fs');
+  expect(readFileSync('src/ui/tokens.css', 'utf8')).toMatch(/--shell-header:\s*rgb\(/);
+});
+
+it('long workout names clamp and wrap in runner header, Today hero, history, lineup and summary', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync('src/ui/styles.css', 'utf8');
+  const rule = css.slice(css.indexOf('/* Long names never break headers'));
+  for (const selector of ['.mixed-live-top > span', '.today-hero h2', '.history-card-heading', '.training-block-row strong', '.mixed-summary h2', '.bar h1']) {
+    expect(rule.split('{')[0]).toContain(selector);
+  }
+  expect(rule).toMatch(/line-clamp: 2[^}]*overflow-wrap: anywhere/);
+});

@@ -18,3 +18,9 @@ test('estimates drop the seconds', () => {
   expect(estimatedMinutesLabel(2736)).toBe('46 min');
   expect(estimatedMinutesLabel(2700)).toBe('45 min');
 });
+
+test('lineup strength rows read whole minutes, never seconds', () => {
+  const block: OrderedBlock = { id: 'lift', kind: 'strength', exerciseId: 'leg-press', sets: 1, repMin: 8, repMax: 12 };
+  expect(orderedDurationLabel([block])).toBe('1 min estimated');
+  expect(estimatedMinutesLabel(36)).toBe('1 min');
+});

@@ -991,6 +991,8 @@ html:has(.training-screen + .tab-bar) {
 .training-trend .trend-line { stroke: var(--shell-exclude); stroke-width: 2.5; }
 
 /* Long names never break headers: clamp to two lines */
-.session-bar h1, .workout-card h2, .workout-card h3, .block-name, .workout-preview-name {
+.session-bar h1, .workout-card h2, .workout-card h3, .block-name, .workout-preview-name,
+.mixed-live-top > span:not(.fb-saved), .today-hero h2, .history-card-heading > :first-child, .training-block-row strong,
+.mixed-summary h2, .screen > .bar h1 {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; overflow-wrap: anywhere;
 }

@@ -95,7 +95,7 @@ for (const offline of [false, true]) {
       : b.kind === 'coached' || b.kind === 'self-paced' ? b.stations!.map((s) => [s.exerciseId, s.equipmentId]) : [])).toEqual(moves);
     const seconds = mixed.prescription.blocks.reduce((sum, b, index) => {
       const time = b.kind === 'strength' ? b.sets * b.repMax * 3 + (b.sets - 1) * (b.restSec ?? 90) : b.durationSec;
-      expect(preview[index]).toContain(durationLabel(time));
+      expect(preview[index]).toContain(b.kind === 'strength' ? estimatedMinutesLabel(time) : durationLabel(time));
       return sum + time;
     }, 0);
     expect(seconds).toBeGreaterThanOrEqual(2700);

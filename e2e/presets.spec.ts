@@ -109,7 +109,7 @@ test('a short draft shows its shortfall, and a short saved workout offers Extend
   const editor = page.getByRole('dialog', { name: 'Build a workout' });
   await editor.getByRole('textbox', { name: 'Workout name' }).fill('Short day');
   await button(editor, 'Add Warm-up').click();
-  await expect(editor.getByRole('status')).toContainText('Add at least 40:00 to reach 45 minutes');
+  await expect(editor.getByRole('status')).toContainText('Add at least 40 min to reach 45 minutes');
   await expect(button(editor, 'Save workout')).toBeDisabled();
   for (const title of ['Four-station rotation', 'Legs & core circuit', 'Easy run · 20 min']) await button(editor, 'Add ' + title).click();
   await expect(button(editor, 'Add Run intervals · 20 min')).toBeDisabled();
@@ -130,7 +130,7 @@ test('a short draft shows its shortfall, and a short saved workout offers Extend
   await expect(button(old, 'Start workout')).toHaveCount(0);
   await button(old, 'Extend to 45 min').click();
   const extend = page.getByRole('dialog', { name: 'Edit workout' });
-  await expect(extend.getByRole('status')).toContainText('Add at least 6:00 to reach 45 minutes');
+  await expect(extend.getByRole('status')).toContainText('Add at least 6 min to reach 45 minutes');
   await expect(button(extend, 'Save workout')).toBeDisabled();
   await button(extend, 'Add Easy run · 15 min').click();
   await expect(extend.getByRole('status')).toContainText('Meets the 45-minute minimum');

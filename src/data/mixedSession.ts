@@ -292,19 +292,22 @@ export async function startMixedSession(db: GymDb, source: Source, now = new Dat
   });
 }
 
+/** An open mixed session that never logged anything: first block, entry stage, no results/timers/drafts/sets/runs. */
+export async function isUntouchedMixed(db: GymDb, session: Session): Promise<boolean> {
+  const m = session.mixed;
+  if (!m || session.endedAt || session.type !== 'custom') return false;
+  const first = m.prescription.blocks[0]?.id;
+  return m.cursor.blockId === first && m.cursor.stage === 'entry' && m.cursor.setSlot === 0
+    && Object.keys(m.results).length === 0 && Object.keys(m.timers).length === 0
+    && Object.values(m.drafts).every((d) => d.rounds === null && d.tapped === 0)
+    && (await db.sets.where('sessionId').equals(session.id).count()) === 0
+    && (await db.runs.where('sessionId').equals(session.id).count()) === 0;
+}
+
 /** Starting a workout drops abandoned open sessions that never logged anything. Sessions with any progress stay resumable. */
 async function discardUntouchedMixed(db: GymDb): Promise<void> {
   const open = await db.sessions.where('type').equals('custom').filter((s) => !s.endedAt && !!s.mixed).toArray();
-  for (const session of open) {
-    const m = session.mixed!;
-    const first = m.prescription.blocks[0]?.id;
-    const untouched = m.cursor.blockId === first && m.cursor.stage === 'entry' && m.cursor.setSlot === 0
-      && Object.keys(m.results).length === 0 && Object.keys(m.timers).length === 0
-      && Object.values(m.drafts).every((d) => d.rounds === null && d.tapped === 0)
-      && (await db.sets.where('sessionId').equals(session.id).count()) === 0
-      && (await db.runs.where('sessionId').equals(session.id).count()) === 0;
-    if (untouched) await db.sessions.delete(session.id);
-  }
+  for (const session of open) if (await isUntouchedMixed(db, session)) await db.sessions.delete(session.id);
 }
 
 export function prepareOrderedStart(g: Gym, ordered: OrderedPrescription, sourceId: string, now: Date, strict = false,

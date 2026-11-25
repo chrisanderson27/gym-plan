@@ -4,7 +4,7 @@ import { buildExport, ImportError, importExport, parseExport } from './backup';
 import { exerciseById } from '../content';
 import { coachedSchedule, initialCoached, projectCoached } from '../engine/block/coached';
 import { GymDb } from './db';
-import { loadSessionPRs } from './history';
+import { listHistory, loadSessionPRs } from './history';
 import { findOpenLiftSession, findStaleOpenLifts } from './lift';
 import { findOpenMixedSession, mixedOptions, rateMixedSession, startMixedSession, updateMixedSession } from './mixedSession';
 import { COACHED_TEMPLATE, MIXED_AT, MIXED_TEMPLATE, PRIOR_LIFT, PRIOR_SET } from './mixedSession.test-fixture';
@@ -702,4 +702,14 @@ test('starting another preset discards an untouched open session but keeps one w
   const third = await startMixedSession(db, { presetId: c!.id }, at(3000));
   expect(await db.sessions.get(second)).toBeDefined();
   expect(await db.sessions.get(third)).toBeDefined();
+});
+
+test('history hides an untouched open session without deleting it, and shows one with progress', async () => {
+  const [a] = WORKOUT_PRESETS;
+  const id = await startMixedSession(db, { presetId: a!.id }, at());
+  expect((await listHistory(db, 0)).map((i) => i.session.id)).not.toContain(id);
+  expect((await listHistory(db, 0, 50, true)).map((i) => i.session.id)).not.toContain(id);
+  expect(await db.sessions.get(id)).toBeDefined();
+  await action(id, { type: 'skip' }, 2000);
+  expect((await listHistory(db, 0)).map((i) => i.session.id)).toContain(id);
 });

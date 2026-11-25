@@ -111,7 +111,7 @@ test('the 45-minute floor accepts exactly 2700 s, rejects 2699 s and never block
   const under = [{ ...exact[1]!, durationSec: 2099 } as OrderedBlock, short[0]!];
   expect(orderedDurationSec(under)).toBe(2699);
   await expect(saveOrderedWorkout(db, { name: 'Under', blocks: under })).rejects.toThrow(WorkoutSaveError);
-  await expect(saveOrderedWorkout(db, { name: 'Under', blocks: under })).rejects.toThrow('0:01');
+  await expect(saveOrderedWorkout(db, { name: 'Under', blocks: under })).rejects.toThrow('1 min');
   // Seeded rows (an old suggestion copy, a short repeat source) are rejected at Start with no writes.
   await db.templates.put({ id: 'old', name: 'Old', type: 'custom', source: 'saved', createdAt: at().toISOString(), blocks: [], ordered: { name: 'Old', blocks: under } });
   const before = await db.sessions.count();

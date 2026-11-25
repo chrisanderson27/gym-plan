@@ -5,7 +5,7 @@ import type { TodayRecommendation } from '../../data/recommendation';
 import { orderedBlockSeconds } from '../../engine/templates';
 import { stationTargetLine } from '../blocks/StationCard';
 import { BlocksIcon, ChevronIcon, FlameIcon, LayersIcon, LiftIcon, ListIcon, RunIcon, SwapIcon, SwimIcon, WindIcon, WorkoutsIcon } from '../icons';
-import { durationLabel, exerciseName, mixedBlockName, workoutBlockKind } from '../labels';
+import { durationLabel, estimatedMinutesLabel, exerciseName, mixedBlockName, workoutBlockKind } from '../labels';
 import { useDemoPlayback } from '../pose/playback';
 import { PosePlaybackButton, PoseView } from '../slots/PoseView';
 
@@ -95,7 +95,7 @@ export function RecommendedLineup({ recommendation }: { recommendation: TodayRec
     return {
       id: block.id, kind: block.kind, title: mixedBlockName(block),
       subtitle: `${workoutBlockKind[block.kind]}${moves.length ? ` · ${moves.length} ${moves.length === 1 ? 'exercise' : 'exercises'}` : ''}`,
-      duration: `${durationLabel(orderedBlockSeconds(block))}${block.kind === 'strength' ? ' est.' : ''}`,
+      duration: block.kind === 'strength' ? `${estimatedMinutesLabel(orderedBlockSeconds(block))} est.` : durationLabel(orderedBlockSeconds(block)),
       content: <>
         {'instructions' in block && <p>{block.instructions}</p>}
         {block.kind === 'coached' && <p>{block.workSec} s work · {block.restSec} s rest · {block.transitionSec} s transition</p>}

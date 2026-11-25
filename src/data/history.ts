@@ -4,6 +4,7 @@ import { CARDIO_MODALITY_LABELS, HISTORY_PAGE } from '../engine/config';
 import { isWorking, type HistorySession } from '../engine/lift/types';
 import { comparableBlock, sessionPRs, type PR } from '../engine/pr';
 import type { GymDb } from './db';
+import { isUntouchedMixed } from './mixedSession';
 import type { RunRow, Session, SetRow, SwimRow } from './types';
 
 export interface CardNumber { value: string; label: string }
@@ -146,7 +147,10 @@ async function priorPRs(db: GymDb, entries: HistorySession[], newestDate: string
 
 export async function listHistory(db: GymDb, page = 0, size = HISTORY_PAGE, completedOnly = false): Promise<HistoryItem[]> {
   const query = db.sessions.orderBy('date').reverse();
-  const rows = await (completedOnly ? query.filter((s) => !!s.endedAt) : query).offset(page * size).limit(size).toArray();
+  const fetched = await (completedOnly ? query.filter((s) => !!s.endedAt) : query).offset(page * size).limit(size).toArray();
+  // Display-only: untouched open sessions (Back with no progress) are hidden, never deleted.
+  const hidden = new Set((await Promise.all(fetched.map(async (s) => await isUntouchedMixed(db, s) ? s.id : null))).filter((id) => id !== null));
+  const rows = fetched.filter((s) => !hidden.has(s.id));
   const newest = rows[0];
   if (!newest) return [];
   const ids = rows.map((s) => s.id);
