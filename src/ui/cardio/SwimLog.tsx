@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
 import type { CssInput } from '../../data/cardio';
+import { LIMITS, rangeError } from '../limits';
 import { parseMSS } from './format';
 import { RpeChips } from './RpeChips';
 
@@ -25,7 +26,9 @@ export function SwimLog({ defaultDistance, defaultMinutes = 45, onSave }: {
   const [t200, setT200] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const ok = rpe !== null && Number(distance) > 0 && Number(minutes) > 0;
+  const distanceError = rangeError(distance, 'Distance', LIMITS.swimMeters, { min: 1 });
+  const minutesError = rangeError(minutes, 'Duration', LIMITS.swimMinutes, { min: 1 });
+  const ok = rpe !== null && Number(distance) > 0 && Number(minutes) > 0 && !distanceError && !minutesError;
 
   const save = async () => {
     if (rpe === null || !ok) return;
@@ -55,10 +58,12 @@ export function SwimLog({ defaultDistance, defaultMinutes = 45, onSave }: {
         Distance
         <input data-testid="swim-distance" inputMode="decimal" value={distance} onInput={(e) => setDistance(e.currentTarget.value)} />
       </label>
+      {distanceError && <p class="field-error" role="alert">{distanceError}</p>}
       <label>
         Duration (min)
         <input inputMode="decimal" value={minutes} onInput={(e) => setMinutes(e.currentTarget.value)} />
       </label>
+      {minutesError && <p class="field-error" role="alert">{minutesError}</p>}
       <p>RPE</p>
       <RpeChips value={rpe} onChange={setRpe} />
       <button type="button" class={pain ? 'chip on pain' : 'chip'} aria-pressed={pain} data-testid="swim-shoulder-pain" onClick={() => setPain(!pain)}>Shoulder pain</button>

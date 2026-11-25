@@ -169,6 +169,13 @@ test('the legacy Builder URLs redirect to Workouts and the saved workout', async
   await expect(page).toHaveURL(/#\/mine\/x$/);
 });
 
+test('Today hides the streak row until a week has closed', async ({ page }) => {
+  await onboard(page);
+  await page.goto('./#/');
+  await expect(page.getByTestId('weekly-goal')).toBeVisible();
+  await expect(page.getByTestId('streak')).toHaveCount(0);
+});
+
 test('ring history shows closed weeks and the same streak as Today', async ({ page }) => {
   const days = [17, 16, 10, 9, 1];
   await seed(page, {

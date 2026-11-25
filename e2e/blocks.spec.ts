@@ -123,8 +123,12 @@ test('minutes and a target of 0 keep save disabled', async ({ page }) => {
   await page.getByLabel('Leg press target').fill('0');
   await page.getByLabel('Leg press target').blur();
   await expect(page.getByLabel('Leg press target')).toHaveAttribute('aria-invalid', 'true');
-  await expect(page.getByText('Enter a target greater than 0.')).toBeVisible();
+  await expect(page.getByText('Enter a target greater than 0 and at most 999.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save to My Blocks' })).toBeDisabled();
+  await page.getByLabel('Leg press target').fill('99999');
+  await expect(page.getByText('Enter a target greater than 0 and at most 999.')).toBeVisible();
+  await page.getByLabel('Block name').fill('');
+  await expect(page.getByTestId('block-problem')).toContainText('block name');
 });
 
 test('a rejected save keeps the name and shows an alert', async ({ page }) => {
@@ -356,4 +360,21 @@ test('dumbbells off keeps goblet squat and an exclusion hides leg press', async 
   const again = page.getByRole('dialog', { name: 'Add an exercise' });
   await expect(again.getByRole('button', { name: 'Leg press' })).toHaveCount(0);
   await expect(again.getByRole('button', { name: 'Goblet squat' })).toBeVisible();
+});
+
+test('removing a saved block asks first and the exercise search has a placeholder', async ({ page }) => {
+  await onboard(page);
+  await page.goto('./#/blocks/new');
+  await page.getByLabel('Block name').fill('Doomed block');
+  await page.getByRole('button', { name: 'Add exercise' }).click();
+  await expect(page.getByRole('searchbox', { name: 'Search exercises' }).or(page.getByLabel('Search exercises'))).toHaveAttribute('placeholder', 'Search exercises');
+  await page.keyboard.press('Escape');
+  await addExercise(page, 'Leg press');
+  await page.getByRole('button', { name: 'Save to My Blocks' }).click();
+  await page.getByRole('button', { name: 'Remove Doomed block' }).click();
+  await page.getByRole('button', { name: 'Keep' }).click();
+  await expect(page.getByRole('link', { name: 'Doomed block' })).toBeVisible();
+  await page.getByRole('button', { name: 'Remove Doomed block' }).click();
+  await page.getByTestId('block-remove-confirm').click();
+  await expect(page.getByRole('link', { name: 'Doomed block' })).toHaveCount(0);
 });

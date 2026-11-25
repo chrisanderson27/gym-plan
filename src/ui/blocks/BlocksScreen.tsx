@@ -1,3 +1,4 @@
+import { useState } from 'preact/hooks';
 import { db } from '../../data/db';
 import { deleteLibraryBlock } from '../../data/libraryBlocks';
 import { useLiveQuery } from '../../data/live';
@@ -12,6 +13,7 @@ const kindLabel = (kind: LibraryBlock['kind']) => (kind === 'coached' ? 'Coached
 export function BlocksScreen({ settings }: { settings: Settings }) {
   const week = weekIndex(localDate(new Date()), settings.programStart);
   const rows = useLiveQuery(() => db.libraryBlocks.toArray(), []);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
   return (
     <main class="screen shell-screen">
       <header class="pref-top">
@@ -45,7 +47,15 @@ export function BlocksScreen({ settings }: { settings: Settings }) {
         <section key={row.id} class="card">
           <a class="block-name" href={`#/blocks/${row.id}`}>{row.name}</a>
           <p>{row.stations.length} stations · {row.durationSec / 60} min · {kindLabel(row.kind)}</p>
-          <button type="button" onClick={() => { void deleteLibraryBlock(db, row.id); }}>Remove {row.name}</button>
+          {confirmId === row.id ? (
+            <div role="group" aria-label={`Remove ${row.name}?`}>
+              <p>Remove {row.name}? This can't be undone.</p>
+              <button type="button" data-testid="block-remove-confirm" onClick={() => { setConfirmId(null); void deleteLibraryBlock(db, row.id); }}>Yes, remove</button>
+              <button type="button" onClick={() => setConfirmId(null)}>Keep</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setConfirmId(row.id)}>Remove {row.name}</button>
+          )}
         </section>
       ))}
     </main>

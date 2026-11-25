@@ -15,6 +15,7 @@ import { deliverFile, backupFileName } from '../platform/share';
 import { isPersisted } from '../platform/storage';
 import { FeedbackList } from './feedback/FeedbackList';
 import { ArrowRightIcon, CalendarIcon, ChevronIcon, PersonIcon, PlusIcon, WorkoutsIcon } from './icons';
+import { LIMITS, rangeError } from './limits';
 import { PoolSheet } from './PoolSheet';
 import { Sheet } from './Sheet';
 
@@ -162,10 +163,7 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
                     <option value="m">meters</option>
                   </select>
                 </label>
-                <label>
-                  Pool length
-                  <input inputMode="decimal" value={pool.poolLength} onChange={(e) => { const v = Number(e.currentTarget.value); if (Number.isFinite(v) && v > 0) saveSettings(db, { poolLength: v }); }} />
-                </label>
+                <PoolLengthInput saved={pool.poolLength} />
               </>
             ) : (
               <>
@@ -188,6 +186,7 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
         </Sheet>
       )}
 
+      <section class="card" data-testid="backup-card">
       <h2>Backup</h2>
       <p>Last backup: {backupLabel}</p>
       <button type="button" onClick={() => doExport(true)}>Export (share)</button>
@@ -199,6 +198,8 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
       {backupMsg && (
         <p role={backupMsg.error ? 'alert' : 'status'} class={backupMsg.error ? 'warn' : 'ok'} data-testid="backup-message">{backupMsg.text}</p>
       )}
+      </section>
+      <section class="card">
       <details data-testid="developer">
         <summary>Developer</summary>
         <FeedbackList onMessage={setMessage} />
@@ -206,7 +207,29 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
         <p>{persisted === true ? 'Storage: persistent' : persisted === false ? 'Storage: best-effort' : 'Storage: unknown'}</p>
         <p>Running as Home Screen app: {isStandalone() ? 'yes' : 'no'}</p>
       </details>
+      </section>
       <p class="dim">gym-plan v{__APP_VERSION__}</p>
     </main>
   );
+}
+
+/** Pool length text field: saves only whole lengths in range, says why otherwise, and snaps back to the last good value on blur. */
+function PoolLengthInput({ saved }: { saved: number }) {
+  const [text, setText] = useState(String(saved));
+  useEffect(() => { setText(String(saved)); }, [saved]);
+  const raw = text.trim();
+  const message = raw === '' ? 'Enter a pool length.' : rangeError(raw, 'Pool length', LIMITS.poolLength, { min: 1, integer: true });
+  return <>
+    <label>
+      Pool length
+      <input inputMode="numeric" value={text} aria-invalid={message ? 'true' : undefined}
+        onInput={(e) => {
+          const value = e.currentTarget.value;
+          setText(value);
+          if (value.trim() !== '' && !rangeError(value.trim(), 'Pool length', LIMITS.poolLength, { min: 1, integer: true })) void saveSettings(db, { poolLength: Number(value) });
+        }}
+        onBlur={() => { if (message) setText(String(saved)); }} />
+    </label>
+    {message && <p class="field-error" role="alert">{message}</p>}
+  </>;
 }

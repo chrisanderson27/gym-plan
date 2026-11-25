@@ -74,7 +74,7 @@
   --shell-tab-wash: #e6efd3;
   --shell-check: #698539;
   --shell-line: #e3e7da;
-  --shell-header: rgba(252, 253, 248, 0.75);
+  --shell-header: rgba(252, 253, 248, 0.97);
   --shell-peach: #f7e9df;
   --shell-peach-ink: #98502f;
   --shell-mint: #e4eee3;
@@ -129,7 +129,7 @@
   --shell-gym-muted: #c1cdc1;
   --shell-gym-index: #c6d0c5;
   --shell-gym-target: #edf3eb;
-  --shell-gym-close: #ffffff;
+  --shell-gym-close: rgba(255, 255, 255, 0.1);
   --text-12: 0.75rem;
   --text-14: 0.875rem;
   --text-16: 1rem;

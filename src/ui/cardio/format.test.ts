@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { DRILLS } from '../../content/drills';
 import type { SwimItem } from '../../data/types';
-import { itemLine } from './format';
+import { itemLine, parseMSS } from './format';
 
 const swim: SwimItem = {
   reps: 4, distance: 150, swimKind: 'swim', stroke: 'FR', intensity: 'MOD', equipment: [], mode: 'rest', seconds: 20,
@@ -26,4 +26,11 @@ it('uses the drill name without an effort word', () => {
 
 it('omits the repetition prefix for a single rep', () => {
   expect(itemLine({ ...swim, reps: 1, distance: 300, intensity: 'EZ', seconds: undefined }, 'yd')).toBe('300 yd freestyle · easy');
+});
+
+it('rejects zero times and malformed m:ss', () => {
+  expect(parseMSS('0:00')).toBeUndefined();
+  expect(parseMSS('0')).toBeUndefined();
+  expect(parseMSS('7:00')).toBe(420);
+  expect(parseMSS('0:30')).toBe(30);
 });

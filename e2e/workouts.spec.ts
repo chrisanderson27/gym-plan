@@ -217,6 +217,7 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   await button(page, 'Save to My Blocks').click();
   await expect(page.getByText('1 stations · 15 min · Coached rotation', { exact: true })).toBeVisible();
   await button(page, 'Remove Personal circuit').click();
+  await page.getByTestId('block-remove-confirm').click();
   await expect(page.getByRole('link', { name: 'Personal circuit', exact: true })).toHaveCount(0);
   await openWorkouts(page);
   const editedCard = saved(page).getByRole('article', { name: 'Friday mixed edited' });
@@ -243,6 +244,10 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   await finishTimed('Continue');
   await expect(page.getByRole('heading', { name: 'Leg press' })).toBeVisible();
   await page.getByLabel('Weight (lb)').fill('95');
+  await page.getByLabel('Reps').fill('99999');
+  await button(page, 'Log set').click();
+  await expect(page.getByRole('alert')).toContainText('Reps must be between 1 and 999');
+  await page.getByLabel('Reps').fill('10');
   await button(page, 'Log set').click();
   await button(page, 'Finish block').click();
   await button(page, 'Continue').click();

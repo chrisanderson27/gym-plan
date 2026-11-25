@@ -137,7 +137,7 @@ export function Home({ settings }: { settings: Settings }) {
       </a>}
       {input && <>
         <WeekCard input={input} />
-        <p class="streak num" data-testid="streak"><FlameIcon />{weekStreak?.count}-week streak</p>
+        {!!weekStreak?.count && <p class="streak num" data-testid="streak"><FlameIcon />{weekStreak?.count}-week streak</p>}
       </>}
       <section class="training-card training-quick">
         <h2>Quick access</h2>

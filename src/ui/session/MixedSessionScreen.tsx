@@ -21,6 +21,7 @@ import { RpeChips } from '../cardio/RpeChips';
 import { runReviewActuals, startedClock } from './runReview';
 import { runExerciseId } from '../../content/stationDemos';
 import { PosePlaybackButton, PoseView } from '../slots/PoseView';
+import { LIMITS, rangeError } from '../limits';
 import './mixed.css';
 
 type Action = Parameters<typeof updateMixedSession>[3];
@@ -338,7 +339,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
         <Sheet label={swapped ? `Swap ${exerciseName(swapped.exerciseId)}` : 'Swap exercise'} onClose={() => setSwap(null)}>
           <h2>{swapped ? `Swap ${exerciseName(swapped.exerciseId)}` : 'Swap exercise'}</h2>
           <div class="mixed-fields">
-            {(swapped ? options?.stations?.[swapped.slotId]?.map((s) => s.exerciseId) : options?.strength)?.map((id) => (
+            {(swapped ? options?.stations?.[swapped.slotId]?.map((s) => s.exerciseId) : options?.strength)?.filter((id) => !stations.some((s) => s.exerciseId === id)).map((id) => (
               <button type="button" key={id} disabled={busy} onClick={() => selectSwap(id)}>{exerciseName(id)}</button>
             ))}
             {swapped && !swapped.skipped && (!coached || stage === 'entry') && <button type="button" disabled={busy} onClick={() => selectSwap(null)}>Skip station</button>}
@@ -400,15 +401,18 @@ function SaveError({ error, retry, submit, busy }: { error: string; retry: Retry
 function StrengthSet({ strength, slot, busy, submit }: { strength: AcceptedStrength; slot: number; busy: boolean; submit: Submit }) {
   const [weight, setWeight] = useState(String(strength.targetWeight ?? ''));
   const [reps, setReps] = useState(String(strength.repMin));
+  const repsError = rangeError(reps, 'Reps', LIMITS.strengthReps, { min: 1, integer: true });
   return (
     <form class="mixed-fields" onSubmit={(event) => {
       event.preventDefault();
+      if (repsError) return;
       void submit({ type: 'set', weight: Number(weight), reps: Number(reps),
         expectedExerciseId: strength.exerciseId, expectedEquipmentId: strength.equipmentId });
     }}>
       <h2>Set {slot + 1} of {strength.sets}</h2>
       <label>Weight (lb)<input type="number" inputMode="decimal" min="0" step="any" required value={weight} onInput={(e) => setWeight(e.currentTarget.value)} /></label>
       <label>Reps<input type="number" inputMode="numeric" min="1" step="1" required value={reps} onInput={(e) => setReps(e.currentTarget.value)} /></label>
+      {repsError && <p class="field-error" role="alert">{repsError}</p>}
       <button class="primary" type="submit" disabled={busy}>Log set</button>
     </form>
   );
@@ -430,13 +434,16 @@ function ReviewForm({ draft, stations, finish, busy, submit, edit }: {
     rounds: r === '' ? null : Number(r),
     partial: s && c !== '' ? { slotId: s.slotId, unit: s.target.unit, count: Number(c) } : null,
   });
+  const roundsError = rangeError(rounds, 'Completed rounds', LIMITS.rounds, { integer: true });
+  const partialError = rangeError(count, 'Partial work', LIMITS.targetReps);
   const save = (r: string, s: EffectiveStation | undefined, c: string) => {
-    if ((r && (!Number.isSafeInteger(Number(r)) || Number(r) < 0)) || (c && (!Number.isFinite(Number(c)) || Number(c) < 0))) return;
+    if (rangeError(r, 'Completed rounds', LIMITS.rounds, { integer: true }) || rangeError(c, 'Partial work', LIMITS.targetReps)) return;
     void submit({ type: 'review', ...actual(r, s, c) });
   };
   return (
     <form class="mixed-fields" onSubmit={(event) => {
       event.preventDefault();
+      if (roundsError || partialError) return;
       void submit({ type: edit ? 'review' : 'continue', ...(draft ? actual(rounds, current, count) : {}) }, undefined, edit);
     }}>
       {draft && <>
@@ -446,6 +453,7 @@ function ReviewForm({ draft, stations, finish, busy, submit, edit }: {
             setRounds(value);
             if (!validity.badInput) save(value, current, count);
           }} /></label>
+        {roundsError && <p class="field-error" role="alert">{roundsError}</p>}
         <label>Partial station<select value={slot} onChange={(e) => {
           const next = e.currentTarget.value;
           setSlot(next);
@@ -459,6 +467,7 @@ function ReviewForm({ draft, stations, finish, busy, submit, edit }: {
             setCount(value);
             if (!validity.badInput) save(rounds, current, value);
           }} /></label>}
+        {partialError && <p class="field-error" role="alert">{partialError}</p>}
       </>}
       <button type="submit" class="primary" disabled={busy}>{edit ? 'Save edits' : finish ? 'Finish workout' : 'Continue'}</button>
     </form>

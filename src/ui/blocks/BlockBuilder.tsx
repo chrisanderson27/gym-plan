@@ -22,6 +22,7 @@ import { useDemoPlayback } from '../pose/playback';
 import { navigate } from '../router';
 import { Sheet } from '../Sheet';
 import { stationGearLabel } from './gearLabel';
+import { amountOk, draftProblem, minutesOk, targetMessage } from './draftCheck';
 import { StationCard, stationTargetLine } from './StationCard';
 
 const EMPTY_TAGS: ReadonlySet<string> = new Set();
@@ -48,9 +49,6 @@ interface Draft {
   recommend: boolean;
 }
 
-const minutesOk = (raw: string) => /^\d+$/.test(raw) && Number(raw) >= 1 && Number(raw) <= 60;
-const amountOk = (raw: string) => raw.trim() !== '' && Number.isFinite(Number(raw)) && Number(raw) > 0;
-const loadOk = (raw: string) => raw.trim() === '' || (Number.isFinite(Number(raw)) && Number(raw) >= 0);
 const readNumber = (raw: string) => (raw.trim() === '' ? Number.NaN : Number(raw));
 
 function stationDraft(exerciseId: string): DraftStation {
@@ -130,12 +128,8 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
     return exercise.name.toLowerCase().includes(q);
   });
 
-  const coachedOk = draft.kind !== 'coached'
-    || (Number.isFinite(draft.workSec) && draft.workSec > 0 && Number.isFinite(draft.restSec) && draft.restSec >= 0 && Number.isFinite(draft.transitionSec) && draft.transitionSec >= 0);
-  const stationsOk = draft.stations.length >= 1 && draft.stations.length <= 6
-    && new Set(draft.stations.map((station) => station.exerciseId)).size === draft.stations.length
-    && draft.stations.every((station) => amountOk(station.amount) && loadOk(station.load));
-  const valid = draft.name.trim().length > 0 && minutesOk(draft.minutes) && coachedOk && stationsOk;
+  const problem = draftProblem(draft);
+  const valid = problem === undefined;
 
   const setKind = (kind: Draft['kind']) => {
     setDraft((d) => kind === 'self-paced'
@@ -281,9 +275,9 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
                       onInput={(e) => {
                         const amount = e.currentTarget.value;
                         patchStation(i, { amount });
-                        if (badTargets[station.exerciseId]) setBadTargets((flags) => ({ ...flags, [station.exerciseId]: !amountOk(amount) }));
+                        if (badTargets[station.exerciseId]) setBadTargets((flags) => ({ ...flags, [station.exerciseId]: !amountOk(amount, station.unit) }));
                       }}
-                      onBlur={(e) => setBadTargets((flags) => ({ ...flags, [station.exerciseId]: !amountOk(e.currentTarget.value) }))}
+                      onBlur={(e) => setBadTargets((flags) => ({ ...flags, [station.exerciseId]: !amountOk(e.currentTarget.value, station.unit) }))}
                     />
                     <select
                       aria-label={`${name} unit`}
@@ -306,7 +300,7 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
                     )}
                   </div>
                 </div>
-                {badTargets[station.exerciseId] && <p>Enter a target greater than 0.</p>}
+                {badTargets[station.exerciseId] && <p>{targetMessage(station.unit)}</p>}
               </section>
             );
           })}
@@ -321,6 +315,7 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
             </label>
             <p>{ELIGIBILITY_HELP}</p>
             {error && <p role="alert" class="warn">{error}</p>}
+            {problem && !(minutesBad && problem.startsWith('Enter minutes')) && !(problem.startsWith('Enter a target') && Object.values(badTargets).some(Boolean)) && <p class="field-error" data-testid="block-problem">{problem}</p>}
             <button type="button" class="primary" disabled={!valid || busy} onClick={() => { void save(); }}><CheckIcon /> Save to My Blocks</button>
           </section>
         </div>
@@ -334,7 +329,7 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
             </div>
             <button type="button" class="block-close" aria-label="Close" onClick={() => setSheet(null)}><CloseIcon /></button>
           </div>
-          <input class="block-search" aria-label="Search exercises" value={query} onInput={(e) => setQuery(e.currentTarget.value)} />
+          <input class="block-search" aria-label="Search exercises" placeholder="Search exercises" value={query} onInput={(e) => setQuery(e.currentTarget.value)} />
           {choices.length === 0 && <p>No matching exercises.</p>}
           {choices.map((exercise) => {
             const demo = stationDemo(exercise);

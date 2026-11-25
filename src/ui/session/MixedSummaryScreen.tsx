@@ -9,7 +9,7 @@ import { weeklyGoal } from '../../engine/plan/ring';
 import { weekIndex } from '../../engine/week';
 import { CalendarIcon, CheckIcon } from '../icons';
 import { MoreMenu } from '../MoreMenu';
-import { mixedBlockName, prLabel } from '../labels';
+import { mixedBlockName, prLabel, summaryHeadline } from '../labels';
 import { RING_ACTIVITY_LABELS } from '../home/Ring';
 import { MixedResultActuals } from './MixedResultActuals';
 import './mixed.css';
@@ -68,7 +68,7 @@ export function MixedSummaryScreen({ id }: { id: string }) {
         <div class="mixed-trophy"><Trophy /></div>
         <span class="mixed-complete-mark"><CheckIcon /></span>
         <p class="pref-eyebrow">Workout complete</p>
-        <h1>Showed up.<br />Got stronger.</h1>
+        <h1>{summaryHeadline(completed).flatMap((line, i) => i ? [<br key={`br${i}`} />, line] : [line])}</h1>
         <p>{mixed.prescription.name} · {completed} {completed === 1 ? 'block' : 'blocks'} finished · {sets.length} {sets.length === 1 ? 'set' : 'sets'} logged{skipped > 0 && ` · ${skipped} skipped`}</p>
       </section>
       <section class="mixed-summary-card" aria-label="Weekly goal">

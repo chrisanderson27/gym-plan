@@ -28,7 +28,7 @@ export function WorkoutLineup({ gear, rows, completed = false, onDisclosure, onE
   useEffect(() => { onExpandedChange?.(expanded); }, [expanded]);
   return <>
     {gear.length > 0 && <section class="training-equipment">
-      <h2><LiftIcon />{completed ? 'Equipment used' : 'Equipment to gather'}</h2>
+      <h2><LiftIcon />Equipment to gather</h2>
       <ul aria-label={completed ? 'Equipment used' : 'Required equipment'}>
         {(more ? gear : gear.slice(0, 4)).map((name) => {
           const Icon = name === 'Dumbbells' ? WorkoutsIcon : name === 'Plyo box' ? BlocksIcon : LayersIcon;

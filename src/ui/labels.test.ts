@@ -5,7 +5,7 @@ import { HYBRID_LEG_MODALITIES, TRACKED_MUSCLES } from '../engine/config';
 import {
   EQUIPMENT_TAG_LABELS, MODALITY_LABELS, MUSCLE_LABELS, RUN_KIND_LABELS,
   durationLabel, equipmentTagName, humanize, modalityName, muscleName, plural, runKindName, screenName, sessionTypeLabel, tagLabel, exerciseName, variantName,
-  floorLabel, prLabel, stationEquipmentLabel, zoneLabel,
+  floorLabel, prLabel, stationEquipmentLabel, summaryHeadline, zoneLabel,
 } from './labels';
 
 /** A label is "raw" when it is the id itself or still starts lower-case (a slug), e.g. "side-delts", "db". */
@@ -96,4 +96,11 @@ it('omits the generic treadmill label on rower and ski stations', () => {
   expect(stationEquipmentLabel({ equipmentId: 'treadmill', exerciseId: 'treadmill' }, equipment)).toBe('Treadmill');
   expect(stationEquipmentLabel({ equipmentId: 'rower', exerciseId: 'rower' }, equipment)).toBe('Rower');
   expect(stationEquipmentLabel({ equipmentId: 'dumbbells', exerciseId: 'db-bench' }, equipment)).toBe('Dumbbells');
+});
+
+describe('summaryHeadline', () => {
+  it('claims progress only when a block was finished', () => {
+    expect(summaryHeadline(2)).toEqual(['Showed up.', 'Got stronger.']);
+    expect(summaryHeadline(0)).toEqual(['Workout ended.']);
+  });
 });

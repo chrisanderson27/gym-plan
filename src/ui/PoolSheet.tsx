@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { db } from '../data/db';
 import { DEFAULT_POOL_LENGTH, saveSettings } from '../data/settings';
 import type { PoolUnit } from '../data/types';
+import { LIMITS, rangeError } from './limits';
 import { Sheet } from './Sheet';
 
 export function PoolSheet({ onClose }: { onClose: () => void }) {
@@ -18,7 +19,8 @@ export function PoolSheet({ onClose }: { onClose: () => void }) {
         event.preventDefault();
         if (saving) return;
         const poolLength = Number(length === 'custom' ? custom : length);
-        if (!Number.isFinite(poolLength) || poolLength <= 0) return setError('Enter a positive pool length.');
+        const invalid = length === 'custom' ? rangeError(custom.trim() || 'x', 'Pool length', LIMITS.poolLength, { min: 1, integer: true }) : undefined;
+        if (invalid || !Number.isFinite(poolLength) || poolLength <= 0) return setError(invalid ?? 'Enter a positive pool length.');
         setSaving(true);
         try {
           await saveSettings(db, { poolUnit, poolLength });

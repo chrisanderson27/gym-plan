@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { BodyLog, LibraryBlock, Session, Settings } from '../src/data/types';
-import { durationLabel } from '../src/ui/labels';
+import { durationLabel, estimatedMinutesLabel } from '../src/ui/labels';
 import { chooseAnother, expectTrainingInventory, localDay, onboard, pageWidth, persistedRows, seedBackup, tooSmall } from './helpers';
 
 const now = new Date('2026-11-20T12:00:00-05:00');
@@ -99,7 +99,7 @@ for (const offline of [false, true]) {
       return sum + time;
     }, 0);
     expect(seconds).toBeGreaterThanOrEqual(2700);
-    expect(hero).toContain(durationLabel(seconds));
+    expect(hero).toContain(estimatedMinutesLabel(seconds));
     expect(await persistedRows(page, 'bodyLogs')).toEqual([]);
     expect(await persistedRows<Settings>(page, 'settings')).toEqual([settings]);
     expect(await persistedRows(page, 'templates')).toEqual([]);

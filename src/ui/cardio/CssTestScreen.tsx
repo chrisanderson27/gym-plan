@@ -17,6 +17,7 @@ export function CssTestScreen() {
     ...(parseMSS(t3) !== undefined ? { t3x100: parseMSS(t3)! } : {}),
   };
   const derived = cssFromTest(input);
+  const badTime = [t400, t200, t3].some((text) => text.trim() !== '' && parseMSS(text) === undefined);
 
   const save = async () => {
     try {
@@ -52,6 +53,7 @@ export function CssTestScreen() {
           {derived.warn && <span class="warn"> {derived.warn}</span>}
         </p>
       )}
+      {badTime && <p class="field-error" role="alert">Enter each time as m:ss, greater than 0:00.</p>}
       {error && <p role="alert" class="warn">{error}</p>}
       <button type="button" class="primary" data-testid="css-save" disabled={!derived} onClick={save}>Save</button>
     </main>

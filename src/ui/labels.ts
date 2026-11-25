@@ -54,6 +54,9 @@ export const tagLabel = (tag: string): string => {
 
 export const sessionTypeLabel = (t: string): string => t.charAt(0).toUpperCase() + t.slice(1);
 
+/** Summary headline lines; neutral when no block was finished. */
+export const summaryHeadline = (finishedBlocks: number): string[] => finishedBlocks > 0 ? ['Showed up.', 'Got stronger.'] : ['Workout ended.'];
+
 export const plural = (n: number, one: string, many = one + 's'): string => `${n} ${n === 1 ? one : many}`;
 
 export const MUSCLE_LABELS: Record<Muscle, string> = {
@@ -123,8 +126,12 @@ export function durationLabel(sec: number): string {
   return s % 60 === 0 ? `${m} min` : `${m} min ${s % 60} s`;
 }
 
+/** Estimates read in whole minutes ("46 min"); exact seconds stay in durationLabel for timed and logged durations. */
+export const estimatedMinutesLabel = (sec: number): string => `${Math.max(1, Math.round(sec / 60))} min`;
+
 export function orderedDurationLabel(blocks: readonly OrderedBlock[]): string {
-  return durationLabel(orderedDurationSec(blocks)) + (blocks.some((block) => block.kind === 'strength') ? ' estimated' : '');
+  const sec = orderedDurationSec(blocks);
+  return blocks.some((block) => block.kind === 'strength') ? `${estimatedMinutesLabel(sec)} estimated` : durationLabel(sec);
 }
 
 const SCREEN_NAMES: [RegExp, string][] = [

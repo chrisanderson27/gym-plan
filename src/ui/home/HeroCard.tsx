@@ -2,7 +2,7 @@ import type { ComponentChildren } from 'preact';
 import type { SessionType } from '../../data/types';
 import { activityOf } from '../../engine/plan/activities';
 import { BurnIcon, CalendarIcon, CheckIcon, LayersIcon, TimerIcon } from '../icons';
-import { durationLabel } from '../labels';
+import { durationLabel, estimatedMinutesLabel } from '../labels';
 
 export function TrainingHeader({ week }: { week: number }) {
   return <header class="pref-top training-header">
@@ -37,7 +37,7 @@ export function HeroCard({ state, title, detail, durationSec, blockCount, estima
       {detail && <p>{detail}</p>}
       {durationSec !== undefined && <div class="today-hero-meta">
         <div>
-          <span><TimerIcon />{durationLabel(durationSec)}{estimated && ' estimated'}</span>
+          <span><TimerIcon />{estimated ? `${estimatedMinutesLabel(durationSec)} estimated` : durationLabel(durationSec)}</span>
           {blockCount !== undefined && <span><LayersIcon />{blockCount} blocks</span>}
         </div>
         {(activityKind || context) && <div>

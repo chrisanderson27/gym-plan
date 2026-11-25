@@ -83,7 +83,12 @@ test('one Start, sixteen scheduled edges, one editable result and the next block
   await page.clock.setFixedTime(at(900_000));
   await expect(page.getByRole('heading', { name: blockTitle })).toBeFocused();
   await button(page, 'Edit what I did').click();
+  await page.getByLabel('Completed rounds').fill('999');
+  await expect(page.getByRole('alert')).toContainText('Completed rounds must be between 0 and 99');
+  await page.getByLabel('Completed rounds').fill('-3');
+  await expect(page.getByRole('alert')).toContainText('Completed rounds must be between 0 and 99');
   await page.getByLabel('Completed rounds').fill('3');
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await page.getByLabel('Partial station').selectOption('cable');
   await page.getByLabel('Partial work (reps)').fill('6');
   await capture(page, info.outputPath('coached-edit.png'));
@@ -282,6 +287,7 @@ test('verified demos and a replacement survive a service-worker-controlled offli
   await page.reload();
   for (const [id] of demos) await expect(page.getByTestId(`pose-${id}`)).toHaveAttribute('data-static', 'true');
   await button(page, 'Swap Goblet squat').click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Seated cable row' })).toHaveCount(0);
   await button(page, 'Leg press').click();
   await expect(page.getByTestId('pose-leg-press')).toBeVisible();
   await expect(page.locator('[data-exercise-id="leg-press"]')).toContainText('45 sec work');
