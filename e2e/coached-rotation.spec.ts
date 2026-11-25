@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { COACHED_TEMPLATE, MIXED_AT, PRIOR_LIFT, PRIOR_SET } from '../src/data/mixedSession.test-fixture';
 import { settings } from '../src/data/p4-test-utils';
 import type { Template } from '../src/data/types';
-import { onboard, pageWidth, seedBackup, tooSmall } from './helpers';
+import { onboard, padToFloor, pageWidth, seedBackup, skipFloorPad, tooSmall } from './helpers';
 
 const at = (ms: number) => MIXED_AT.getTime() + ms;
 const button = (page: Page, name: string) => page.getByRole('button', { name, exact: true });
@@ -16,7 +16,8 @@ async function capture(page: Page, path: string) {
   await page.screenshot({ path, scale: 'css' });
 }
 
-async function seed(page: Page, template = COACHED_TEMPLATE, prefs: Parameters<typeof settings>[0] = {}) {
+async function seed(page: Page, source = COACHED_TEMPLATE, prefs: Parameters<typeof settings>[0] = {}) {
+  const template = padToFloor(source);
   await page.clock.setFixedTime(Date.parse(settings().updatedAt) - 1);
   await onboard(page);
   await page.clock.setFixedTime(MIXED_AT);
@@ -26,6 +27,7 @@ async function seed(page: Page, template = COACHED_TEMPLATE, prefs: Parameters<t
   }, 2);
   await page.goto('./#/mine/' + template.id);
   await button(page, 'Start').click();
+  if (template !== source) await skipFloorPad(page);
 }
 
 async function finishTimed(page: Page, finish = false) {
@@ -253,7 +255,8 @@ test('verified demos and a replacement survive a service-worker-controlled offli
   for (const [id, equipment] of demos) {
     const card = page.locator(`[data-exercise-id="${id}"]`);
     await expect(card).toHaveAttribute('data-equipment-id', equipment);
-    await card.getByRole('button', { name: /^Play / }).press('Enter');
+    // The first card autoplays; pick any other card, which moves playback to it.
+    if ((await page.getByTestId(`pose-${id}`).getAttribute('data-running')) !== 'true') await card.getByRole('button', { name: /^Play / }).press('Enter');
     await expect(page.getByTestId(`pose-${id}`)).toHaveAttribute('data-running', 'true');
     await expect(page.locator('.gym-card [data-running="true"]')).toHaveCount(1);
   }

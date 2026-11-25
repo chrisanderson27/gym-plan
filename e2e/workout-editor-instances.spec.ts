@@ -5,7 +5,7 @@ test('keeps duplicate source actions and focus on the selected snapshot after a 
   const stamp = '2026-11-22T12:00:00.000Z';
   const source = {
     id: 'tempo-circuit', kind: 'self-paced', name: 'Tempo circuit', recommend: false,
-    durationSec: 480, createdAt: stamp, updatedAt: stamp,
+    durationSec: 2700, createdAt: stamp, updatedAt: stamp,
     stations: [{ exerciseId: 'reverse-lunge', target: { unit: 'reps', amount: 8 } }],
   };
   await onboard(page);
@@ -19,7 +19,7 @@ test('keeps duplicate source actions and focus on the selected snapshot after a 
 
   const other = await context.newPage();
   try {
-    await seedBackup(other, { libraryBlocks: [{ ...source, durationSec: 600, updatedAt: '2026-11-22T12:01:00.000Z' }] }, 2);
+    await seedBackup(other, { libraryBlocks: [{ ...source, durationSec: 3000, updatedAt: '2026-11-22T12:01:00.000Z' }] }, 2);
   } finally {
     await other.close();
   }
@@ -32,5 +32,5 @@ test('keeps duplicate source actions and focus on the selected snapshot after a 
   await editor.getByRole('button', { name: 'Remove', exact: true }).click();
   await editor.getByRole('button', { name: 'Save workout', exact: true }).click();
   const saved = page.getByRole('article', { name: 'Independent copies', exact: true });
-  await expect(saved).toContainText('10 min · 1 block');
+  await expect(saved).toContainText('50 min · 1 block');
 });

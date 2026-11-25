@@ -1,33 +1,28 @@
-import { useMemo, useState } from 'preact/hooks';
+import { useMemo, useRef, useState } from 'preact/hooks';
 import { BURN_TEMPLATES } from '../../content/burn-templates';
-import { RUN_FORMATS } from '../../content/run-formats';
-import { burnInputs, loadCardioSnapshot, saveBurn, saveRun, saveSwim, type CardioSnapshot } from '../../data/cardio';
+import { copyWorkoutBlock, legacyWorkoutDraft } from '../../data/workoutChoices';
+import { workoutShortfallSec } from '../../engine/templates';
+import { loadCardioSnapshot, saveSwim, type CardioSnapshot } from '../../data/cardio';
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
 import { useLiveQuery } from '../../data/live';
 import { missingCoachedSchedule, startMixedSession } from '../../data/mixedSession';
 import { poolOf } from '../../data/settings';
-import { loadRunnable, startFromBlocks, type Runnable } from '../../data/templates';
-import type { IntervalBlock, RunBlock, SwimSetBlock } from '../../data/types';
+import { loadRunnable, type Runnable } from '../../data/templates';
+import type { SwimSetBlock } from '../../data/types';
 import { localDate } from '../../engine/dates';
-import { generateRun } from '../../engine/run/generator';
-import { runToIntervals } from '../../engine/run/to-timer';
 import { latestCss } from '../../engine/swim/css';
 import { generateSwim } from '../../engine/swim/generator';
 import { weekIndex } from '../../engine/week';
 import { BurnScreen } from '../cardio/BurnScreen';
-import { RpeChips } from '../cardio/RpeChips';
-import { RunLog } from '../cardio/RunLog';
 import { SwimCard } from '../cardio/SwimCard';
 import { SwimLog } from '../cardio/SwimLog';
-import { TimerScreen } from '../cardio/TimerScreen';
 import { PoolSheet } from '../PoolSheet';
-import { mixedBlockName, orderedDurationLabel } from '../labels';
+import { exerciseName, mixedBlockName, orderedDurationLabel, runKindName } from '../labels';
 import { navigate } from '../router';
 import { MoreMenu } from '../MoreMenu';
 import { OrderedStart } from '../workouts/OrderedStart';
-
-const { substitutesOf, labelOf } = burnInputs();
+import { WorkoutEditor } from '../workouts/WorkoutEditor';
 
 export function TemplateRunScreen(src: { templateId: string } | { sessionId: string }) {
   const key = 'templateId' in src ? src.templateId : src.sessionId;
@@ -50,151 +45,52 @@ export function TemplateRunScreen(src: { templateId: string } | { sessionId: str
   if (run.type === 'burn' && run.blocks.some((b) => b.kind === 'circuit')) {
     return <BurnScreen templateId={BURN_TEMPLATES.some((t) => t.id === run.templateId) ? run.templateId : undefined} />;
   }
-  if (run.blocks.some((b) => b.kind === 'lift')) return <LiftAgain run={run} />;
-  if (first?.kind === 'interval') return <BurnAgain run={run} snap={snap} />;
-  if (first?.kind === 'run') return <RunAgain run={run} block={first} snap={snap} />;
+  if (run.blocks.some((b) => b.kind === 'lift') || first?.kind === 'interval' || first?.kind === 'run') return <LegacyAgain run={run} />;
   if (first?.kind === 'swim') return <SwimAgain run={run} snap={snap} />;
   return <main class="screen"><header class="bar"><h1>Nothing to run</h1><MoreMenu feedback={{ kind: 'workout', context: {} }} /></header></main>;
 }
 
 function MixedAgain({ source, ordered }: { source: Parameters<typeof startMixedSession>[1]; ordered: NonNullable<Runnable['ordered']> }) {
   const repair = ordered.blocks.some(missingCoachedSchedule);
+  const short = workoutShortfallSec(ordered.blocks) > 0;
+  const [extending, setExtending] = useState(false);
+  const extend = useRef<HTMLButtonElement>(null);
+  const baseline = useMemo(() => ({ name: `${ordered.name} (45 min)`, blocks: ordered.blocks.map((block) => copyWorkoutBlock(block)) }), [ordered]);
   return (
     <main class="screen">
       <header class="bar"><h1>{ordered.name}</h1><a class="gear" href="#/progress">Progress</a></header>
       <p>{orderedDurationLabel(ordered.blocks)}</p>
       <ol class="plan">{ordered.blocks.map((b) => <li key={b.id}>{mixedBlockName(b)}</li>)}</ol>
       {repair && <p>Replace or remove coached blocks missing a station schedule in Workouts.</p>}
-      <OrderedStart source={source} ordered={ordered} testId="again-start">Start</OrderedStart>
+      {short ? <>
+        <p class="workout-warning">This workout is shorter than 45 minutes. Extend it to start.</p>
+        <button type="button" class="primary" ref={extend} data-testid="again-extend" onClick={() => setExtending(true)}>Extend as a new workout</button>
+      </> : <OrderedStart source={source} ordered={ordered} testId="again-start">Start</OrderedStart>}
       <a class="btn" href="#/workouts">Workouts</a>
+      {extending && <WorkoutEditor initial={baseline} onSaved={(id) => navigate(`/mine/${id}`)} onClose={() => setExtending(false)} fallbackFocus={() => extend.current} />}
     </main>
   );
 }
 
-function LiftAgain({ run }: { run: Runnable }) {
-  const [busy, setBusy] = useState(false);
-  const start = async () => {
-    setBusy(true);
-    const id = await startFromBlocks(db, run);
-    navigate((run.type === 'hybrid' ? '/hybrid/session/' : '/lift/session/') + id);
-  };
+/** Fresh Repeat of a legacy lift, hybrid, burn or run row. The standard runner needs a 45-minute workout, so the user converts or chooses one. */
+function LegacyAgain({ run }: { run: Runnable }) {
+  const [editing, setEditing] = useState(false);
+  const build = useRef<HTMLButtonElement>(null);
+  const { draft, dropped } = useMemo(() => legacyWorkoutDraft(run), [run]);
   return (
-    <main class="screen">
+    <main class="screen" data-testid="legacy-again">
       <header class="bar">
         <h1>{run.name}</h1>
         <a class="gear" href="#/progress/history">History</a>
         <MoreMenu feedback={{ kind: 'workout', context: { ...(run.templateId ? { templateId: run.templateId } : {}) } }} />
       </header>
-      <p class="dim">Weights are re-prescribed from your current history.</p>
-      <button type="button" class="primary" data-testid="again-start" disabled={busy} onClick={start}>Start</button>
-    </main>
-  );
-}
-
-function BurnAgain({ run, snap }: { run: Runnable; snap: CardioSnapshot }) {
-  const [sessionId] = useState(newId);
-  const [stage, setStage] = useState<'preview' | 'timer' | 'log'>('preview');
-  const [result, setResult] = useState<{ blocks: IntervalBlock[]; startedAt: string } | null>(null);
-  const [rpe, setRpe] = useState<number | null>(null);
-  const templateId = run.templateId ?? 'mine';
-  // Substitution only (no budget trimming): a re-run keeps its own length.
-  const blocks = useMemo(
-    () => run.blocks.filter((b): b is IntervalBlock => b.kind === 'interval').map((b): IntervalBlock => {
-      const { result: _r, ...rest } = b;
-      void _r;
-      return {
-        ...rest, id: newId(),
-        phases: b.phases.map((p) => {
-          if (!p.exerciseId || !snap.excluded.has(p.exerciseId)) return { ...p };
-          const to = (substitutesOf[p.exerciseId] ?? []).find((s) => !snap.excluded.has(s));
-          return to ? { ...p, exerciseId: to, label: labelOf[to] ?? to } : p;
-        }),
-      };
-    }),
-    [run, snap.excluded],
-  );
-  if (stage === 'timer') {
-    return (
-      <TimerScreen blocks={blocks} feedbackContext={{ sessionId, templateId }} onExit={() => setStage('preview')}
-        onFinish={(b, startedAt) => { setResult({ blocks: b, startedAt }); setStage('log'); }} />
-    );
-  }
-  if (stage === 'log' && result) {
-    return (
-      <main class="screen">
-        <header class="bar">
-          <h1>Session complete</h1>
-          <MoreMenu feedback={{ kind: 'workout', context: { sessionId, templateId } }} />
-        </header>
-        <RpeChips value={rpe} onChange={setRpe} allowSkip />
-        <button type="button" class="primary" data-testid="burn-save"
-          onClick={async () => { await saveBurn(db, { templateId, blocks: result.blocks, rpe, startedAt: result.startedAt, id: sessionId }); navigate('/'); }}>Save</button>
-      </main>
-    );
-  }
-  return (
-    <main class="screen">
-      <header class="bar">
-        <h1>{run.name}</h1>
-        <a class="gear" href="#/progress/history">History</a>
-        <MoreMenu feedback={{ kind: 'workout', context: { sessionId, templateId } }} />
-      </header>
-      <ul class="plan">{blocks.map((b) => <li key={b.id}>{b.label ?? 'Block'} · {b.rounds}×</li>)}</ul>
-      <button type="button" class="primary" data-testid="again-start" onClick={() => setStage('timer')}>Start timer</button>
-    </main>
-  );
-}
-
-function RunAgain({ run, block, snap }: { run: Runnable; block: RunBlock; snap: CardioSnapshot }) {
-  const [sessionId] = useState(newId);
-  const [stage, setStage] = useState<'plan' | 'timer' | 'log'>('plan');
-  const [frozen, setFrozen] = useState<IntervalBlock[]>([]);
-  const [startedAt, setStartedAt] = useState(() => new Date().toISOString());
-  const settings = snap.settings;
-  // Never replayed verbatim: regenerated so the 1.10× cap and weekly cap still apply.
-  const plan = useMemo(() => {
-    if (!settings) return null;
-    const plannedSec = block.repeats * block.segments.reduce((n, s) => n + (s.sec ?? 0), 0);
-    return generateRun({
-      now: new Date().toISOString(), today: localDate(new Date()), programStart: settings.programStart, history: snap.runHistory,
-      kind: block.runKind, ...(block.format ? { format: block.format } : {}), formats: RUN_FORMATS, lastDoneByFormat: snap.lastIntervalFormat,
-      ...(plannedSec > 0 ? { durationMin: Math.max(5, Math.round(plannedSec / 60)) } : {}), makeId: newId,
-    });
-  }, [block, snap, settings]);
-  if (!plan) return <main class="screen"><h1>{run.name}</h1></main>;
-  const ctx = { sessionId, ...(run.templateId ? { templateId: run.templateId } : {}) };
-  if (stage === 'timer') {
-    return (
-      <TimerScreen blocks={frozen} feedbackContext={ctx} onExit={() => setStage('plan')}
-        onFinish={(_b, at) => { setStartedAt(at); setStage('log'); }} />
-    );
-  }
-  if (stage === 'log') {
-    return (
-      <main class="screen">
-        <header class="bar">
-          <h1>Log run</h1>
-          <MoreMenu feedback={{ kind: 'workout', context: ctx }} />
-        </header>
-        <RunLog defaultMinutes={Math.round(plan.plannedSec / 60)} defaultModality={plan.block.modality}
-          onSave={async (v) => { await saveRun(db, { block: plan.block, startedAt, id: sessionId, ...v }); navigate('/'); }} />
-      </main>
-    );
-  }
-  return (
-    <main class="screen">
-      <header class="bar">
-        <h1>{run.name}</h1>
-        <a class="gear" href="#/progress/history">History</a>
-        <MoreMenu feedback={{ kind: 'workout', context: ctx }} />
-      </header>
-      <p data-testid="run-planned"><strong>Planned {Math.round(plan.plannedSec / 60)} min</strong></p>
-      <ul class="plan">
-        {plan.reasons.map((r) => <li key={r}>{r}</li>)}
-        {plan.warnings.map((w) => <li key={w} class="warn">{w}</li>)}
-      </ul>
-      <button type="button" class="primary" data-testid="again-start" onClick={() => { setFrozen(runToIntervals(plan.block, plan)); setStage('timer'); }}>Start timer</button>
-      <button type="button" data-testid="run-log-direct" onClick={() => setStage('log')}>Log without timer</button>
+      <p>Workouts now start in the standard runner and last at least 45 minutes.</p>
+      <ol class="plan">{run.blocks.filter((b) => b.kind !== 'lift' || !b.warmup).map((b) => <li key={b.id}>
+        {b.kind === 'lift' ? exerciseName(b.exerciseId) : b.kind === 'run' ? `${runKindName(b.runKind)} run` : b.kind}</li>)}</ol>
+      {dropped.length > 0 && <p class="dim">Not carried over: {dropped.join(', ')} blocks.</p>}
+      <button type="button" class="primary" ref={build} data-testid="legacy-build" onClick={() => setEditing(true)}>Build a 45-minute version</button>
+      <a class="btn" href="#/workouts">Choose a standard workout</a>
+      {editing && <WorkoutEditor initial={draft} onSaved={(id) => navigate(`/mine/${id}`)} onClose={() => setEditing(false)} fallbackFocus={() => build.current} />}
     </main>
   );
 }

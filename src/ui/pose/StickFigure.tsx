@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useLayoutEffect, useMemo, useRef } from 'preact/hooks';
 import type { PoseDef } from '../../content/types';
 import { anglesAt, gobletDumbbellBounds, HEAD_RADIUS, idleAngles, layout, resolveFrames, skeleton, type Joint, type Layout, type Pt, type Skeleton } from '../../engine/pose';
+import { useReducedMotion } from './playback';
 
 const SEGMENTS: { key: string; a: Joint; b: Joint; far?: boolean }[] = [
   { key: 'torso', a: 'hip', b: 'neck' },
@@ -80,10 +81,10 @@ function setLine(el: Element | null, a: { x: number; y: number }, b: { x: number
   el.setAttribute('y2', String(r1(b.y)));
 }
 
-function Figure({ def, lay, sk, refs, testId, label, onToggle, running }: {
+function Figure({ def, lay, sk, refs, testId, label, running }: {
   def: PoseDef; lay: Layout; sk: Skeleton;
   refs?: { current: Record<string, Element | null> };
-  testId?: string; label: string; onToggle?: () => void;
+  testId?: string; label: string;
   running?: boolean;
 }) {
   const { viewBox: v, anchorAt } = lay;
@@ -100,7 +101,6 @@ function Figure({ def, lay, sk, refs, testId, label, onToggle, running }: {
       aria-label={label}
       data-testid={testId}
       data-running={running === undefined ? undefined : running ? 'true' : 'false'}
-      onClick={onToggle}
     >
       <Prop def={def} lay={lay} />
       {def.prop === 'air-bike' && bikeLinks(lay.hip0, sk).map(([a, b], i) => (
@@ -124,31 +124,19 @@ function Figure({ def, lay, sk, refs, testId, label, onToggle, running }: {
   );
 }
 
-const REDUCED = '(prefers-reduced-motion: reduce)';
-const prefersReduced = () => typeof matchMedia === 'function' && matchMedia(REDUCED).matches;
-
-/** Looped demo with tap-to-pause for standalone figures and a static strip for reduced motion. */
-export function StickFigure({ def, label, testId, running }: { def: PoseDef; label: string; testId: string; running?: boolean }) {
+/** Looped demo, always controlled by its surface. Reduced motion shows a static strip instead. */
+export function StickFigure({ def, label, testId, running }: { def: PoseDef; label: string; testId: string; running: boolean }) {
   const lay = useMemo(() => layout(def), [def]);
-  const [reduced, setReduced] = useState(prefersReduced);
-  const paused = useRef(false);
+  const reduced = useReducedMotion();
   const refs = useRef<Record<string, Element | null>>({});
 
-  useEffect(() => {
-    if (typeof matchMedia !== 'function') return;
-    const mq = matchMedia(REDUCED);
-    const on = () => setReduced(mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  }, []);
-
   useLayoutEffect(() => {
-    if (reduced || running === false) return;
+    if (reduced || !running) return;
     let raf = 0;
     let last = performance.now();
     let elapsed = 0;
     const frame = (now: number) => {
-      if (!paused.current) elapsed += now - last;
+      elapsed += now - last;
       last = now;
       const sk = skeleton(anglesAt(def, elapsed), def.anchor, lay.anchorAt);
       const r = refs.current;
@@ -177,15 +165,14 @@ export function StickFigure({ def, label, testId, running }: { def: PoseDef; lab
       </div>
     );
   }
-  const idle = running === false;
+  const idle = !running;
   // Remount when switching modes because playback writes the SVG attributes directly.
   return (
     <Figure
       key={idle ? 'idle' : 'playing'}
       def={def} lay={lay} sk={skeleton(idle ? idleAngles(def) : anglesAt(def, 0), def.anchor, lay.anchorAt)}
       refs={refs} testId={testId} label={aria}
-      running={running ?? true}
-      onToggle={running === undefined ? () => { paused.current = !paused.current; } : undefined}
+      running={running}
     />
   );
 }

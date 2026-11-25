@@ -17,6 +17,7 @@ import { localDate } from '../../engine/dates';
 import { weekIndex } from '../../engine/week';
 import { CalendarIcon, CheckIcon, ChevronIcon, CloseIcon, EyeIcon, PlusIcon } from '../icons';
 import { StickFigure } from '../pose/StickFigure';
+import { useDemoPlayback } from '../pose/playback';
 import { navigate } from '../router';
 import { Sheet } from '../Sheet';
 import { stationGearLabel } from './gearLabel';
@@ -101,7 +102,11 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
   const [busy, setBusy] = useState(false);
   const [sheet, setSheet] = useState<null | 'add' | 'preview'>(null);
   const [query, setQuery] = useState('');
-  const [running, setRunning] = useState(0);
+  const previewIds = draft.stations.flatMap((station, i) => {
+    const exercise = exerciseById.get(station.exerciseId);
+    return exercise && stationDemo(exercise) ? [`${i}:${station.exerciseId}`] : [];
+  });
+  const preview = useDemoPlayback('block-preview', previewIds);
 
   useEffect(() => {
     if (mode !== 'edit' || !editId) return;
@@ -308,7 +313,7 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
           <section class="block-ready">
             <h2>Ready for the gym?</h2>
             <p>{draft.kind === 'coached' ? COACHED_HELP : SELF_HELP}</p>
-            <button type="button" class="block-row" disabled={!valid} onClick={() => { setRunning(0); setSheet('preview'); }}><EyeIcon /> Preview gym grid</button>
+            <button type="button" class="block-row" disabled={!valid} onClick={() => setSheet('preview')}><EyeIcon /> Preview gym grid</button>
             <label class="check block-eligibility">
               <span>Use in workout recommendations</span>
               <input type="checkbox" checked={draft.recommend} onChange={(e) => setDraft({ ...draft, recommend: e.currentTarget.checked })} />
@@ -375,7 +380,7 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
                   <StationCard key={station.exerciseId} exerciseId={station.exerciseId} index={i}
                     poseId={exercise ? stationDemo(exercise)?.poseId : undefined}
                     target={stationTargetLine(station.exerciseId, station.amount, station.unit, station.load)}
-                    playing={running === i} onPlay={() => setRunning(running === i ? -1 : i)} />
+                    playing={preview.playingId === `${i}:${station.exerciseId}`} onPlay={() => preview.toggle(`${i}:${station.exerciseId}`)} />
                 );
               })}
             </div>

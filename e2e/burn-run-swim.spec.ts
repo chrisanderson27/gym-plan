@@ -99,9 +99,9 @@ test('old interval Burn renders in history and still runs on the timer', async (
   await page.goto(`./#/history/${old.id}`);
   await expect(page.locator('main h1')).toContainText(/burn/i);
   await page.goto('./#/mine/legacy-burn');
-  await page.getByTestId('again-start').click();
-  await page.getByTestId('timer-start').click();
-  await expect(page.getByTestId('timer-phase')).toHaveText('Row');
+  // Fresh Repeat of a legacy row now converts to a 45-minute standard workout.
+  await expect(page.getByTestId('legacy-again')).toBeVisible();
+  await expect(page.getByTestId('legacy-build')).toBeVisible();
   await page.goto('./#/burn');
   await expect(page.getByText('Last Burn')).toBeVisible();
 });

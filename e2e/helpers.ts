@@ -107,3 +107,21 @@ export function persistedRows<T>(page: Page, store: string) {
     };
   }), store);
 }
+
+/** Adds a leading inert block when a fixture is under the 45-minute Start floor. Returns the same object when no pad is needed. */
+export function padToFloor<T extends { ordered?: { name: string; blocks: unknown[] } }>(template: T): T {
+  const ordered = template.ordered;
+  if (!ordered) return template;
+  const blocks = ordered.blocks as { kind: string; durationSec?: number; sets?: number; repMax?: number; restSec?: number }[];
+  const seconds = blocks.reduce((sum, b) => sum + (b.kind === 'strength'
+    ? (b.sets ?? 0) * (b.repMax ?? 0) * 3 + Math.max(0, (b.sets ?? 0) - 1) * (b.restSec ?? 90) : b.durationSec ?? 0), 0);
+  if (seconds >= 2700) return template;
+  const pad = { id: 'floor-pad', kind: 'preparation', durationSec: Math.min(3600, 2700 - seconds), instructions: 'Easy.' };
+  return { ...template, ordered: { ...ordered, blocks: [pad, ...blocks] } };
+}
+
+/** Skips the leading pad block that padToFloor adds. */
+export async function skipFloorPad(page: Page) {
+  await page.getByRole('button', { name: 'Skip block', exact: true }).click();
+  await page.getByRole('button', { name: /^Continue/ }).click();
+}

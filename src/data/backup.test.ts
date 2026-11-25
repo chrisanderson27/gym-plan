@@ -3,6 +3,7 @@ import { GymDb } from './db';
 import { ROUND_TRIP_EXCLUDE, buildExport, importExport, markBackedUp, parseExport, ImportError } from './backup';
 import { newId } from './ids';
 import { saveOrderedWorkout } from './templates';
+import { floored } from './test-utils';
 import { startMixedSession, updateMixedSession } from './mixedSession';
 import { libraryWorkoutBlock, copyWorkoutBlock, starterWorkoutBlocks } from './workoutChoices';
 import { STORE_NAMES } from './stores';
@@ -272,7 +273,7 @@ it('round-trips an edited ordered workout with extra strength fields and valid l
   const src = open();
   const now = new Date('2026-11-22T12:00:00.000Z');
   const strength = starterWorkoutBlocks.find((block) => block.kind === 'strength')!;
-  const baseline = { name: 'Restored strength', blocks: [{ ...strength, notes: 12, warmup: 'easy' }] };
+  const baseline = { name: 'Restored strength', blocks: floored([{ ...strength, notes: 12, warmup: 'easy' }]) };
   const template = { id: 'portable', name: baseline.name, ordered: baseline, blocks: [],
     type: 'custom', source: 'saved', createdAt: now.toISOString() };
   await importExport(src, parseExport(JSON.stringify({ schemaVersion: 2, stores: { templates: [template] } })).file);
@@ -305,9 +306,9 @@ it('restores authored workouts and history after the source changes, keeping loc
     ],
   };
   await src.libraryBlocks.add(source);
-  const ordered = { name: 'Synthetic circuit day', blocks: [
+  const ordered = { name: 'Synthetic circuit day', blocks: floored([
     ...starterWorkoutBlocks.slice(0, 3), libraryWorkoutBlock(source), starterWorkoutBlocks[4]!,
-  ].map((block) => copyWorkoutBlock(block)) };
+  ].map((block) => copyWorkoutBlock(block))) };
   const id = await saveOrderedWorkout(src, ordered, undefined, now);
   await src.libraryBlocks.update(source.id, { recommend: true, durationSec: 600, stations: [...source.stations].reverse() });
   const sid = await startMixedSession(src, { templateId: id }, now);

@@ -716,6 +716,9 @@ button.block-station { border-radius: var(--radius); }
 .workout-actions svg { width: 16px; height: 16px; flex: none; }
 .workout-error { flex-basis: 100%; color: var(--color-danger-text); margin: 8px 0; }
 .workout-warning { font-size: 13px; color: var(--shell-ink); margin: 8px 0; }
+.workout-lineup { color: var(--shell-secondary); margin: 8px 0 0; font-size: 13px; line-height: 20px; overflow-wrap: anywhere; }
+.workout-floor { font-size: 13px; color: var(--shell-secondary); margin: 8px 0; }
+.workout-floor[data-short='true'] { color: var(--shell-ink); font-weight: 600; }
 .sheet.overlay.sheet-top {
   top: 0; bottom: auto; max-height: 100dvh; border-radius: 0 0 12px 12px;
   padding: calc(20px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));

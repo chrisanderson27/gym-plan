@@ -163,7 +163,7 @@ export function screenName(hash: string | undefined): string | undefined {
 
 export function mixedBlockName(block: OrderedBlock) {
   if (block.kind === 'strength') return exerciseName(block.exerciseId);
-  if (block.kind === 'self-paced' || block.kind === 'coached') return block.name;
+  if (block.kind === 'self-paced' || block.kind === 'coached' || block.kind === 'run') return block.name;
   return block.kind === 'preparation' ? 'Preparation' : 'Recovery';
 }
 
@@ -173,6 +173,7 @@ export const workoutBlockKind = {
   coached: 'Coached rotation',
   'self-paced': 'Self-paced circuit',
   recovery: 'Recovery',
+  run: 'Running',
 };
 
 export function workoutBlockName(block: OrderedBlock) {

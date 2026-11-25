@@ -17,7 +17,7 @@ const ordered: OrderedPrescription = {
       { slotId: 'carry', exerciseId: 'farmer-carry', target: { unit: 'm', amount: 30 }, load: 25 },
       { slotId: 'hold', exerciseId: 'plank', target: { unit: 'sec', amount: 35 } },
     ] },
-    { id: 'recovery', kind: 'recovery', durationSec: 60, instructions: 'Walk slowly and let your breathing settle.' },
+    { id: 'recovery', kind: 'recovery', durationSec: 2400, instructions: 'Walk slowly and let your breathing settle.' },
   ],
 };
 

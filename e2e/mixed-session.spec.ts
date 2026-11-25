@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { MIXED_AT, MIXED_TEMPLATE, PRIOR_LIFT, PRIOR_SET } from '../src/data/mixedSession.test-fixture';
 import { settings } from '../src/data/p4-test-utils';
-import { onboard, pageWidth, seedBackup, tooSmall } from './helpers';
+import { onboard, padToFloor, pageWidth, seedBackup, skipFloorPad, tooSmall } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   // Backup import keeps whichever settings row has the newer update timestamp.
@@ -69,11 +69,13 @@ test('preparation and strength demos use keyboard controls and show static cues 
   const pause = page.getByRole('button', { name: /^Pause / });
   for (const [id, instruction] of [['calf-raise', 'Full stretch at the bottom'], ['leg-press', 'Do not lock out the knees']] as const) {
     const pose = page.getByTestId(`pose-${id}`);
+    // Demos autoplay, and one explicit pause survives re-renders.
+    await expect(pose).toHaveAttribute('data-running', 'true');
+    await expect(page.locator('[data-running="true"]')).toHaveCount(1);
+    await pause.press('Enter');
     await expect(pose).toHaveAttribute('data-running', 'false');
     await play.press('Enter');
     await expect(pose).toHaveAttribute('data-running', 'true');
-    await pause.press('Enter');
-    await expect(pose).toHaveAttribute('data-running', 'false');
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await expect(pose).toHaveAttribute('data-static', 'true');
     await expect(page.getByText(instruction)).toBeVisible();
@@ -128,10 +130,10 @@ test('saved mixed session runs offline, resumes a live swap and can reopen and r
   await page.reload();
   await expect(page).toHaveURL(new RegExp('/workout/session/' + id + '$'));
   await expect(page.getByRole('timer')).toHaveText('07:41');
-  const play = page.getByRole('button', { name: 'Play Step-up to box' });
-  await play.focus();
-  await page.keyboard.press('Enter');
   await expect(page.getByTestId('pose-step-up')).toHaveAttribute('data-running', 'true');
+  await page.getByRole('button', { name: 'Pause Step-up to box' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByTestId('pose-step-up')).toHaveAttribute('data-running', 'false');
   await page.getByRole('button', { name: 'Play Push-up' }).click();
   await expect(page.locator('.gym-grid [data-running="true"]')).toHaveCount(1);
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -188,15 +190,16 @@ test('unsupported movement remains readable and skipped work keeps untapped roun
   const original = MIXED_TEMPLATE.ordered!.blocks[3]!;
   if (original.kind !== 'self-paced') throw new Error('Missing circuit fixture');
   await seedBackup(page, {
-    templates: [{ ...MIXED_TEMPLATE, blocks: [], ordered: {
+    templates: [padToFloor({ ...MIXED_TEMPLATE, blocks: [], ordered: {
       name: 'Long title workout for narrow viewports', blocks: [{ ...original,
         stations: [{ ...original.stations[0]!, exerciseId: 'imported-unknown-exercise-with-a-long-name' }, original.stations[1]!],
       }],
-    } }],
+    } })],
     settings: [settings()],
   }, 2);
   await page.goto('./#/mine/' + MIXED_TEMPLATE.id);
   await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await skipFloorPad(page);
   await expect(page.getByText('Movement unavailable')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start block' })).toBeDisabled();
   await expect.poll(() => pageWidth(page)).toBe(320);

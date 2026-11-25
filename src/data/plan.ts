@@ -39,7 +39,7 @@ export async function loadPlanInput(db: GymDb, now = new Date()): Promise<PlanIn
 
 async function classifySessions(db: GymDb, sessions: Session[]) {
   const ids = sessions.map((s) => s.id);
-  const runIds = sessions.filter((s) => s.type === 'run' || s.type === 'hybrid').map((s) => s.id);
+  const runIds = sessions.filter((s) => s.type === 'run' || s.type === 'hybrid' || (s.type === 'custom' && !!s.mixed)).map((s) => s.id);
   const [sets, runs] = await Promise.all([
     ids.length ? db.sets.where('sessionId').anyOf(ids).toArray() : [],
     runIds.length ? db.runs.where('sessionId').anyOf(runIds).toArray() : [],

@@ -88,12 +88,7 @@ test('a Builder superset keeps one primary and stays within the viewport', async
   await page.getByTestId('builder-search').fill('row');
   await page.getByTestId('builder-add-seated-cable-row').click();
   await page.getByTestId('builder-pair-0').click();
-  await page.getByTestId('builder-start').click();
-  await expect(page).toHaveURL(/#\/lift\/session\/[^/]+$/);
-  const superset = page.getByTestId(/^superset-/);
-  await expect(superset).toBeVisible();
-  await expect(superset.getByTestId('exercise-chest-press-machine')).toBeVisible();
-  await expect(superset.getByTestId('exercise-seated-cable-row')).toBeVisible();
+  await expect(page.getByTestId('builder-pair-0')).toHaveAttribute('aria-pressed', 'true');
   expect(await tooSmall(page)).toEqual([]);
   expect(await pageWidth(page)).toBeLessThanOrEqual(390);
   expect(await primaryCount(page)).toBe(1);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Block, IntervalBlock, LiftBlock, OrderedBlock } from '../data/types';
-import { FULL_WORKOUT_MIN_SEC, moveBlock, orderedBlockMinutes, orderedBlockSeconds, orderedDurationMin, orderedDurationSec, newLiftBlock, pairWithNext, removeBlock, templateDurationMin, toTemplateBlocks, unpair } from './templates';
+import { FULL_WORKOUT_MIN_SEC, moveBlock, orderedBlockMinutes, orderedBlockSeconds, orderedDurationMin, orderedDurationSec, newLiftBlock, workoutShortfallSec, pairWithNext, removeBlock, templateDurationMin, toTemplateBlocks, unpair } from './templates';
 
 let n = 0;
 const mk = () => 'id' + n++;
@@ -78,5 +78,23 @@ describe('ordered scheduled duration', () => {
     expect(totals).toEqual([2699, 2700, 2701]);
     expect(totals.map((seconds) => seconds >= FULL_WORKOUT_MIN_SEC)).toEqual([false, true, true]);
     expect(orderedDurationMin(blocks)).toBe(34);
+  });
+});
+
+describe('workoutShortfallSec', () => {
+  const timed = (sec: number): OrderedBlock => ({ id: 't', kind: 'recovery', durationSec: sec, instructions: 'Easy.' });
+  it('passes at exactly 45 minutes and fails by the missing second below it', () => {
+    expect(workoutShortfallSec([timed(2700)])).toBe(0);
+    expect(workoutShortfallSec([timed(2701)])).toBe(0);
+    expect(workoutShortfallSec([timed(2699)])).toBe(1);
+    expect(workoutShortfallSec([])).toBe(FULL_WORKOUT_MIN_SEC);
+  });
+  it('counts a run block by its prescribed seconds', () => {
+    const run: OrderedBlock = { id: 'r', kind: 'run', name: 'Easy run', runKind: 'easy', modality: 'run', durationSec: 1200 };
+    expect(orderedBlockSeconds(run)).toBe(1200);
+    expect(workoutShortfallSec([timed(1500), run])).toBe(0);
+  });
+  it('leaves legacy template minutes unchanged', () => {
+    expect(templateDurationMin([lift('a', { sets: 3 })])).toBe(Math.round(3 * 2));
   });
 });

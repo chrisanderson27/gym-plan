@@ -4,7 +4,7 @@ import type { GymDb } from './db';
 import { loadLiftSnapshot, prescribeExercise, setNotAtMyGym } from './lift';
 import { chestBlock, NOW, seedSettings, session, topSets } from './p4-test-utils';
 import { listMine, loadRunnable, saveAsMine, saveBuilt, saveOrderedWorkout, startFromBlocks } from './templates';
-import { openTestDb } from './test-utils';
+import { floored, openTestDb } from './test-utils';
 import { copyWorkoutBlock, starterWorkoutBlocks } from './workoutChoices';
 import type { LiftBlock, OrderedPrescription } from './types';
 
@@ -98,7 +98,7 @@ describe('templates', () => {
 
 it('ordered saves keep the exact prescription, stable edit identity and legacy lift-only projection', async () => {
   const db = open();
-  const initial = { name: '  Mixed plan  ', blocks: starterWorkoutBlocks.map((block) => copyWorkoutBlock(block)) };
+  const initial = { name: '  Mixed plan  ', blocks: floored(starterWorkoutBlocks.map((block) => copyWorkoutBlock(block))) };
   const id = await saveOrderedWorkout(db, initial, undefined, NOW);
   const baseline = (await loadRunnable(db, { templateId: id }))!.ordered!;
   expect(baseline).toEqual({ ...initial, name: 'Mixed plan' });
@@ -117,7 +117,7 @@ it('ordered saves keep the exact prescription, stable edit identity and legacy l
 
 it('rejects stale concurrent, malformed and missing-row edits without writing over valid data', async () => {
   const db = open();
-  const baseline = { name: 'Base', blocks: [starterWorkoutBlocks[0]!] };
+  const baseline = { name: 'Base', blocks: floored([starterWorkoutBlocks[0]!]) };
   const id = await saveOrderedWorkout(db, baseline);
   const results = await Promise.allSettled(['First', 'Second'].map((name) =>
     saveOrderedWorkout(db, { ...baseline, name }, { id, baseline })));

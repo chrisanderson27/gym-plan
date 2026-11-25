@@ -171,20 +171,15 @@ test('the legacy weigh-in route still updates the read-only Progress trend', asy
   await expectTrainingInventory(page);
 });
 
-test('the legacy Builder saves a workout accessible in Workouts', async ({ page }) => {
+test('the legacy Builder holds Save until the workout reaches 45 minutes', async ({ page }) => {
   await page.goto('./#/builder');
   await page.getByTestId('builder-name').fill('Chest press practice');
   await page.getByTestId('builder-search').fill('chest press');
   await page.getByTestId('builder-add-chest-press-machine').click();
-  await page.getByTestId('builder-save').click();
-  await expect(page).toHaveURL(/#\/progress$/);
-  await page.locator('main').getByRole('link', { name: 'Workouts', exact: true }).click();
-  const saved = page.getByRole('article', { name: 'Chest press practice' });
-  await expect(saved).toBeVisible();
-  await saved.getByRole('link', { name: 'Edit', exact: true }).click();
-  await expect(page.getByTestId('builder-name')).toHaveValue('Chest press practice');
-  await page.getByTestId('builder-start').click();
-  await expect(page).toHaveURL(/#\/lift\/session\//);
+  // One exercise is far under the shared 45-minute floor, so Save and Start wait for more work.
+  await expect(page.getByTestId('builder-save')).toBeDisabled();
+  await expect(page.getByTestId('builder-start')).toBeDisabled();
+  await expect(page.getByTestId('builder-hint')).toContainText('45 minutes');
 });
 
 test('ring history shows closed weeks and the same streak as Today', async ({ page }) => {

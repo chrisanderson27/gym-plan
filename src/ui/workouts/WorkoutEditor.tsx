@@ -5,24 +5,40 @@ import { missingCoachedSchedule, workoutPreview } from '../../data/mixedSession'
 import { saveOrderedWorkout, StaleWorkoutSaveError, WorkoutSaveError } from '../../data/templates';
 import type { OrderedBlock, OrderedPrescription } from '../../data/types';
 import { validAuthoredWorkout } from '../../data/validate';
-import { copyWorkoutBlock, libraryWorkoutBlock, starterWorkoutBlocks, strengthWorkoutChoices, workoutBlockContent } from '../../data/workoutChoices';
-import { moveBlock } from '../../engine/templates';
-import { BlocksIcon, BookmarkIcon, CloseIcon, FlameIcon, LiftIcon, PlusIcon, SwapIcon, WindIcon } from '../icons';
+import { WORKOUT_PRESETS } from '../../data/presets';
+import { copyWorkoutBlock, libraryWorkoutBlock, runWorkoutChoices, starterWorkoutBlocks, strengthWorkoutChoices, workoutBlockContent } from '../../data/workoutChoices';
+import { moveBlock, workoutShortfallSec } from '../../engine/templates';
+import { BlocksIcon, BookmarkIcon, CloseIcon, FlameIcon, LiftIcon, PlusIcon, RunIcon, SwapIcon, WindIcon } from '../icons';
 import { orderedDurationLabel, workoutBlockKind, workoutBlockName } from '../labels';
 import { Sheet } from '../Sheet';
 
-const icons = { preparation: FlameIcon, strength: LiftIcon, coached: SwapIcon, 'self-paced': BlocksIcon, recovery: WindIcon };
+const icons = { preparation: FlameIcon, strength: LiftIcon, coached: SwapIcon, 'self-paced': BlocksIcon, recovery: WindIcon, run: RunIcon };
 type DraftBlock = { id: string; block: OrderedBlock; choiceId?: string };
 const choiceKey = (block: { id: string }, source: string) => `${source}:${block.id}`;
 const builtIns = starterWorkoutBlocks.map((block) => ({ id: choiceKey(block, 'starter'), block }));
 const strengthChoices = strengthWorkoutChoices.map((block) => ({ id: choiceKey(block, 'strength'), block }));
+const runChoices = runWorkoutChoices.map((block) => ({ id: choiceKey(block, 'run'), block }));
+// Preset blocks give a short workout real work to extend with. Duplicates by content are listed once.
+const presetChoices = (() => {
+  const seen = new Set(builtIns.concat(runChoices).map(({ block }) => workoutBlockContent(block)));
+  return WORKOUT_PRESETS.flatMap((preset) => preset.blocks.flatMap((block) => {
+    const content = workoutBlockContent(block);
+    if (block.kind === 'preparation' || block.kind === 'recovery' || block.kind === 'strength' || block.kind === 'run' || seen.has(content)) return [];
+    seen.add(content);
+    return [{ id: choiceKey({ id: `${preset.id}:${block.id}` }, 'preset'), block }];
+  }));
+})();
 
-export function WorkoutEditor({ edit, onClose, fallbackFocus }: {
-  edit?: { id: string; baseline: OrderedPrescription }; onClose: () => void; fallbackFocus: () => HTMLElement | null;
+const shortfallText = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.ceil(sec % 60)).padStart(2, '0')}`;
+
+export function WorkoutEditor({ edit, initial, onSaved, onClose, fallbackFocus }: {
+  edit?: { id: string; baseline: OrderedPrescription }; initial?: OrderedPrescription; onSaved?: (id: string) => void;
+  onClose: () => void; fallbackFocus: () => HTMLElement | null;
 }) {
+  const start = edit?.baseline ?? initial;
   const label = edit ? 'Edit workout' : 'Build a workout';
-  const [name, setName] = useState(edit?.baseline.name ?? '');
-  const [selected, setSelected] = useState<DraftBlock[]>(() => edit?.baseline.blocks.map((block) => ({ id: block.id, block })) ?? []);
+  const [name, setName] = useState(start?.name ?? '');
+  const [selected, setSelected] = useState<DraftBlock[]>(() => start?.blocks.map((block) => ({ id: block.id, block })) ?? []);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [moreStrength, setMoreStrength] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,7 +53,8 @@ export function WorkoutEditor({ edit, onClose, fallbackFocus }: {
   const choices = useMemo(() => [
     ...builtIns,
     ...(library ?? []).map((source) => ({ id: choiceKey(source, 'library'), block: libraryWorkoutBlock(source) })),
-    ...(moreStrength ? strengthChoices : []),
+    ...runChoices,
+    ...(moreStrength ? [...strengthChoices, ...presetChoices] : []),
   ], [library, moreStrength]);
   const rows = useMemo(() => {
     // Keep a source row paired to the same copy when the workout order changes.
@@ -56,7 +73,9 @@ export function WorkoutEditor({ edit, onClose, fallbackFocus }: {
   const blocks = useMemo(() => selected.map((item) => item.block), [selected]);
   const gym = useLiveQuery(async () => ({ blocks, demos: await workoutPreview(db, blocks) }), [blocks]);
   const ordered = { name: name.trim(), blocks };
-  const canSave = validAuthoredWorkout(ordered);
+  const shortfall = workoutShortfallSec(blocks);
+  const canSave = validAuthoredWorkout(ordered) && shortfall === 0;
+  const hasRun = blocks.some((block) => block.kind === 'run');
   const full = selected.length >= 30;
 
   const copy = (source: OrderedBlock, id: string): DraftBlock => {
@@ -70,7 +89,8 @@ export function WorkoutEditor({ edit, onClose, fallbackFocus }: {
     setBusy(true);
     setError('');
     try {
-      await saveOrderedWorkout(db, ordered, asNew ? undefined : edit);
+      const id = await saveOrderedWorkout(db, ordered, asNew ? undefined : edit);
+      onSaved?.(id);
       onClose();
     } catch (reason) {
       setConflict(reason instanceof StaleWorkoutSaveError);
@@ -124,11 +144,12 @@ export function WorkoutEditor({ edit, onClose, fallbackFocus }: {
                   <div class="workout-choice-text"><strong>{title}</strong><small>{orderedDurationLabel([block])} · {workoutBlockKind[block.kind]}</small></div>
                   <button id={triggerId} type="button" class="workout-pick"
                     aria-label={entry ? `${title}, block ${index + 1}, actions` : `Add ${title}`}
-                    aria-expanded={entry ? open : undefined} disabled={busy || (!entry && full)}
+                    aria-expanded={entry ? open : undefined} disabled={busy || (!entry && (full || (block.kind === 'run' && hasRun)))}
                     onClick={() => entry ? setExpanded(open ? null : entry.id) : setSelected((items) => [...items, copy(source, id)])}>
                     <span>{entry ? index + 1 : <PlusIcon />}</span>
                   </button>
                 </div>
+                {!entry && block.kind === 'run' && hasRun && <p class="workout-warning">One running segment per workout.</p>}
                 {repair && <p class="workout-warning">Missing station schedule. Add a coached block with a schedule, then remove this block.</p>}
                 {invalid && <p class="workout-warning">Invalid timing or targets. Remove this block and fix its prescription in Blocks.</p>}
                 {!!warnings?.length && <p class="workout-warning">{[...new Set(warnings.map((demo) => demo.status))].join(' ')}</p>}
@@ -149,6 +170,9 @@ export function WorkoutEditor({ edit, onClose, fallbackFocus }: {
           })}
           {!moreStrength && <li><button type="button" class="workout-more" onClick={() => setMoreStrength(true)}>More strength blocks</button></li>}
         </ul>
+        <p class="workout-floor" role="status" aria-live="polite" data-short={shortfall > 0 ? 'true' : 'false'}>
+          {shortfall > 0 ? `Add at least ${shortfallText(shortfall)} to reach 45 minutes.` : 'Meets the 45-minute minimum.'}
+        </p>
         {error && <p class="workout-error" role="alert">{error}</p>}
         {conflict && <button type="button" disabled={!canSave || busy} onClick={() => submit(true)}>Save as new workout</button>}
         <button type="submit" class="primary workout-save" disabled={!canSave || busy}><BookmarkIcon />Save workout</button>

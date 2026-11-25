@@ -1,17 +1,19 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
 import { MixedInputError, mixedOptions, updateMixedSession } from '../../data/mixedSession';
 import { saveSettings } from '../../data/settings';
-import type { AcceptedStrength, EffectiveStation, MixedCursor, MixedDraft, MixedExecution, OrderedBlock, Session } from '../../data/types';
+import type { AcceptedStrength, CardioModality, EffectiveStation, MixedCursor, MixedDraft, MixedExecution, OrderedBlock, RunBlock, Session } from '../../data/types';
 import { blockBeeps } from '../../engine/block/clock';
 import { blockRemainingSec, coachedSchedule, nextStation, projectCoached, sameCoachedPhase, stationWorkSec } from '../../engine/block/coached';
 import { elapsedClamped, remainingMs } from '../../engine/block/session';
+import { runPhases, runSegmentAt } from '../../engine/run/segments';
 import { beep, unlockAudio } from '../../platform/audio';
 import { holdWakeLock } from '../../platform/wakelock';
 import { StationCard, stationTargetLine } from '../blocks/StationCard';
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, EditIcon, MutedIcon, PauseIcon, PlayIcon, SoundIcon } from '../icons';
-import { exerciseName, mixedBlockName } from '../labels';
+import { exerciseName, mixedBlockName, modalityName, runKindName } from '../labels';
+import { useDemoPlayback } from '../pose/playback';
 import { MoreMenu } from '../MoreMenu';
 import { navigate } from '../router';
 import { Sheet } from '../Sheet';
@@ -25,7 +27,9 @@ type Retry = { action: Action; expected: MixedCursor; closeEditor?: boolean };
 // Ticks and small scheduling delays may announce one edge. A foreground gap only updates the display.
 const FRESH_CUE_MS = 1000;
 const blockKind = (block: OrderedBlock) => block.kind === 'coached' ? 'Coached rotation'
-  : block.kind === 'self-paced' ? 'Self-paced circuit' : block.kind;
+  : block.kind === 'self-paced' ? 'Self-paced circuit' : block.kind === 'run' ? 'Running' : block.kind;
+const runExercise = (modality: CardioModality) => modality === 'bike' ? 'air-bike' : modality === 'row' ? 'rower' : 'treadmill';
+const stationIdentity = (s: EffectiveStation, poseId?: string) => `${s.slotId}:${s.exerciseId}:${s.equipmentId ?? ''}:${poseId ?? ''}`;
 
 export function MixedSessionScreen({ id }: { id: string }) {
   const session = useLiveQuery(() => db.sessions.get(id).then((row) => row ?? null), [id]);
@@ -55,8 +59,6 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState<Retry | null>(null);
-  const [playing, setPlaying] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ entry: string; slot: string | null }>();
   const [editing, setEditing] = useState(false);
   const [swap, setSwap] = useState<{ slotId: string } | 'strength' | null>(null);
   const writing = useRef(false);
@@ -74,7 +76,15 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
   const currentStation = rotation && lineup[rotation.at.station];
   const nextStationInLineup = rotation && lineup[nextStation(rotation.at, lineup.length).station];
   const stationEntry = rotation && `${rotation.at.rotations}:${currentStation?.slotId}`;
-  const playingSlot = !stationEntry ? playing : preview?.entry === stationEntry ? preview.slot : currentStation?.slotId;
+  const stationPose = (s: EffectiveStation) => options?.available?.has(s.slotId) ? s.poseId : undefined;
+  const demoIds = stations.filter((s) => stationPose(s)).map((s) => stationIdentity(s, stationPose(s)));
+  // Demo playback is UI state only. It never goes through updateMixedSession.
+  const demo = useDemoPlayback(stationEntry ? `entry:${stationEntry}` : `block:${block.id}`, demoIds,
+    currentStation && stationPose(currentStation) ? stationIdentity(currentStation, stationPose(currentStation)) : null);
+  const acceptedRun = block.kind === 'run' ? session.blocks.find((row): row is RunBlock => row.kind === 'run' && row.id === block.id) : undefined;
+  const phases = useMemo(() => acceptedRun ? runPhases(acceptedRun) : [], [acceptedRun]);
+  const segment = acceptedRun && clock && stage === 'active' ? runSegmentAt(phases, elapsed) : undefined;
+  const segmentCue = useRef<{ now: number; index: number } | null>(null);
 
   const submit: Submit = async (action, expected = mixed.cursor, closeEditor) => {
     const draftEdit = action.type === 'review';
@@ -96,7 +106,6 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
       if (closeEditor) setEditing(false);
       if (action.type === 'swap-station' || action.type === 'swap-strength') {
         setSwap(null);
-        setPlaying(null);
       }
       setNow(Date.now());
       return true;
@@ -171,9 +180,19 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
   }, [active, remaining, busy, retry]);
   useLayoutEffect(() => {
     if (stage !== 'review') return;
-    setPlaying(null);
     setSwap(null);
   }, [stage]);
+  useEffect(() => {
+    // Segment edges sound once, and only when fresh. A foreground gap or a missed edge never replays.
+    if (!active || !segment || document.visibilityState !== 'visible') {
+      segmentCue.current = null;
+      return;
+    }
+    const last = segmentCue.current;
+    segmentCue.current = { now, index: segment.index };
+    if (!last || sound === false || now < last.now || now - last.now > FRESH_CUE_MS || last.index === segment.index || remaining === 0) return;
+    if (elapsed - (segment.current?.startMs ?? 0) <= FRESH_CUE_MS) beep(segment.current?.role === 'work' ? 'go' : 'tick');
+  });
   useLayoutEffect(() => {
     if (stage === 'review' && swap === null) reviewHeading.current?.focus();
   }, [stage, swap, editing]);
@@ -236,12 +255,14 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
           <h2 ref={reviewHeading} tabIndex={-1}>Review block</h2>
           {clock && <p>{formatClock(Math.floor((clock.frozenElapsedMs ?? 0) / 1000))} elapsed</p>}
           {strength && <p>{setSlot ? `${setSlot} of ${strength.sets} sets logged` : 'Skipped'}</p>}
-          <ReviewForm draft={clock?.startedAt === null ? undefined : draft} stations={stations} finish={finish} busy={busy} submit={submit} />
+          {block.kind === 'run' && clock?.startedAt !== null
+            ? <RunReviewForm elapsedSec={Math.floor((clock?.frozenElapsedMs ?? 0) / 1000)} modality={acceptedRun?.modality ?? block.modality} finish={finish} busy={busy} submit={submit} />
+            : <ReviewForm draft={clock?.startedAt === null ? undefined : draft} stations={stations} finish={finish} busy={busy} submit={submit} />}
         </section>
       ) : strength ? (
         <>
           <p>{ready ? `${strength.sets} sets · ${strength.repMin}–${strength.repMax} reps` : options ? 'Movement unavailable' : 'Checking equipment…'}</p>
-          <MixedDemo key={`${strength.exerciseId}:${strength.equipmentId}`} exerciseId={strength.exerciseId} poseId={options?.poseId || undefined} />
+          <MixedDemo key={`${strength.exerciseId}:${strength.equipmentId}:${options?.poseId}`} scope={block.id} exerciseId={strength.exerciseId} poseId={options?.poseId || undefined} />
           {ready && <StrengthSet key={`${strength.exerciseId}:${strength.equipmentId}:${setSlot}`} strength={strength} slot={setSlot} busy={busy} submit={submit} />}
           <div class="actions">
             {stage === 'entry' && <button type="button" disabled={busy || !options?.strength?.length} onClick={() => setSwap('strength')}>Swap exercise</button>}
@@ -257,7 +278,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
               <strong class="num" role="timer" aria-label={coached ? 'Block time left' : undefined}>{formatClock(remaining)}</strong></div>
             {circuit && draft && <div class="mixed-rounds"><span class="mixed-eyebrow num">Rounds logged</span>
               <strong class="num" aria-label={draft.rounds === null ? 'Rounds unreported' : undefined}>{String(draft.rounds ?? 0).padStart(2, '0')}</strong></div>}
-            <progress aria-label="Block time left" max={block.kind === 'strength' ? 1 : block.durationSec} value={remaining} />
+            <progress aria-label="Block time left" max={block.kind === 'strength' ? 1 : clock ? clock.durationMs / 1000 : block.durationSec} value={remaining} />
           </div>
           {circuit || coached ? (
             <>
@@ -273,11 +294,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
                     target={stationTargetLine(station.exerciseId, station.target.amount, station.target.unit, station.load)}
                     interval={coached && station.target.unit !== 'sec' ? stationWorkSec(station.target, coached.workSec) : undefined}
                     marker={station === currentStation ? 'Now' : station === nextStationInLineup ? 'Next' : undefined}
-                    playing={playingSlot === station.slotId} onPlay={() => {
-                      const slot = playingSlot === station.slotId ? null : station.slotId;
-                      if (stationEntry) setPreview({ entry: stationEntry, slot });
-                      else setPlaying(slot);
-                    }}
+                    playing={demo.playingId === stationIdentity(station, stationPose(station))} onPlay={() => demo.toggle(stationIdentity(station, stationPose(station)))}
                     onSwap={coached && stage === 'active' && station.skipped ? undefined : () => setSwap({ slotId: station.slotId })} disabled={busy}
                     status={station.skipped ? 'Skipped' : options && !options.available?.has(station.slotId) ? 'Movement unavailable' : undefined} />
                 ))}
@@ -285,7 +302,18 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
             </>
           ) : (block.kind === 'preparation' || block.kind === 'recovery') && <>
             <p>{block.instructions}</p>
-            {block.exerciseId && <MixedDemo exerciseId={block.exerciseId} poseId={options?.poseId || undefined} />}
+            {block.exerciseId && <MixedDemo key={`${block.exerciseId}:${options?.equipmentId}:${options?.poseId}`} scope={block.id} exerciseId={block.exerciseId} poseId={options?.poseId || undefined} />}
+            {options && !ready && <p>Movement unavailable</p>}
+          </>}
+          {block.kind === 'run' && <>
+            <p>{runKindName(acceptedRun?.runKind ?? block.runKind)} · {modalityName(acceptedRun?.modality ?? block.modality)} · {Math.round((clock?.durationMs ?? phases.at(-1)?.endMs ?? block.durationSec * 1000) / 60_000)} min planned</p>
+            {segment?.current && <div class="mixed-run-segment" role="status" data-testid="run-segment">
+              <p class="mixed-eyebrow num">Now</p>
+              <h2>{segment.current.label}</h2>
+              <p class="num" role="timer" aria-label="Segment time left">{formatClock(Math.ceil(segment.remainingMs / 1000))}</p>
+              {segment.next && <p><b>Next:</b> {segment.next.label}</p>}
+            </div>}
+            <MixedDemo key={`${block.id}:${(acceptedRun?.modality ?? block.modality)}:${options?.poseId}`} scope={block.id} exerciseId={runExercise(acceptedRun?.modality ?? block.modality)} poseId={options?.poseId || undefined} />
             {options && !ready && <p>Movement unavailable</p>}
           </>}
           <div class="mixed-live-actions actions">
@@ -321,12 +349,41 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
   );
 }
 
-function MixedDemo({ exerciseId, poseId }: { exerciseId: string; poseId?: string }) {
-  const [playing, setPlaying] = useState(false);
+function MixedDemo({ scope, exerciseId, poseId }: { scope: string; exerciseId: string; poseId?: string }) {
+  const { playingId, toggle } = useDemoPlayback(scope, poseId ? [exerciseId] : []);
+  const playing = playingId === exerciseId;
   return <div class="mixed-demo">
     <PoseView exerciseId={exerciseId} poseId={poseId} running={playing} />
-    {poseId && <PosePlaybackButton name={exerciseName(exerciseId)} playing={playing} onPlay={() => setPlaying(!playing)} />}
+    {poseId && <PosePlaybackButton name={exerciseName(exerciseId)} playing={playing} onPlay={() => toggle(exerciseId)} />}
   </div>;
+}
+
+const RUN_MODALITIES: CardioModality[] = ['run', 'treadmill', 'bike', 'row', 'ski', 'stair', 'elliptical'];
+
+function RunReviewForm({ elapsedSec, modality, finish, busy, submit }: {
+  elapsedSec: number; modality: CardioModality; finish: boolean; busy: boolean; submit: Submit;
+}) {
+  const [distance, setDistance] = useState('');
+  const [minutes, setMinutes] = useState(String(Math.max(1, Math.round(elapsedSec / 60))));
+  const [mode, setMode] = useState<CardioModality>(modality);
+  const [rpe, setRpe] = useState('5');
+  const [pain, setPain] = useState(false);
+  const valid = Number(minutes) > 0 && (distance === '' || Number(distance) >= 0);
+  return (
+    <form class="mixed-fields" data-testid="run-review" onSubmit={(event) => {
+      event.preventDefault();
+      if (!valid) return;
+      void submit({ type: 'continue', run: { distanceMi: distance === '' ? 0 : Number(distance), durationSec: Math.round(Number(minutes) * 60), modality: mode, rpe: Number(rpe), painFlag: pain } });
+    }}>
+      <label>Distance (mi)<input type="number" inputMode="decimal" min="0" step="any" value={distance} onInput={(e) => setDistance(e.currentTarget.value)} /></label>
+      <label>Duration (min)<input type="number" inputMode="decimal" min="0.5" step="any" required value={minutes} onInput={(e) => setMinutes(e.currentTarget.value)} /></label>
+      <label>Modality<select value={mode} onChange={(e) => setMode(e.currentTarget.value as CardioModality)}>
+        {RUN_MODALITIES.map((m) => <option key={m} value={m}>{modalityName(m)}</option>)}</select></label>
+      <label>Effort (RPE 1–10)<input type="number" inputMode="numeric" min="1" max="10" step="1" required value={rpe} onInput={(e) => setRpe(e.currentTarget.value)} /></label>
+      <label class="check"><input type="checkbox" checked={pain} onChange={(e) => setPain(e.currentTarget.checked)} />Pain during this block</label>
+      <button type="submit" class="primary" disabled={busy || !valid}>{finish ? 'Finish workout' : 'Continue'}</button>
+    </form>
+  );
 }
 
 function formatClock(seconds: number) {

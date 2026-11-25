@@ -1,38 +1,52 @@
 import { exerciseById } from '../content';
 import { EQUIPMENT_PREFS } from '../content/equipment-prefs';
-import { COACHED_EXERCISE_IDS, PHASE3_EXERCISE_IDS, coachedEquipmentId, coachedPose, phase3EquipmentId, phase3Pose } from '../content/stationDemos';
+import { RUN_FORMATS } from '../content/run-formats';
+import { COACHED_EXERCISE_IDS, PHASE3_EXERCISE_IDS, coachedEquipmentId, coachedPose, phase3EquipmentId, phase3Pose, runDemo } from '../content/stationDemos';
 import { coachedSchedule, initialCoached, nextCoached, projectCoached, sameCoachedPhase } from '../engine/block/coached';
 import { elapsedClamped, finishClock, pauseClock, reconcileClock, resumeClock, startClock } from '../engine/block/session';
 import { stationUnits } from '../engine/block/progression';
-import { FINISH_RPE, PRIMARY_SET_WEIGHT, SECONDARY_SET_WEIGHT } from '../engine/config';
+import { FINISH_RPE, LOWER_MUSCLES, PRIMARY_SET_WEIGHT, SECONDARY_SET_WEIGHT } from '../engine/config';
 import { localDate } from '../engine/dates';
 import { exerciseAllowed } from '../engine/gym/eligibility';
 import { classifyHard } from '../engine/hard';
+import { hybridCardio } from '../engine/hybrid';
 import { swapCandidates } from '../engine/lift/generator';
 import { summarizeLiftSession } from '../engine/lift/session';
 import { weekFractionalSets, weeklyTarget } from '../engine/lift/volume';
+import { generateRun } from '../engine/run/generator';
+import { runPhases, runTotalMs } from '../engine/run/segments';
+import { workoutShortfallSec } from '../engine/templates';
 import { weekIndex } from '../engine/week';
+import { loadCardioSnapshot, runWalkRatioOf, type CardioSnapshot } from './cardio';
 import type { GymDb } from './db';
 import { newId } from './ids';
 import { blockPrescriptionPatch, ensureEquipmentInstance, LIFT_EXERCISES, loadLiftSnapshot, resolveEquipmentId } from './lift';
 import { toBlockExercise } from './liftday';
 import { loggedMixedSets, mixedSetId, reconcileMixedStrength } from './mixedSets';
-import { loadRunnable, orderedStrengthToLift, replayLiftFlags } from './templates';
-import type { CoachedCheckpoint, EffectiveStation, LiftBlock, MixedCursor, MixedDraft, MixedExecution, MixedResult, MixedTimer,
+import { presetById } from './presets';
+import { loadRunnable, orderedStrengthToLift, replayLiftFlags, type Runnable } from './templates';
+import type { Block, CardioModality, CoachedCheckpoint, OrderedRunBlock, RunBlock, EffectiveStation, LiftBlock, MixedCursor, MixedDraft, MixedExecution, MixedResult, MixedTimer,
   LiftVariant, OrderedBlock, OrderedPrescription, OrderedStation, OrderedStrengthBlock, Session, SetRow } from './types';
 import { isAcceptedStrength, snapshotValue } from './validate';
 
 export class MixedInputError extends Error {}
 export class StaleWorkoutError extends MixedInputError {}
+export class ShortWorkoutError extends MixedInputError {
+  constructor(readonly shortfallSec: number) {
+    super('This workout is shorter than 45 minutes. Extend it to start.');
+  }
+}
 
-type Source = { templateId: string } | { sessionId: string };
+type Source = { templateId: string } | { sessionId: string } | { presetId: string };
 type Action = { type: 'start' | 'pause' | 'resume' | 'expire' | 'finish' | 'skip' }
   | { type: 'next'; observed: CoachedCheckpoint }
   | { type: 'round'; expectedTapped: number; expectedStations: EffectiveStation[] }
   | { type: 'swap-station'; slotId: string; exerciseId: string | null; expectedExerciseId: string }
   | { type: 'swap-strength'; exerciseId: string; expectedExerciseId: string }
-  | { type: 'review' | 'continue'; rounds?: number | null; partial?: MixedDraft['partial'] | null }
+  | { type: 'review' | 'continue'; rounds?: number | null; partial?: MixedDraft['partial'] | null; run?: RunActuals }
   | { type: 'set'; reps: number; weight: number; expectedExerciseId: string; expectedEquipmentId?: string };
+
+export interface RunActuals { distanceMi: number; durationSec: number; modality: CardioModality; rpe: number; painFlag: boolean }
 
 const PHASE_LIFTS = new Map([...LIFT_EXERCISES].filter(([id, lift]) => lift.repMin > 0 && PHASE3_EXERCISE_IDS.some((known) => known === id)));
 const required = new Map([
@@ -87,8 +101,8 @@ export function missingCoachedSchedule(block: OrderedBlock) {
 export async function workoutPreview(db: GymDb, blocks: OrderedBlock[], now = new Date()) {
   const g = await loadMixedGym(db, now);
   return blocks.map((block) => {
-    const describe = (exerciseId: string, equipmentId?: string, supported = true) => {
-      const coached = block.kind === 'coached';
+    const describe = (exerciseId: string, equipmentId?: string, supported = true, forceCoached = false) => {
+      const coached = forceCoached || block.kind === 'coached';
       const verified = supported && verifiedDemo(g, exerciseId, equipmentId, coached);
       const available = verified && availableDemo(g, exerciseId, equipmentId, coached);
       const extraGear = required.get(exerciseId)?.filter((id) => verified && id !== verified.equipmentId)
@@ -110,8 +124,57 @@ export async function workoutPreview(db: GymDb, blocks: OrderedBlock[], now = ne
     if (block.kind === 'coached' || block.kind === 'self-paced') {
       return (block.stations ?? []).map((station) => describe(station.exerciseId, station.equipmentId, stationUnitMatches(station)));
     }
+    if (block.kind === 'run') {
+      const demo = runDemo(block.modality);
+      if (!demo.exerciseId) return [{ exerciseId: 'treadmill', equipmentId: undefined, equipmentName: undefined, poseId: demo.poseId, status: undefined }];
+      return [describe(demo.exerciseId, undefined, true, !!demo.coached)];
+    }
     return block.exerciseId ? [describe(block.exerciseId)] : [];
   });
+}
+
+/** What Start would accept today for each block, read-only. Safety guardrails can shorten sets or run seconds below the prescription. */
+export async function acceptedPlanNotes(db: GymDb, blocks: OrderedBlock[], now = new Date()): Promise<(string | undefined)[]> {
+  if (!blocks.length) return [];
+  const g = await loadMixedGym(db, now);
+  const runInputs = blocks.some((b) => b.kind === 'run') ? await loadCardioSnapshot(db, now) : undefined;
+  let prepared: ReturnType<typeof prepareOrderedStart>;
+  try {
+    prepared = prepareOrderedStart(g, { name: 'preview', blocks }, 'preview', now, false, runInputs);
+  } catch {
+    return blocks.map(() => undefined);
+  }
+  return blocks.map((block) => {
+    if (block.kind === 'strength') {
+      const sets = prepared?.mixed.strength[block.id]?.sets;
+      return sets !== undefined && sets < block.sets ? `Today: ${sets} of ${block.sets} sets within your weekly limits.` : undefined;
+    }
+    if (block.kind === 'run') {
+      const run = prepared?.blocks.find((b): b is RunBlock => b.kind === 'run' && b.id === block.id);
+      const sec = run ? runTotalMs(runPhases(run)) / 1000 : block.durationSec;
+      return sec < block.durationSec - 30 ? `Today: ${Math.round(sec / 60)} min run within your running limits.` : undefined;
+    }
+    return undefined;
+  });
+}
+
+/** Lower-body workout: the session variant, else any strength block whose primary muscles are lower-body. */
+function isLowerWorkout(ordered: OrderedPrescription, variant?: LiftVariant) {
+  if (variant) return variant.startsWith('lower');
+  return ordered.blocks.some((b) => b.kind === 'strength'
+    && LIFT_EXERCISES.get(b.exerciseId)?.primary.some((m) => (LOWER_MUSCLES as readonly string[]).includes(m)));
+}
+
+/** Plans the prescribed run through the existing generator and lower-day machine swap. The prescription stays as authored. */
+export function planOrderedRun(cardio: CardioSnapshot, programStart: string, block: OrderedRunBlock, lower: boolean, now: Date): RunBlock {
+  const run = generateRun({
+    now: now.toISOString(), today: localDate(now), programStart, history: cardio.runHistory, kind: block.runKind,
+    formats: RUN_FORMATS, lastDoneByFormat: cardio.lastIntervalFormat, durationMin: Math.max(5, Math.round(block.durationSec / 60)),
+    makeId: () => block.id,
+  });
+  const machine = block.modality === 'bike' || block.modality === 'row' ? block.modality : undefined;
+  const out = hybridCardio({ variant: lower || machine ? 'lower-a' : 'upper-a', run, ...(machine ? { modality: machine } : {}) }).block;
+  return { ...out, id: block.id };
 }
 
 export function resolveStation(g: Gym, original: OrderedStation, exerciseId = original.exerciseId, coached = false): EffectiveStation | null {
@@ -177,28 +240,39 @@ function prepareStrength(g: Gym, block: OrderedStrengthBlock, exerciseId: string
   return { ...base, ...patch, sets: count, equipmentId: demo.equipmentId };
 }
 
+/** Bundled presets have no database row. A removed preset resolves to null. */
+export function presetRunnable(presetId: string): Runnable | null {
+  const preset = presetById(presetId);
+  return preset ? { type: 'custom', name: preset.name, blocks: [], ordered: structuredClone({ name: preset.name, blocks: preset.blocks }) } : null;
+}
+
 export async function startMixedSession(db: GymDb, source: Source, now = new Date(), expected?: OrderedPrescription): Promise<string> {
-  const sourceId = 'templateId' in source ? 'template:' + source.templateId : 'session:' + source.sessionId;
-  return db.transaction('rw', [db.sessions, db.templates, db.sets, db.settings, db.equipment, db.exerciseOverrides], async () => {
+  const sourceId = 'templateId' in source ? 'template:' + source.templateId : 'presetId' in source ? 'preset:' + source.presetId : 'session:' + source.sessionId;
+  return db.transaction('rw', [db.sessions, db.templates, db.sets, db.settings, db.equipment, db.exerciseOverrides, db.runs, db.tests], async () => {
     const open = await db.sessions.where('type').equals('custom').filter((s) => !s.endedAt && s.mixed?.sourceId === sourceId).first();
     if (open) return open.id;
     if ('sessionId' in source && !(await db.sessions.get(source.sessionId))?.endedAt) {
       throw new MixedInputError('Finish the original workout before repeating it.');
     }
-    const run = await loadRunnable(db, source);
+    const run = 'presetId' in source ? presetRunnable(source.presetId) : await loadRunnable(db, source);
     if (expected && snapshotValue(run?.ordered) !== snapshotValue(expected)) {
       throw new StaleWorkoutError('This workout changed. Review the current plan before starting.');
     }
     if (!run?.ordered || !run.ordered.blocks.length) throw new MixedInputError('This workout is unavailable.');
     if (run.ordered.blocks.some(missingCoachedSchedule)) throw new MixedInputError('Coached blocks without a station schedule are unavailable.');
+    // The open-session return above comes first, so an active short workout always resumes.
+    const shortfall = workoutShortfallSec(run.ordered.blocks);
+    if (shortfall > 0) throw new ShortWorkoutError(shortfall);
     const g = await loadMixedGym(db, now);
-    const prepared = prepareOrderedStart(g, run.ordered, sourceId, now);
-    return writePreparedOrdered(db, prepared!, now, run.templateId,
-      'sessionId' in source ? (await db.sessions.get(source.sessionId))?.variant : undefined);
+    const variant = 'sessionId' in source ? (await db.sessions.get(source.sessionId))?.variant : undefined;
+    const runInputs = run.ordered.blocks.some((b) => b.kind === 'run') ? await loadCardioSnapshot(db, now) : undefined;
+    const prepared = prepareOrderedStart(g, run.ordered, sourceId, now, false, runInputs, variant);
+    return writePreparedOrdered(db, prepared!, now, run.templateId, variant);
   });
 }
 
-export function prepareOrderedStart(g: Gym, ordered: OrderedPrescription, sourceId: string, now: Date, strict = false) {
+export function prepareOrderedStart(g: Gym, ordered: OrderedPrescription, sourceId: string, now: Date, strict = false,
+  runInputs?: CardioSnapshot, variant?: LiftVariant) {
   const prescription = structuredClone(ordered);
   const flags = replayLiftFlags(g.snapshot, now);
   const volume = weekFractionalSets(g.snapshot, LIFT_EXERCISES);
@@ -206,9 +280,16 @@ export function prepareOrderedStart(g: Gym, ordered: OrderedPrescription, source
     kind: 'ordered', sourceId, prescription, stations: {}, strength: {}, timers: {}, drafts: {}, results: {},
     cursor: { blockId: prescription.blocks[0]!.id, stage: 'entry', setSlot: 0 },
   };
-  const blocks: LiftBlock[] = [];
+  const blocks: Block[] = [];
+  const lower = isLowerWorkout(prescription, variant);
   for (const b of prescription.blocks) {
-    if (b.kind === 'strength') {
+    if (b.kind === 'run') {
+      if (!runInputs) {
+        if (strict) return null;
+        throw new MixedInputError('Running history is required to plan this workout.');
+      }
+      blocks.push(planOrderedRun(runInputs, g.snapshot.programStart, b, lower, now));
+    } else if (b.kind === 'strength') {
       const accepted = prepareStrength(g, b, b.exerciseId, flags, volume, strict);
       if (strict && !accepted) return null;
       const lift = accepted ?? orderedStrengthToLift(b);
@@ -244,6 +325,7 @@ export async function writePreparedOrdered(db: GymDb, prepared: NonNullable<Retu
   now: Date, templateId?: string, variant?: LiftVariant): Promise<string> {
   const { mixed, blocks, flags } = structuredClone(prepared);
   for (const block of blocks) {
+    if (block.kind !== 'lift') continue;
     const strength = mixed.strength[block.id]!;
     if (strength.equipmentId) {
       block.equipmentId = await materializeStrength(db, block);
@@ -254,7 +336,7 @@ export async function writePreparedOrdered(db: GymDb, prepared: NonNullable<Retu
   await db.sessions.add({
     id, type: 'custom', date: now.toISOString(), templateId, variant, blocks, mixed,
     hard: false, hardCardio: false, rpe: null, durationMin: 0, notes: '',
-    flags: { deload: flags.deload, calibration: blocks.some((b) => b.label === 'Calibration') },
+    flags: { deload: flags.deload, calibration: blocks.some((b) => b.kind === 'lift' && b.label === 'Calibration') },
   });
   return id;
 }
@@ -290,6 +372,11 @@ export async function mixedOptions(db: GymDb, b: OrderedBlock, mixed: MixedExecu
       poseId: demo?.poseId,
     };
   }
+  if (b.kind === 'run') {
+    const planned = runDemo(b.modality);
+    const demo = planned.exerciseId ? availableDemo(g, planned.exerciseId, undefined, !!planned.coached) : null;
+    return { ready: !planned.exerciseId || !!demo, poseId: planned.poseId, equipmentId: demo?.equipmentId };
+  }
   const demo = b.kind !== 'coached' && b.exerciseId ? availableDemo(g, b.exerciseId) : null;
   return { ready: b.kind !== 'coached' && (!b.exerciseId || !!demo), poseId: demo?.poseId, equipmentId: demo?.equipmentId };
 }
@@ -310,7 +397,7 @@ function sameLineup(stations: EffectiveStation[], expected: EffectiveStation[]) 
 }
 
 export async function updateMixedSession(db: GymDb, id: string, expected: MixedCursor, action: Action, now = new Date()): Promise<Session | undefined> {
-  return db.transaction('rw', [db.sessions, db.sets, db.equipment, db.exerciseOverrides, db.settings], async () => {
+  return db.transaction('rw', [db.sessions, db.sets, db.equipment, db.exerciseOverrides, db.settings, db.runs, db.tests], async () => {
     const session = await db.sessions.get(id);
     const m = session?.mixed;
     if (!session || !m || session.endedAt) return session;
@@ -350,13 +437,16 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
     }
 
     switch (action.type) {
-      case 'start':
+      case 'start': {
         if (stage !== 'entry' || b.kind === 'strength') return session;
         if (!(await mixedOptions(db, b, m, now)).ready) throw new MixedInputError('Replace or skip unavailable movements first.');
-        saveClock({ ...startClock({ startedAt: null, pausedAt: null, pausedMs: 0, durationMs: b.durationSec * 1000 }, nowMs),
+        const acceptedRun = b.kind === 'run' ? session.blocks.find((row): row is RunBlock => row.kind === 'run' && row.id === b.id) : undefined;
+        const durationMs = acceptedRun ? runTotalMs(runPhases(acceptedRun)) : b.durationSec * 1000;
+        saveClock({ ...startClock({ startedAt: null, pausedAt: null, pausedMs: 0, durationMs }, nowMs),
           ...(b.kind === 'coached' ? { coached: initialCoached } : {}) });
         setStage('active');
         break;
+      }
       case 'pause':
       case 'resume':
         if (stage !== 'active' || !clock || (action.type === 'pause' ? clock.pausedAt !== null : clock.pausedAt === null)) return session;
@@ -462,6 +552,18 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         const partial = status === 'skipped' || action.partial === undefined ? draft?.partial : action.partial ?? undefined;
         checkActual(partial, stations ?? []);
         if (draft && (action.rounds !== undefined || action.partial !== undefined)) saveDraft({ ...draft, rounds: rounds ?? null, partial });
+        if (b.kind === 'run' && status === 'completed') {
+          const v = action.run;
+          const planned = session.blocks.find((row): row is RunBlock => row.kind === 'run' && row.id === blockId);
+          if (!planned || !v || !nonnegative(v.distanceMi) || !(v.durationSec > 0) || !Number.isSafeInteger(v.rpe) || v.rpe < 1 || v.rpe > 10) {
+            throw new MixedInputError('Enter the distance, duration and effort for this run.');
+          }
+          const ratio = runWalkRatioOf(planned);
+          await db.runs.put({
+            sessionId: id, kind: planned.runKind, modality: v.modality, distanceMi: v.distanceMi, durationSec: Math.round(v.durationSec),
+            intervals: planned.segments, ...(ratio ? { runWalkRatio: ratio } : {}), rpe: v.rpe, painFlag: v.painFlag,
+          });
+        }
         const result: MixedResult = { status, elapsedMs: clock?.frozenElapsedMs ?? 0,
           ...(draft ? { rounds: rounds ?? null, partial, stations, stationChanges: draft.stationChanges } : {}) };
         m.results = { ...m.results, [blockId]: result };
@@ -477,7 +579,7 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
           const lifts = session.blocks.filter((row): row is LiftBlock => row.kind === 'lift');
           const { fatigue } = summarizeLiftSession(lifts, sets);
           Object.assign(session, {
-            endedAt: now.toISOString(), rpe: null, ...classifyHard({ type: session.type, rpe: null, runKinds: [] }),
+            endedAt: now.toISOString(), rpe: null, ...classifyHard({ type: session.type, rpe: null, runKinds: await loggedRunKinds(db, id) }),
             durationMin: Math.max(0, Math.round((nowMs - Date.parse(session.date)) / 60_000)),
             flags: { ...session.flags, fatigue },
           });
@@ -492,9 +594,15 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
 
 export async function rateMixedSession(db: GymDb, id: string, rpe: number): Promise<void> {
   if (!Object.values(FINISH_RPE).some((value) => value === rpe)) throw new MixedInputError('Invalid effort.');
-  await db.transaction('rw', db.sessions, async () => {
+  await db.transaction('rw', db.sessions, db.runs, async () => {
     const session = await db.sessions.get(id);
     if (!session?.mixed || !session.endedAt) throw new MixedInputError('This workout is unfinished.');
-    await db.sessions.update(id, { rpe, ...classifyHard({ type: session.type, rpe, runKinds: [] }) });
+    await db.sessions.update(id, { rpe, ...classifyHard({ type: session.type, rpe, runKinds: await loggedRunKinds(db, id) }) });
   });
+}
+
+/** A mixed session holds at most one run row. Its kind drives the hard-cardio flag. */
+async function loggedRunKinds(db: GymDb, sessionId: string) {
+  const row = await db.runs.get(sessionId);
+  return row ? [row.kind] : [];
 }

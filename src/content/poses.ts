@@ -297,6 +297,16 @@ export const POSES: Record<string, PoseDef> = {
       { angles: { thighN: 59.8, shinN: 340.7, thighF: 59.1, shinF: 21.1, ...arms(30, 94) }, ms: 350 },
     ],
   },
+  // Jog cycle: setup, left stride, right stride, return. Arms swing opposite the legs.
+  run: {
+    view: 'side', anchor: 'hip',
+    frames: [
+      { angles: { torso: 172, head: 176, thighN: 8, shinN: 352, thighF: 352, shinF: 8, upperArmN: 350, forearmN: 80, upperArmF: 10, forearmF: 80 } },
+      { angles: { thighN: 48, shinN: 8, thighF: 320, shinF: 285, upperArmN: 40, forearmN: 90, upperArmF: 320, forearmF: 60 }, ms: 280 },
+      { angles: { thighN: 320, shinN: 285, thighF: 48, shinF: 8, upperArmN: 320, forearmN: 60, upperArmF: 40, forearmF: 90 }, ms: 280 },
+      { angles: { thighN: 8, shinN: 352, thighF: 352, shinF: 8, upperArmN: 350, forearmN: 80, upperArmF: 10, forearmF: 80 }, ms: 280 },
+    ],
+  },
   'farmer-carry': {
     view: 'side', anchor: 'feet', implement: 'db',
     frames: [

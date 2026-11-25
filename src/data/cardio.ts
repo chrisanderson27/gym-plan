@@ -29,7 +29,7 @@ export async function loadCardioSnapshot(db: GymDb, now = new Date()): Promise<C
   const since = new Date(now.getTime() - SNAPSHOT_DAYS * 86_400_000).toISOString();
   const sessions = await db.sessions.where('date').aboveOrEqual(since).toArray();
   const cardio = sessions.filter((s) => CARDIO_TYPES.includes(s.type));
-  const runIds = sessions.filter((s) => s.type === 'run' || s.type === 'hybrid').map((s) => s.id);
+  const runIds = sessions.filter((s) => s.type === 'run' || s.type === 'hybrid' || (s.type === 'custom' && !!s.mixed)).map((s) => s.id);
   const [runRows, cssTests, overrides, settings] = await Promise.all([
     db.runs.where('sessionId').anyOf(runIds).toArray(),
     db.tests.where('kind').equals('css').toArray(),
@@ -58,6 +58,13 @@ export async function loadCardioSnapshot(db: GymDb, now = new Date()): Promise<C
     const block = s.blocks[0];
     if (s.type === 'run' && block?.kind === 'run' && block.runKind === 'intervals' && block.format) {
       lastIntervalFormat[block.format] = later(lastIntervalFormat[block.format], s.date);
+    }
+  }
+  for (const s of sessions) {
+    // A mixed workout's run block is not first, so read it by kind.
+    const run = s.type === 'custom' && s.mixed ? s.blocks.find((b) => b.kind === 'run') : undefined;
+    if (run?.kind === 'run' && run.runKind === 'intervals' && run.format) {
+      lastIntervalFormat[run.format] = later(lastIntervalFormat[run.format], s.date);
     }
   }
   return {

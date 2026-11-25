@@ -156,6 +156,10 @@ const orderedBlock: Check = (v) => {
   if (v.kind === 'strength') return isAcceptedStrength(v) && opt(nonnegative)(v.restSec);
   if (!bounded(1, 3600)(v.durationSec)) return false;
   if (v.kind === 'preparation' || v.kind === 'recovery') return id(v.instructions) && opt(id)(v.exerciseId);
+  if (v.kind === 'run') {
+    return only(v, ['id', 'kind', 'name', 'runKind', 'modality', 'durationSec']) && id(v.name)
+      && oneOf('easy', 'intervals')(v.runKind) && oneOf('run', 'bike', 'row')(v.modality) && bounded(300, 3600)(v.durationSec);
+  }
   if (v.kind === 'coached') {
     const common = ['id', 'kind', 'name', 'durationSec'];
     if (!bounded(60, 3600)(v.durationSec) || !id(v.name)) return false;
@@ -174,7 +178,8 @@ const orderedBlock: Check = (v) => {
 };
 const ordered = shape({ name: id, blocks: keyed('id', 1, 30, orderedBlock) });
 export const validAuthoredWorkout = (v: OrderedPrescription) =>
-  ordered(v) && v.blocks.every((b) => b.kind !== 'coached' || !!b.stations);
+  ordered(v) && v.blocks.every((b) => b.kind !== 'coached' || !!b.stations)
+  && v.blocks.filter((b) => b.kind === 'run').length <= 1;
 
 // JSON backups can omit undefined fields and reorder object keys, but array order is significant.
 export const snapshotValue = (value: unknown): string => JSON.stringify(value, (_, item) => isRec(item)
@@ -251,7 +256,8 @@ function validMixed(row: Rec, backup?: BackupSnapshot): boolean {
     if (i === current && m.cursor.stage === 'active' && (!t || t.startedAt === null || t.frozenElapsedMs !== undefined)) return false;
     if (i === current && m.cursor.stage === 'entry' && t) return false;
     if (i === current && m.cursor.stage === 'review' && t?.frozenElapsedMs === undefined) return false;
-    if (t && (t.durationMs !== b.durationSec * 1000 || (t.pausedAt !== null && (t.startedAt === null || t.pausedAt < t.startedAt))
+    // A run block's clock is the accepted plan, which a running guardrail can shorten below the prescription.
+    if (t && ((b.kind === 'run' ? !bounded(1000, 7_200_000)(t.durationMs) : t.durationMs !== b.durationSec * 1000) || (t.pausedAt !== null && (t.startedAt === null || t.pausedAt < t.startedAt))
       || (t.frozenElapsedMs !== undefined && t.frozenElapsedMs > t.durationMs))) return false;
     if (r && (r.elapsedMs !== t?.frozenElapsedMs || (r.status === 'skipped') !== (t.startedAt === null))) return false;
     if (b.kind === 'coached' && !b.stations) return false;

@@ -82,9 +82,11 @@ test('reference Workouts layouts, suggestion saves, focus and 56 px actions', as
   await expect(page.getByRole('link', { name: 'Workouts' })).toHaveAttribute('aria-current', 'page');
   await expect(page.getByText('Week 21')).toBeVisible();
   await capture(page, info, 'workouts-empty');
-  for (const [index, title] of ['Shoulders & Back', 'Full-Body Strength & Conditioning'].entries()) {
+  for (const [index, title] of ['Upper Push & Pull', 'Full-Body Strength'].entries()) {
     await page.clock.setFixedTime(new Date(+at + index * 1000));
-    await button(suggestions(page).getByRole('article', { name: title }), 'Save workout').click();
+    await button(suggestions(page).getByRole('article', { name: title }), 'Preview').click();
+    await button(page.getByRole('dialog', { name: 'Preview ' + title }), 'Save a copy').click();
+    await button(page.getByRole('dialog', { name: 'Preview ' + title }), 'Close preview').click();
     await expect(saved(page).getByRole('article', { name: title })).toBeVisible();
   }
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -139,13 +141,11 @@ test('reference Workouts layouts, suggestion saves, focus and 56 px actions', as
     await button(dialog, 'Close workout builder').click();
   }
 
-  const legs = suggestions(page).getByRole('article', { name: 'Legs & Core' });
+  const legs = suggestions(page).getByRole('article', { name: 'Lower Strength & Core' });
   await button(legs, 'Preview').click();
-  const preview = page.getByRole('dialog', { name: 'Preview Legs & Core' });
-  await expect(preview.locator('.workout-preview-list > li > h3')).toHaveText([
-    'Warm-up', 'Leg press', 'Four-station rotation', 'Legs & core circuit', 'Cool-down',
-  ]);
-  await button(preview, 'Save workout').click();
+  const preview = page.getByRole('dialog', { name: 'Preview Lower Strength & Core' });
+  await expect(preview.locator('.workout-preview-list > li > h3')).toHaveCount(6);
+  await expect(preview.locator('[data-running="true"]')).toHaveCount(1);
   await button(preview, 'Start workout').click();
   await expect(page.getByRole('heading', { name: 'Preparation' })).toBeVisible();
 });
@@ -171,11 +171,11 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   await button(page, 'New workout').click();
   const draft = page.getByRole('dialog', { name: 'Build a workout' });
   await expect(button(draft, 'Save workout')).toBeDisabled();
-  for (const title of ['Warm-up', 'Personal circuit', 'Leg press', 'Personal rotation', 'Cool-down']) await button(draft, 'Add ' + title).click();
+  for (const title of ['Warm-up', 'Personal circuit', 'Leg press', 'Personal rotation', 'Four-station rotation', 'Legs & core circuit', 'Cool-down']) await button(draft, 'Add ' + title).click();
   await button(draft, 'Personal circuit, block 2, actions').click();
   await button(draft, 'Move down').click();
   await button(draft, 'Move down').click();
-  await button(draft, 'Cool-down, block 5, actions').click();
+  await button(draft, 'Cool-down, block 7, actions').click();
   await button(draft, 'Remove').click();
   await button(draft, 'Add Cool-down').click();
   await draft.getByRole('textbox', { name: 'Workout name' }).fill('  Friday mixed  ');
@@ -200,13 +200,15 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   await page.reload();
   await button(card, 'Preview').click();
   const preview = page.getByRole('dialog', { name: 'Preview Friday mixed' });
-  const order = ['Warm-up', 'Leg press', 'Personal rotation', 'Personal circuit', 'Cool-down'];
+  const order = ['Warm-up', 'Leg press', 'Personal rotation', 'Personal circuit', 'Four-station rotation', 'Legs & core circuit', 'Cool-down'];
   await expect(preview.locator('.workout-preview-list > li > h3')).toHaveText(order);
   await button(preview, 'Edit workout').click();
   const edit = page.getByRole('dialog', { name: 'Edit workout' });
   await edit.getByRole('textbox', { name: 'Workout name' }).fill('Friday mixed edited');
   await capture(page, info, 'workout-edit');
   await button(edit, 'Save workout').click();
+  // A saved Extend or edit reopens the preview on the saved prescription.
+  await button(page.getByRole('dialog', { name: 'Preview Friday mixed edited' }), 'Close preview').click();
 
   await page.getByRole('link', { name: 'Blocks' }).click();
   await page.getByRole('link', { name: 'Personal rotation', exact: true }).click();
@@ -256,7 +258,7 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   await expect(swapped).toBeVisible();
   const beforePlayback = await readSession(page, sid);
   const clockBefore = await page.getByRole('timer').textContent();
-  await button(page, 'Play Step-up to box').press('Enter');
+  // The swapped card autoplays, and playback never touches the clock or the log.
   await expect(swapped).toHaveAttribute('data-running', 'true');
   const frame = await swapped.innerHTML();
   await expect.poll(() => swapped.innerHTML()).not.toBe(frame);
@@ -271,6 +273,11 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   await capture(page, info, 'workout-reduced-motion');
   await button(page, 'Finish block').click();
   await button(page, 'Continue').click();
+  await expect(page.getByRole('heading', { name: 'Four-station rotation' })).toBeVisible();
+  await button(page, 'Start block').click();
+  await button(page, 'Finish block').click();
+  await page.getByRole('button', { name: /^Continue to Legs & core circuit/ }).click();
+  await finishTimed('Continue');
   await expect(page.getByRole('heading', { name: 'Recovery' })).toBeVisible();
   await finishTimed('Finish workout');
   await expect(page).toHaveURL(new RegExp('/workout/summary/' + sid + '$'));
@@ -311,6 +318,7 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
     await button(fresh.getByRole('dialog'), 'Edit workout').click();
     await fresh.getByRole('textbox', { name: 'Workout name' }).fill('Restored circuit day');
     await button(fresh.getByRole('dialog'), 'Save workout').click();
+    await button(fresh.getByRole('dialog', { name: 'Preview Restored circuit day' }), 'Close preview').click();
     await button(saved(fresh).getByRole('article', { name: 'Restored circuit day' }), 'Start workout').click();
     await expect(fresh.getByRole('heading', { name: 'Preparation' })).toBeVisible();
 
@@ -360,35 +368,33 @@ test('v1 lift edit and legacy cardio keep their direct and offline library route
   }];
   await seedBackup(page, { templates });
   await openWorkouts(page);
-  await button(suggestions(page).getByRole('article', { name: 'Legs & Core' }), 'Save workout').click();
-  await expect(saved(page).getByRole('article')).toHaveCount(3);
-  const lift = saved(page).getByRole('article', { name: 'Old paired lifts' });
-  await lift.getByRole('link', { name: 'Edit', exact: true }).click();
+  await expect(saved(page).getByRole('article')).toHaveCount(2);
+  // The legacy builder route still opens, but Save follows the shared 45-minute floor.
+  await page.goto('./#/builder/legacy-lift');
   await expect(page.getByTestId('builder-pair-0')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('builder-name').fill('Old paired lifts edited');
-  await page.getByTestId('builder-save').click();
-  await expect(page).toHaveURL(/#\/progress$/);
+  await expect(page.getByTestId('builder-save')).toBeDisabled();
+  await expect(page.getByTestId('builder-hint')).toContainText('45 minutes');
   await openWorkouts(page);
-  await expect(saved(page).getByRole('article', { name: 'Old paired lifts edited', exact: true })).toBeVisible();
   await controlledOffline(page, context, info);
-  await button(suggestions(page).getByRole('article', { name: 'Full-Body Strength & Conditioning' }), 'Preview').click();
-  const starter = page.getByRole('dialog', { name: 'Preview Full-Body Strength & Conditioning' });
+  await button(suggestions(page).getByRole('article', { name: 'Full-Body Strength' }), 'Preview').click();
+  const starter = page.getByRole('dialog', { name: 'Preview Full-Body Strength' });
   await expect(starter.getByTestId('pose-hip-thrust')).toBeVisible();
   await button(starter, 'Close preview').click();
   const run = saved(page).getByRole('article', { name: 'Old easy run' });
   await run.getByRole('link', { name: 'Preview' }).click();
   await expect(page).toHaveURL(/#\/mine\/legacy-run$/);
-  await expect(page.getByTestId('run-planned')).toBeVisible();
+  await expect(page.getByTestId('legacy-again')).toBeVisible();
   await page.goto('./#/mine/legacy-lift');
-  await page.getByTestId('again-start').click();
-  await expect(page).toHaveURL(/#\/lift\/session\//);
+  await expect(page.getByTestId('legacy-again')).toBeVisible();
+  await expect(page.getByTestId('legacy-build')).toBeVisible();
 });
 
 test('refreshes stale previews and offers repair or Skip for unsupported prescriptions', async ({ page, context }, info) => {
   await onboard(page);
   const templates: Template[] = [{
     id: 'stale', name: 'Original warm-up', source: 'saved', type: 'custom', createdAt: at.toISOString(), blocks: [],
-    ordered: { name: 'Original warm-up', blocks: [{ id: 'prep', kind: 'preparation', durationSec: 60, instructions: 'Warm up.' }] },
+    ordered: { name: 'Original warm-up', blocks: [{ id: 'prep', kind: 'preparation', durationSec: 2700, instructions: 'Warm up.' }] },
   }, {
     id: 'old-rotation', name: 'Old rotation', source: 'saved', type: 'custom', createdAt: at.toISOString(), blocks: [],
     ordered: { name: 'Old rotation', blocks: [{ id: 'old', kind: 'coached', name: 'Schedule pending', durationSec: 120 }] },
@@ -399,7 +405,7 @@ test('refreshes stale previews and offers repair or Skip for unsupported prescri
   const other = await context.newPage();
   try {
     await seedBackup(other, { templates: [{ ...templates[0], name: 'Changed warm-up',
-      ordered: { name: 'Changed warm-up', blocks: [{ id: 'prep', kind: 'preparation', durationSec: 60,
+      ordered: { name: 'Changed warm-up', blocks: [{ id: 'prep', kind: 'preparation', durationSec: 2700,
         instructions: 'Historic movement.', exerciseId: 'unknown-movement' }] },
     }] }, 2);
   } finally {
@@ -428,9 +434,10 @@ test('refreshes stale previews and offers repair or Skip for unsupported prescri
   await capture(page, info, 'workout-missing-schedule');
   await button(editor, 'Schedule pending, block 1, actions').click();
   await button(editor, 'Remove').click();
-  await button(editor, 'Add Four-station rotation').click();
+  for (const title of ['Four-station rotation', 'Legs & core circuit', 'Easy run · 20 min', 'Warm-up', 'Cool-down']) await button(editor, 'Add ' + title).click();
   await expect(button(editor, 'Save workout')).toBeEnabled();
   await button(editor, 'Save workout').click();
+  await button(page.getByRole('dialog', { name: 'Preview Old rotation' }), 'Close preview').click();
   await expect(editor).toHaveCount(0);
   await expect(button(saved(page).getByRole('article', { name: 'Old rotation' }), 'Start workout')).toBeEnabled();
   await page.goto('./#/builder/old-rotation');

@@ -3,7 +3,7 @@ import { COACHED_REST_SEC, COACHED_TRANSITION_SEC, COACHED_WORK_SEC } from '../e
 import { newLiftBlock } from '../engine/templates';
 import { newId } from './ids';
 import { LIFT_EXERCISES } from './lift';
-import type { ExecutableCoachedBlock, LibraryBlock, LibraryStation, OrderedBlock, OrderedPrescription, OrderedSelfPacedBlock, OrderedStation, OrderedStrengthBlock, OrderedTimedBlock } from './types';
+import type { Block, ExecutableCoachedBlock, LibraryBlock, LibraryStation, OrderedBlock, OrderedPrescription, OrderedRunBlock, OrderedSelfPacedBlock, OrderedStation, OrderedStrengthBlock, OrderedTimedBlock } from './types';
 
 export function copyWorkoutBlock(block: OrderedBlock, makeId = newId): OrderedBlock {
   const copy = structuredClone(block);
@@ -28,7 +28,7 @@ export function libraryWorkoutBlock(row: LibraryBlock): OrderedBlock {
   return { id, name, kind: row.kind, durationSec, stations, workSec, restSec, transitionSec };
 }
 
-function strength(exerciseId: string, sets?: number): OrderedStrengthBlock {
+export function strength(exerciseId: string, sets?: number): OrderedStrengthBlock {
   const { repMin, repMax } = LIFT_EXERCISES.get(exerciseId)!;
   const lift = newLiftBlock({ id: exerciseId, repMin, repMax }, () => exerciseId);
   return {
@@ -40,22 +40,22 @@ function strength(exerciseId: string, sets?: number): OrderedStrengthBlock {
 export const strengthWorkoutChoices = PHASE3_EXERCISE_IDS.flatMap((id) =>
   id !== 'leg-press' && (LIFT_EXERCISES.get(id)?.repMin ?? 0) > 0 ? [strength(id)] : []);
 
-function starterStations(rows: LibraryStation[], coached: boolean) {
+export function starterStations(rows: LibraryStation[], coached: boolean) {
   return rows.map((row, index) => ({
     ...stationPrescription(row, String(index + 1)),
     equipmentId: coached ? coachedEquipmentId(row.exerciseId) : phase3EquipmentId(row.exerciseId),
   }));
 }
 
-const warmUp: OrderedTimedBlock = {
+export const warmUp: OrderedTimedBlock = {
   id: 'warm-up', kind: 'preparation', durationSec: 300,
   instructions: 'Move at an easy pace, then rehearse the movements you plan to train.',
 };
-const coolDown: OrderedTimedBlock = {
+export const coolDown: OrderedTimedBlock = {
   id: 'cool-down', kind: 'recovery', durationSec: 300,
   instructions: 'Slow your pace and breathe comfortably. Use gentle stretches as needed.',
 };
-const rotation: ExecutableCoachedBlock = {
+export const rotation: ExecutableCoachedBlock = {
   id: 'four-station-rotation', kind: 'coached', name: 'Four-station rotation', durationSec: 720,
   workSec: COACHED_WORK_SEC, restSec: COACHED_REST_SEC, transitionSec: COACHED_TRANSITION_SEC,
   stations: starterStations([
@@ -65,7 +65,7 @@ const rotation: ExecutableCoachedBlock = {
     { exerciseId: 'air-bike', target: { unit: 'sec', amount: 45 } },
   ], true),
 };
-const legsCircuit: OrderedSelfPacedBlock = {
+export const legsCircuit: OrderedSelfPacedBlock = {
   id: 'legs-core-circuit', kind: 'self-paced', name: 'Legs & core circuit', durationSec: 480,
   stations: starterStations([
     { exerciseId: 'reverse-lunge', target: { unit: 'reps', amount: 8 } },
@@ -77,12 +77,13 @@ const legsCircuit: OrderedSelfPacedBlock = {
 const legPress = strength('leg-press', 5);
 export const starterWorkoutBlocks: OrderedBlock[] = [warmUp, legPress, rotation, legsCircuit, coolDown];
 
-interface StarterWorkout extends OrderedPrescription {
+export interface StarterWorkout extends OrderedPrescription {
   category: string;
   description: string;
 }
 
-export const suggestedWorkouts: StarterWorkout[] = [
+/** The three original suggestions. Kept only so copies users saved earlier keep their category and description. */
+export const LEGACY_SUGGESTIONS: StarterWorkout[] = [
   {
     name: 'Legs & Core', category: 'Strength & conditioning',
     description: 'Build lower-body strength, then put it to work with coached intervals and a core-focused finish.',
@@ -127,6 +128,8 @@ function blockContent(block: OrderedBlock): unknown[] {
         block.stations?.map(stationContent)];
     case 'self-paced':
       return [block.kind, block.name, block.durationSec, block.stations.map(stationContent)];
+    case 'run':
+      return [block.kind, block.name, block.runKind, block.modality, block.durationSec];
     default:
       return [block.kind, block.durationSec, block.instructions, block.exerciseId];
   }
@@ -143,14 +146,41 @@ export function workoutBlockContent(block: OrderedBlock) {
   return oversized ? undefined : content;
 }
 
-const suggestionContent = suggestedWorkouts.map((suggestion) => suggestion.blocks.map(workoutBlockContent));
-
-export function matchingSuggestion(ordered: OrderedPrescription) {
+/** Finds the starter (preset or legacy suggestion) whose block content a saved workout still matches exactly. */
+export function matchingStarter<T extends { blocks: OrderedBlock[] }>(starters: readonly T[], ordered: OrderedPrescription): T | undefined {
   const content = ordered.blocks.map(workoutBlockContent);
-  return suggestedWorkouts.find((_, index) => {
-    const starter = suggestionContent[index]!;
-    return starter.length === content.length && content.every((block, i) => block !== undefined && block === starter[i]);
+  return starters.find((starter) => {
+    const expected = starter.blocks.map(workoutBlockContent);
+    return expected.length === content.length && content.every((block, i) => block !== undefined && block === expected[i]);
   });
+}
+
+export const runWorkoutChoices: OrderedRunBlock[] = [
+  { id: 'run-easy-15', kind: 'run', name: 'Easy run · 15 min', runKind: 'easy', modality: 'run', durationSec: 900 },
+  { id: 'run-easy-20', kind: 'run', name: 'Easy run · 20 min', runKind: 'easy', modality: 'run', durationSec: 1200 },
+  { id: 'run-intervals-20', kind: 'run', name: 'Run intervals · 20 min', runKind: 'intervals', modality: 'run', durationSec: 1200 },
+];
+
+/** Maps a legacy (non-ordered) saved workout into an editable draft. Interval, circuit and swim blocks are not carried over. */
+export function legacyWorkoutDraft(runnable: { name: string; blocks: Block[] }, makeId = newId): { draft: OrderedPrescription; dropped: string[] } {
+  const blocks: OrderedBlock[] = [];
+  const dropped: string[] = [];
+  let hasRun = false;
+  for (const b of runnable.blocks) {
+    if (b.kind === 'lift') {
+      if (b.warmup) continue;
+      const { id: _id, exerciseId, sets, repMin, repMax, restSec, equipmentId } = b;
+      void _id;
+      blocks.push({ id: makeId(), kind: 'strength', exerciseId, sets, repMin, repMax, ...(restSec === undefined ? {} : { restSec }),
+        ...(equipmentId === undefined ? {} : { equipmentId }) });
+    } else if (b.kind === 'run' && !hasRun) {
+      hasRun = true;
+      const sec = b.repeats * b.segments.reduce((n, seg) => n + (seg.sec ?? 0), 0);
+      blocks.push({ id: makeId(), kind: 'run', name: b.runKind === 'intervals' ? 'Run intervals' : 'Easy run', runKind: b.runKind === 'intervals' ? 'intervals' : 'easy',
+        modality: b.modality === 'bike' || b.modality === 'row' ? b.modality : 'run', durationSec: Math.min(3600, Math.max(300, Math.round(sec))) });
+    } else dropped.push(b.kind);
+  }
+  return { draft: { name: runnable.name, blocks }, dropped: [...new Set(dropped)] };
 }
 
 /** Accessory stations for a lift day, with compatible alternatives within each training role. */

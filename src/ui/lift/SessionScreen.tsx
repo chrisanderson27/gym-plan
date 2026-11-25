@@ -27,7 +27,8 @@ import { FinishSheet } from '../session/FinishSheet';
 import { PrBanner } from '../session/PrBanner';
 import { RestTimer } from '../session/RestTimer';
 import { blockChangeItems, exerciseChangeItems } from '../session/changeItems';
-import { PoseView } from '../slots/PoseView';
+import { useDemoPlayback } from '../pose/playback';
+import { PoseView, PosePlaybackButton } from '../slots/PoseView';
 import { useNow, useWakeLock } from '../session/hooks';
 import { CalibrationCard } from './CalibrationCard';
 import { EquipmentSheet } from './EquipmentSheet';
@@ -168,6 +169,7 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
     };
   }) : [];
   const candidate = cards.find(({ block, calibrating }) => !calibrating && !done(block));
+  const demo = useDemoPlayback(`lift-step:${candidate?.block.id ?? ''}`, candidate ? [candidate.block.exerciseId] : []);
   const calibrationAdvance = cards.filter(({ calibrating }) => calibrating).at(-1);
   const cardFor = ({ block, mine, calibrating }: (typeof cards)[number]) => {
     const props = {
@@ -285,7 +287,10 @@ function SessionRunner({ sessionId }: { sessionId: string }) {
             </section>
           )}
           {cards.length === 1 && candidate && (
-            <PoseView exerciseId={candidate.block.exerciseId} poseId={exerciseById.get(candidate.block.exerciseId)?.poseId} />
+            <>
+              <PoseView exerciseId={candidate.block.exerciseId} poseId={exerciseById.get(candidate.block.exerciseId)?.poseId} running={demo.playingId === candidate.block.exerciseId} />
+              {exerciseById.get(candidate.block.exerciseId)?.poseId && <PosePlaybackButton name={exerciseName(candidate.block.exerciseId)} playing={demo.playingId === candidate.block.exerciseId} onPlay={() => demo.toggle(candidate.block.exerciseId)} />}
+            </>
           )}
           {error && !prompt && <p class="error" role="alert">{error}</p>}
         </>

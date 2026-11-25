@@ -15,8 +15,15 @@ import { openTestDb } from './test-utils';
 import type { MixedExecution } from './types';
 import { validateRows } from './validate';
 import { weeklyGoal } from '../engine/plan/ring';
+import { FULL_WORKOUT_MIN_SEC, orderedDurationSec } from '../engine/templates';
 
 const source = { templateId: MIXED_TEMPLATE.id };
+type Blocks = NonNullable<typeof MIXED_TEMPLATE.ordered>['blocks'];
+/** A leading inert recovery block keeps short fixtures above the 45-minute Start floor. */
+const padFloor = (blocks: Blocks): Blocks => {
+  const need = Math.min(3600, Math.max(0, FULL_WORKOUT_MIN_SEC - orderedDurationSec(blocks)));
+  return need > 0 ? [{ id: 'floor-pad', kind: 'recovery', durationSec: need, instructions: 'Easy.' }, ...blocks] : blocks;
+};
 const at = (ms = 0) => new Date(MIXED_AT.getTime() + ms);
 let db: GymDb;
 beforeEach(async () => {
@@ -37,12 +44,14 @@ const action = async (id: string, next: Parameters<typeof updateMixedSession>[3]
 
 test.each(['strength', 'self-paced'] as const)('restored %s IDs retain their own block state on Start and Repeat', async (kind) => {
   const block = { ...MIXED_TEMPLATE.ordered!.blocks.find((row) => row.kind === kind)!, id: '__proto__' };
-  const template = { ...MIXED_TEMPLATE, ordered: { name: MIXED_TEMPLATE.name, blocks: [block] }, blocks: [] };
+  const template = { ...MIXED_TEMPLATE, ordered: { name: MIXED_TEMPLATE.name, blocks: padFloor([block]) }, blocks: [] };
   await db.templates.put(template);
   const file = parseExport(JSON.stringify(await buildExport(db, at(), 'test'))).file;
   await db.templates.delete(source.templateId);
   await importExport(db, file);
   const started = await startMixedSession(db, source, at());
+  await action(started, { type: 'skip' });
+  await action(started, { type: 'continue' });
   const assertBlockState = async (id: string) => {
     const mixed = (await current(id)).mixed!;
     const maps = kind === 'strength' ? [mixed.strength] : [mixed.stations, mixed.drafts];
@@ -68,9 +77,17 @@ async function logCurrentSet(id: string, weight: number) {
   return action(id, { type: 'set', weight, reps: 10, expectedExerciseId: accepted.exerciseId, expectedEquipmentId: accepted.equipmentId });
 }
 
-async function startBlocks(...blocks: NonNullable<typeof MIXED_TEMPLATE.ordered>['blocks']) {
-  await db.templates.put({ ...MIXED_TEMPLATE, blocks: [], ordered: { name: 'Test workout', blocks } });
-  return startMixedSession(db, source, at());
+async function startBlocks(...blocks: Blocks) {
+  const need = Math.min(3600, Math.max(0, FULL_WORKOUT_MIN_SEC - orderedDurationSec(blocks)));
+  // A leading pad that is skipped immediately keeps the block under test first, above the 45-minute Start floor.
+  const pad = need > 0 ? [{ id: 'floor-pad', kind: 'recovery' as const, durationSec: need, instructions: 'Easy.' }] : [];
+  await db.templates.put({ ...MIXED_TEMPLATE, blocks: [], ordered: { name: 'Test workout', blocks: [...pad, ...blocks] } });
+  const id = await startMixedSession(db, source, at());
+  if (pad.length) {
+    await action(id, { type: 'skip' });
+    await action(id, { type: 'continue' });
+  }
+  return id;
 }
 
 async function roundTrip(id: string, now = MIXED_AT) {
@@ -129,7 +146,7 @@ test('reconciles stale and duplicate Next, pause, expiry and Continue across bac
   await expect(action(id, { type: 'continue' }, deadline + 2)).rejects.toThrow('result write failed');
   db.sessions.hook('updating').unsubscribe(failWrite);
   await Promise.all([0, 1].map(() => updateMixedSession(db, id, review.cursor, { type: 'continue' }, at(deadline + 3))));
-  expect((await current(id)).mixed!.results).toEqual({ rotation: expect.objectContaining({ status: 'completed', rounds: 2, partial, elapsedMs: 720_000 }) });
+  expect((await current(id)).mixed!.results).toEqual({ 'floor-pad': expect.anything(), rotation: expect.objectContaining({ status: 'completed', rounds: 2, partial, elapsedMs: 720_000 }) });
   await roundTrip(id, at(deadline + 3));
   const restored = openTestDb();
   try {
@@ -139,7 +156,10 @@ test('reconciles stale and duplicate Next, pause, expiry and Continue across bac
     expect(fresh.timers).toEqual({});
     expect(fresh.drafts.rotation).toEqual({ rounds: null, tapped: 0 });
     expect(fresh.results).toEqual({});
-    const started = await updateMixedSession(restored, replay, fresh.cursor, { type: 'start' }, at(deadline + 100));
+    await updateMixedSession(restored, replay, fresh.cursor, { type: 'skip' }, at(deadline + 50));
+    const skipped = (await restored.sessions.get(replay))!.mixed!;
+    await updateMixedSession(restored, replay, skipped.cursor, { type: 'continue' }, at(deadline + 60));
+    const started = await updateMixedSession(restored, replay, (await restored.sessions.get(replay))!.mixed!.cursor, { type: 'start' }, at(deadline + 100));
     expect(started?.mixed?.timers.rotation).toMatchObject({ coached: initialCoached, startedAt: at(deadline + 100).getTime() });
   } finally {
     await restored.delete();
@@ -412,8 +432,7 @@ test('unsupported stations are readable and can be skipped, with untouched round
   const block = MIXED_TEMPLATE.ordered!.blocks[3]!;
   if (block.kind !== 'self-paced') throw new Error('Missing circuit fixture');
   const unsupported = { ...block, stations: [{ ...block.stations[0]!, exerciseId: 'old-lunge' }, block.stations[1]!] };
-  await db.templates.put({ ...MIXED_TEMPLATE, blocks: [], ordered: { name: 'Circuit', blocks: [unsupported] } });
-  const id = await startMixedSession(db, source, at());
+  const id = await startBlocks(unsupported);
   await expect(action(id, { type: 'start' })).rejects.toThrow('Replace or skip');
   await action(id, { type: 'swap-station', slotId: 'lunge', exerciseId: null, expectedExerciseId: 'old-lunge' });
   await action(id, { type: 'start' });
@@ -434,8 +453,7 @@ test('coached snapshots remain readable and Start rejects them before writing', 
 
 test('a concurrent round retry counts once and replacement is rechecked before writing', async () => {
   const circuit = MIXED_TEMPLATE.ordered!.blocks[3]!;
-  await db.templates.put({ ...MIXED_TEMPLATE, blocks: [], ordered: { name: 'Circuit', blocks: [circuit] } });
-  const id = await startMixedSession(db, source, at());
+  const id = await startBlocks(circuit);
   await action(id, { type: 'start' });
   const mixed = (await current(id)).mixed!;
   expect((await mixedOptions(db, circuit, mixed, at())).stations?.lunge).toEqual(expect.arrayContaining([expect.objectContaining({ exerciseId: 'step-up' })]));

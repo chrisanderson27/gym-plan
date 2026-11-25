@@ -61,3 +61,10 @@ function verifiedPose(exerciseId: string, equipment: { id: string; kind: string;
   const instance = seed.kind === 'machine' && equipment.name === `${exercise.name} — ${seed.name}`;
   return equipment.id === seed.id || instance ? stationDemo(exercise)?.poseId : undefined;
 }
+
+/** Demo for a running segment. Outdoor or treadmill running needs no gear, so only machines go through availability. */
+export function runDemo(modality: 'run' | 'bike' | 'row'): { poseId: string; exerciseId?: string; coached?: boolean } {
+  if (modality === 'bike') return { poseId: 'air-bike', exerciseId: 'air-bike', coached: true };
+  if (modality === 'row') return { poseId: 'rower', exerciseId: 'rower' };
+  return { poseId: 'run' };
+}

@@ -178,3 +178,9 @@ _Learned 2026-11-19 · costs: one source lookup and a misread "no blocks" sessio
 **You'll see:** the bare `#/lift` picker Start builds straight sets only (no circuit blocks), and Wake Lock calls leave no visible trace.
 **Do:** to get a "lift + blocks" session, use Today's Start or open `#/lift/start/<variant>` (for example `lower-b`). An open lift within 12 h is resumed instead. A stale one (>12 h) is not "open", so it is shown only on Today as "Unfinished lift from …". For Wake Lock, launch with `--init-script <file>` that wraps `navigator.wakeLock.request` and pushes `acquired`/`released` into `window.__wl`, then `eval "JSON.stringify(window.__wl)"`. Call the journey wrapper by its absolute path, not through a shell variable; each expansion triggers a permission prompt.
 **Where:** `#/`, `#/lift`, `#/lift/session/<id>`.
+
+### Give `screenshot` an absolute path
+_Learned 2026-11-25 · costs: ~30 screenshots lost and re-taken_
+**You'll see:** `screenshot .agents/…/media/x.png >/dev/null` prints nothing and no file appears; the daemon resolves relative paths against its own cwd.
+**Do:** always pass an absolute path and keep the success line (don't redirect it), then `ls` the media dir after the first shot.
+**Where:** any recorded run.

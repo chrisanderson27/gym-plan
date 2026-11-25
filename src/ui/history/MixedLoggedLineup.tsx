@@ -99,6 +99,7 @@ export function loggedLineup({ session, sets, run, swim }: SessionDetail, equipm
         title,
         content: <>
           <p>{result.status === 'skipped' ? 'Skipped' : 'Completed'}{block.kind !== 'strength' && ` · ${elapsed} sec`}</p>
+          {block.kind === 'run' && run && result.status === 'completed' && <p>{modalityName(run.modality ?? 'run')} · {runKindName(run.kind)} · {durationLabel(run.durationSec)}{run.distanceMi > 0 && ` · ${run.distanceMi} mi`} · RPE {run.rpe}</p>}
           {(block.kind !== 'coached' || result.status !== 'skipped') && <MixedResultActuals result={result} coached={block.kind === 'coached'} />}
           {rows.length > 0 && renderSets(rows)}
           {result.stationChanges?.map((change, index, changes) => {

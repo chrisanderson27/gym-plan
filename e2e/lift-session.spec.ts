@@ -292,7 +292,7 @@ test('Today resumes a recent lift across midnight and can discard a stale lift',
   expect(await readStore<Session>(page, 'sessions')).toEqual([]);
 });
 
-test('a saved lift runs in focus mode and reopens read-only after finishing', async ({ page }) => {
+test('a saved legacy lift Repeat offers a 45-minute conversion', async ({ page }) => {
   await setup(page);
   await seedBackup(page, {
     templates: [{
@@ -304,18 +304,10 @@ test('a saved lift runs in focus mode and reopens read-only after finishing', as
     }],
   });
   await page.goto('./#/mine/saved-lift');
-  await page.getByTestId('again-start').click();
-  await expect(page.getByTestId('set-done')).toBeVisible();
-  const sessionUrl = page.url();
-  await page.getByTestId('set-done').click();
-  await page.getByTestId('step-next').click();
-  await page.getByTestId('finish-easy').click();
-  await expect(page.getByTestId('hero-state')).toHaveAttribute('data-state', 'done');
-  await page.goto(sessionUrl);
-  await expect(page.getByRole('heading', { name: 'Finished', exact: true })).toBeVisible();
-  await expect(page.locator('[aria-label="Elapsed time"]')).toHaveCount(0);
-  await expect(page.locator('main')).toContainText('100 lb × 10');
-  await expect(page.locator('.primary')).toHaveCount(0);
+  // Fresh Repeat of a legacy lift opens the conversion screen. The native runner is reached by resume or the lift routes.
+  await expect(page.getByTestId('legacy-again')).toBeVisible();
+  await expect(page.getByTestId('legacy-build')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Choose a standard workout' })).toBeVisible();
 });
 
 test('a hybrid hands off to cardio after its lift step using the same session id', async ({ page }) => {

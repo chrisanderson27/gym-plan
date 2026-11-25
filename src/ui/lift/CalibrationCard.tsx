@@ -9,7 +9,8 @@ import { pickSubstitute } from '../../engine/lift/generator';
 import { painSwapOffer } from '../../engine/lift/pain';
 import { calibrationLanding, calibrationStart } from '../../engine/lift/progression';
 import { stepBy } from '../../engine/lift/steps';
-import { PoseView } from '../slots/PoseView';
+import { useDemoPlayback } from '../pose/playback';
+import { PoseView, PosePlaybackButton } from '../slots/PoseView';
 import type { CardProps } from './FocusLift';
 import { Stepper } from './Stepper';
 
@@ -55,6 +56,8 @@ export function CalibrationCard(p: CardProps & { advance?: { label: string; onCl
     setWeight(null);
   };
 
+  const { playingId, toggle } = useDemoPlayback(`calibration:${block.id}`, [block.exerciseId]);
+
   const answer = async (rir: 1 | 3, goHeavier: boolean) => {
     if (!last) return;
     await db.sets.update(last.id, { rir });
@@ -67,7 +70,8 @@ export function CalibrationCard(p: CardProps & { advance?: { label: string; onCl
       <header>
         <h2>{ex?.name ?? block.exerciseId}</h2>
       </header>
-      <PoseView exerciseId={block.exerciseId} poseId={ex?.poseId} />
+      <PoseView exerciseId={block.exerciseId} poseId={ex?.poseId} running={playingId === block.exerciseId} />
+      {ex?.poseId && <PosePlaybackButton name={ex.name} playing={playingId === block.exerciseId} onPlay={() => toggle(block.exerciseId)} />}
       <button type="button" class="link" onClick={p.onEquipment}>{eq?.name ?? 'Choose equipment'} ▾</button>
       <p class="dim">Calibration: find a weight you could lift about 3 more times.</p>
       {cal.map((s) => (

@@ -2,21 +2,22 @@ import { useMemo, useRef, useState } from 'preact/hooks';
 import { db } from '../../data/db';
 import { useLiveQuery } from '../../data/live';
 import { missingCoachedSchedule } from '../../data/mixedSession';
-import { editableLiftTemplate, listMine, saveOrderedWorkout } from '../../data/templates';
+import { listMine, saveOrderedWorkout } from '../../data/templates';
 import type { OrderedPrescription, Settings, Template } from '../../data/types';
-import { copyWorkoutBlock, matchingSuggestion, suggestedWorkouts } from '../../data/workoutChoices';
+import { PRESET_ACTIVITY_LABEL, WORKOUT_PRESETS, matchingSuggestion, type WorkoutPreset } from '../../data/presets';
+import { copyWorkoutBlock } from '../../data/workoutChoices';
 import { localDate } from '../../engine/dates';
-import { templateDurationMin } from '../../engine/templates';
+import { templateDurationMin, workoutShortfallSec } from '../../engine/templates';
 import { weekIndex } from '../../engine/week';
 import { BookmarkIcon, CalendarIcon, HistoryIcon, PlayIcon, PlusIcon } from '../icons';
-import { orderedDurationLabel } from '../labels';
+import { orderedDurationLabel, workoutBlockName } from '../labels';
 import { ALL_TEMPLATE_TYPES } from '../mine/MineRow';
 import { MoreMenu } from '../MoreMenu';
 import { OrderedStart } from './OrderedStart';
 import { WorkoutEditor } from './WorkoutEditor';
 import { WorkoutPreview } from './WorkoutPreview';
 
-type Suggestion = (typeof suggestedWorkouts)[number];
+type Suggestion = WorkoutPreset;
 type Preview = { ordered: OrderedPrescription; id?: string; suggestion?: Suggestion; removed?: boolean };
 type Overlay = { preview: Preview } | { edit?: { id: string; baseline: OrderedPrescription } };
 const legacyCategory = { lift: 'Strength', custom: 'Strength', burn: 'Burn', run: 'Run', swim: 'Swim', hybrid: 'Hybrid' };
@@ -31,7 +32,18 @@ export function WorkoutsScreen({ settings }: { settings: Settings }) {
   const pending = useRef(false);
   const newWorkout = useRef<HTMLButtonElement>(null);
   const fallbackFocus = () => newWorkout.current;
-  const close = () => { if (!pending.current) setOverlay(null); };
+  // After an Extend save, the preview reopens on the saved prescription so Start is offered.
+  const reopen = useRef<string | null>(null);
+  const close = () => {
+    if (pending.current) return;
+    const id = reopen.current;
+    reopen.current = null;
+    if (!id) {
+      setOverlay(null);
+      return;
+    }
+    void db.templates.get(id).then((row) => setOverlay(row?.ordered ? { preview: { id, ordered: row.ordered } } : null));
+  };
 
   const saveSuggestion = async (suggestion: Suggestion, showPreview: boolean) => {
     if (pending.current) return;
@@ -63,21 +75,25 @@ export function WorkoutsScreen({ settings }: { settings: Settings }) {
       if (ordered) setOverlay({ preview: { ordered, id: template?.id, suggestion } });
     };
     const needsRepair = ordered?.blocks.some(missingCoachedSchedule);
+    const short = !!ordered && !suggestion && workoutShortfallSec(ordered.blocks) > 0;
+    const eyebrow = suggestion ? PRESET_ACTIVITY_LABEL[suggestion.activity]
+      : match?.category ?? (template && !ordered ? legacyCategory[template.type] : 'Custom workout');
     return (
-      <article class="workout-card" key={template?.id ?? name} aria-label={name}>
-        <p class="pref-eyebrow">{match?.category ?? (template && !ordered ? legacyCategory[template.type] : 'Custom workout')}</p>
+      <article class="workout-card" key={template?.id ?? name} aria-label={name} data-preset={suggestion?.id}>
+        <p class="pref-eyebrow">{eyebrow}</p>
         <h3>{name}</h3>
         {match && <p class="workout-description">{match.description}</p>}
         <p class="workout-meta"><HistoryIcon />{duration && `${duration} · `}{count} {count === 1 ? 'block' : 'blocks'}</p>
+        {suggestion && <p class="workout-lineup">{suggestion.blocks.map(workoutBlockName).join(' · ')}</p>}
         {needsRepair && <p class="workout-warning">Needs a station schedule. Open Preview to edit.</p>}
+        {short && <p class="workout-warning">Shorter than 45 minutes. Extend it to start.</p>}
         <div class="workout-actions">
-          {suggestion ? <button type="button" class="primary" disabled={!!saving} onClick={() => saveSuggestion(suggestion, false)}><BookmarkIcon />Save workout</button>
-            : ordered && template ? <OrderedStart source={{ templateId: template.id }} ordered={ordered} disabled={needsRepair}><PlayIcon />Start workout</OrderedStart>
-              : <a class="btn primary" href={url}><PlayIcon />Start workout</a>}
+          {suggestion ? <OrderedStart source={{ presetId: suggestion.id }}><PlayIcon />Start workout</OrderedStart>
+            : short && template ? <button type="button" class="primary" onClick={() => setOverlay({ edit: { id: template.id, baseline: ordered! } })}><PlusIcon />Extend to 45 min</button>
+              : ordered && template ? <OrderedStart source={{ templateId: template.id }} ordered={ordered} disabled={needsRepair}><PlayIcon />Start workout</OrderedStart>
+                : <a class="btn primary" href={url}><PlayIcon />Open workout</a>}
           {ordered ? <button type="button" class="workout-preview-action" disabled={!!saving} onClick={preview}>Preview</button>
             : <a class="btn workout-preview-action" href={url}>Preview</a>}
-          {template && editableLiftTemplate(template) && <a class="btn" href={`#/builder/${template.id}`}>Edit</a>}
-          {suggestion && saveError === name && <p class="workout-error" role="alert">Could not save the workout. Try again.</p>}
         </div>
       </article>
     );
@@ -110,20 +126,23 @@ export function WorkoutsScreen({ settings }: { settings: Settings }) {
       </section>
       <section class="workout-suggested" aria-labelledby="suggested-workouts">
         <h2 id="suggested-workouts">Suggested workouts</h2>
-        {suggestedWorkouts.map((suggestion) => card({ suggestion }))}
+        {WORKOUT_PRESETS.map((suggestion) => card({ suggestion }))}
       </section>
       <footer class="workout-footer"><MoreMenu feedback={{ kind: 'workout', context: {} }} /></footer>
-      {overlay && !('preview' in overlay) && <WorkoutEditor edit={overlay.edit} onClose={close} fallbackFocus={fallbackFocus} />}
+      {overlay && !('preview' in overlay) && <WorkoutEditor edit={overlay.edit} onSaved={(id) => { if (overlay.edit) reopen.current = id; }} onClose={close} fallbackFocus={fallbackFocus} />}
       {preview && <WorkoutPreview ordered={preview.ordered} onClose={close} fallbackFocus={fallbackFocus}>
         {preview.removed ? <p class="workout-error" role="alert">This workout was removed.</p> : preview.id ? (
           <>
-            <OrderedStart source={{ templateId: preview.id }} ordered={preview.ordered} disabled={repair}
-              onStale={() => refreshPreview(preview.id!, preview.ordered)}><PlayIcon />Start workout</OrderedStart>
+            {workoutShortfallSec(preview.ordered.blocks) > 0
+              ? <button type="button" class="primary" onClick={() => setOverlay({ edit: { id: preview.id!, baseline: preview.ordered } })}>Extend to 45 min</button>
+              : <OrderedStart source={{ templateId: preview.id }} ordered={preview.ordered} disabled={repair}
+                onStale={() => refreshPreview(preview.id!, preview.ordered)}><PlayIcon />Start workout</OrderedStart>}
             <button type="button" onClick={() => setOverlay({ edit: { id: preview.id!, baseline: preview.ordered } })}>Edit workout</button>
           </>
         ) : preview.suggestion && (
           <>
-            <button type="button" class="primary" disabled={!!saving} onClick={() => saveSuggestion(preview.suggestion!, true)}><BookmarkIcon />Save workout</button>
+            <OrderedStart source={{ presetId: preview.suggestion.id }}><PlayIcon />Start workout</OrderedStart>
+            <button type="button" disabled={!!saving} onClick={() => saveSuggestion(preview.suggestion!, true)}><BookmarkIcon />Save a copy</button>
             {saveError === preview.suggestion.name && <p class="workout-error" role="alert">Could not save the workout. Try again.</p>}
           </>
         )}

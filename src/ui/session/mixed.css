@@ -403,3 +403,7 @@
   font-size: var(--text-14);
   font-weight: 700;
 }
+
+.mixed-run-segment { margin: 12px 0; }
+.mixed-run-segment h2 { margin: 4px 0; }
+.mixed-run-segment p { margin: 4px 0; }

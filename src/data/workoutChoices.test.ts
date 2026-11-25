@@ -8,9 +8,11 @@ import { toBlockExercise } from './liftday';
 import { mixedOptions, startMixedSession, updateMixedSession, workoutPreview } from './mixedSession';
 import { settings } from './p4-test-utils';
 import { saveOrderedWorkout } from './templates';
-import { openTestDb } from './test-utils';
+import { floored, openTestDb } from './test-utils';
 import type { OrderedSelfPacedBlock, OrderedStation } from './types';
-import { copyWorkoutBlock, libraryWorkoutBlock, matchingSuggestion, starterWorkoutBlocks, strengthWorkoutChoices, suggestedWorkouts, workoutBlockContent } from './workoutChoices';
+import { WORKOUT_PRESETS, matchingSuggestion } from './presets';
+import { LEGACY_SUGGESTIONS, copyWorkoutBlock, libraryWorkoutBlock, starterWorkoutBlocks, strengthWorkoutChoices, workoutBlockContent } from './workoutChoices';
+const suggestedWorkouts = LEGACY_SUGGESTIONS;
 
 let db: ReturnType<typeof openTestDb>;
 beforeEach(() => { db = openTestDb(); });
@@ -25,6 +27,10 @@ test('starter workouts match their durations and all offered movements resolve a
     const blocks = suggestion.blocks.map((block) => copyWorkoutBlock(block));
     expect(matchingSuggestion({ ...suggestion, blocks })).toBe(suggestion);
     expect(matchingSuggestion({ ...suggestion, blocks: [...blocks].reverse() })).toBeUndefined();
+  }
+  for (const suggestion of WORKOUT_PRESETS) {
+    const blocks = suggestion.blocks.map((block) => copyWorkoutBlock(block));
+    expect(matchingSuggestion({ ...suggestion, blocks })).toBe(suggestion);
     const id = await saveOrderedWorkout(db, { name: suggestion.name, blocks });
     const session = (await db.sessions.get(await startMixedSession(db, { templateId: id })))!;
     expect(session.mixed!.prescription.blocks).toEqual(blocks);
@@ -90,7 +96,7 @@ test.each([
   expect.soft(demo?.poseId).toBe(expectedId ? 'hip-thrust' : undefined);
   expect.soft(demo?.status?.split(' Replace')[0]).toBe(status);
 
-  const templateId = await saveOrderedWorkout(db, { name: 'Hip thrust day', blocks: [block] }, undefined, now);
+  const templateId = await saveOrderedWorkout(db, { name: 'Hip thrust day', blocks: floored([block]) }, undefined, now);
   const session = await db.sessions.get(await startMixedSession(db, { templateId }, now));
   expect(session?.mixed?.strength[block.id]?.equipmentId).toBe(expectedId);
 });
@@ -99,7 +105,7 @@ test('repeats starter strength on the verified machine that logged the original 
   const now = new Date('2026-11-22T12:00:00.000Z');
   await db.settings.put(settings({ programStart: '2026-07-01' }));
   const block = starterWorkoutBlocks.find((choice) => choice.kind === 'strength')!;
-  const ordered = { name: 'Leg press day', blocks: [block] };
+  const ordered = { name: 'Leg press day', blocks: floored([block]) };
   const templateId = await saveOrderedWorkout(db, ordered, undefined, now);
   const sessionId = await startMixedSession(db, { templateId }, now);
   const first = (await db.sessions.get(sessionId))!.mixed!;
@@ -114,6 +120,9 @@ test('repeats starter strength on the verified machine that logged the original 
   }
   const { cursor } = (await db.sessions.get(sessionId))!.mixed!;
   await updateMixedSession(db, sessionId, cursor, { type: 'continue' }, new Date(+now + 30_000));
+  const pad = (await db.sessions.get(sessionId))!.mixed!.cursor;
+  await updateMixedSession(db, sessionId, pad, { type: 'skip' }, new Date(+now + 31_000));
+  await updateMixedSession(db, sessionId, (await db.sessions.get(sessionId))!.mixed!.cursor, { type: 'continue' }, new Date(+now + 32_000));
   await db.templates.delete(templateId);
   const later = new Date(+now + 86_400_000);
   const repeat = (await db.sessions.get(await startMixedSession(db, { sessionId }, later)))!;
@@ -121,7 +130,7 @@ test('repeats starter strength on the verified machine that logged the original 
   expect(repeat.mixed!.strength[block.id]).toMatchObject({ equipmentId, targetWeight: 120 });
   expect(await db.sets.where('sessionId').equals(repeat.id).count()).toBe(0);
 
-  const explicit = { name: 'Seed machine', blocks: [{ ...block, equipmentId: seed }] };
+  const explicit = { name: 'Seed machine', blocks: floored([{ ...block, equipmentId: seed }]) };
   const pinned = await saveOrderedWorkout(db, explicit, undefined, now);
   const ownMachine = (await db.sessions.get(await startMixedSession(db, { templateId: pinned }, later)))!;
   expect(ownMachine.mixed!.prescription).toEqual(explicit);

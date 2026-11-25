@@ -238,7 +238,16 @@ export type OrderedCoachedBlock = ExecutableCoachedBlock | (OrderedCoachedBase &
   restSec?: undefined;
   transitionSec?: undefined;
 });
-export type OrderedBlock = OrderedTimedBlock | OrderedStrengthBlock | OrderedSelfPacedBlock | OrderedCoachedBlock;
+/** A running segment. Planned through generateRun and hybridCardio at Start. */
+export interface OrderedRunBlock {
+  id: string;
+  kind: 'run';
+  name: string;
+  runKind: 'easy' | 'intervals';
+  modality: 'run' | 'bike' | 'row';
+  durationSec: number;
+}
+export type OrderedBlock = OrderedTimedBlock | OrderedStrengthBlock | OrderedSelfPacedBlock | OrderedCoachedBlock | OrderedRunBlock;
 export interface OrderedPrescription {
   name: string;
   blocks: OrderedBlock[];

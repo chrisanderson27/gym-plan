@@ -3,6 +3,8 @@ import { exerciseById } from '../../content';
 import { db } from '../../data/db';
 import { newId } from '../../data/ids';
 import { LIFT_EXERCISES } from '../../data/lift';
+import { legacyWorkoutDraft } from '../../data/workoutChoices';
+import { workoutShortfallSec } from '../../engine/templates';
 import { editableLiftTemplate, saveBuilt, startFromBlocks, WorkoutSaveError } from '../../data/templates';
 import type { LiftBlock } from '../../data/types';
 import { TRACKED_MUSCLES } from '../../engine/config';
@@ -42,7 +44,9 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
     const n = exerciseById.get(e.id)?.name ?? e.id;
     return n.toLowerCase().includes(query.toLowerCase()) && (!muscle || e.primary.includes(muscle)) && (!equip || e.equipment.includes(equip));
   }).slice(0, 20);
-  const ok = name.trim().length > 0 && blocks.length > 0;
+  // The shared 45-minute floor uses the same estimate as Workouts, on the converted draft.
+  const shortfall = workoutShortfallSec(legacyWorkoutDraft({ name, blocks }).draft.blocks);
+  const ok = name.trim().length > 0 && blocks.length > 0 && shortfall === 0;
   const patch = (blockId: string, p: Partial<LiftBlock>) => setBlocks(blocks.map((b) => (b.id === blockId ? { ...b, ...p } : b)));
 
   const save = async () => saveBuilt(db, { ...(id ? { id } : {}), name, blocks });
@@ -123,7 +127,7 @@ export function BuilderScreen({ templateId }: { templateId?: string }) {
           </div>
         </section>
       ))}
-      {!ok && <p class="dim" data-testid="builder-hint">{name.trim().length === 0 ? 'Name your workout to start' : 'Add an exercise to start'}</p>}
+      {!ok && <p class="dim" data-testid="builder-hint">{name.trim().length === 0 ? 'Name your workout to start' : blocks.length === 0 ? 'Add an exercise to start' : `Add at least ${Math.floor(shortfall / 60)}:${String(Math.ceil(shortfall % 60)).padStart(2, '0')} of work to reach 45 minutes`}</p>}
       {error && <p role="alert">{error}</p>}
       <button type="button" class="primary" data-testid="builder-start" disabled={!ok || busy} onClick={() => submit(true)}>Start</button>
       <button type="button" data-testid="builder-save" disabled={!ok || busy} onClick={() => submit(false)}>Save</button>

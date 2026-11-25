@@ -65,6 +65,7 @@ const intervalSec = (b: IntervalBlock) => b.rounds * b.phases.reduce((n, p) => n
 export const FULL_WORKOUT_MIN_SEC = 45 * 60;
 
 export function orderedBlockSeconds(block: OrderedBlock) {
+  if (block.kind === 'run') return block.durationSec;
   if (block.kind !== 'strength') return block.durationSec;
   return block.sets * block.repMax * SEC_PER_UNIT.reps
     + Math.max(0, block.sets - 1) * (block.restSec ?? REST_DEFAULT_SEC);
@@ -72,6 +73,11 @@ export function orderedBlockSeconds(block: OrderedBlock) {
 
 export function orderedDurationSec(blocks: readonly OrderedBlock[]) {
   return blocks.reduce((seconds, block) => seconds + orderedBlockSeconds(block), 0);
+}
+
+/** Seconds missing from the shared 45-minute floor. Unrounded: 2700 passes, 2699 does not. */
+export function workoutShortfallSec(blocks: readonly OrderedBlock[]) {
+  return Math.max(0, FULL_WORKOUT_MIN_SEC - orderedDurationSec(blocks));
 }
 
 export function orderedBlockMinutes(block: OrderedBlock) {

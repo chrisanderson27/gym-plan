@@ -128,8 +128,8 @@ test('hybrid: lift then cardio is one session, with feedback', async ({ page }, 
   await page.goto('./#/history');
   await page.locator('[data-testid^="history-"]').first().click();
   await page.getByTestId('again').click();
-  await page.getByTestId('again-start').click();
-  await expect(page).toHaveURL(/\/hybrid\/session\//);
+  await expect(page.getByTestId('legacy-again')).toBeVisible();
+  await expect(page.getByTestId('legacy-build')).toBeVisible();
   testInfo.annotations.push({ type: 'covered', description: 'AC1' });
 });
 
