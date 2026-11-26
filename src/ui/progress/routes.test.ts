@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { canonicalRoute, isLegacyResumeRoute, isMappedRoute } from './routes';
 
 const unchanged = [
-  '/', '/workouts', '/blocks', '/blocks/new', '/blocks/suggest', '/blocks/abc', '/progress', '/progress/history',
+  '/', '/sign-in', '/workouts', '/blocks', '/blocks/new', '/blocks/suggest', '/blocks/abc', '/progress', '/progress/history',
   '/history/01HZZ', '/settings', '/workout/session/s1', '/workout/summary/s1', '/mine/t1', '/again/s1', '/swim', '/swim/css',
   '/lift/session/s1', '/burn/session/s1', '/hybrid/session/s1', '/hybrid/cardio/s1',
 ];

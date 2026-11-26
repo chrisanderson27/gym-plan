@@ -40,4 +40,9 @@ export default tseslint.config(
     ignores: ['src/data/live.ts', 'src/data/**/*.test.ts'],
     rules: restrict(['preact/*', '**/ui/**'], ['preact']),
   },
+  {
+    files: ['src/sync/**/*.ts'],
+    ignores: ['src/sync/**/*.test.ts'],
+    rules: restrict(['preact/*', '**/ui/**'], ['preact']),
+  },
 );

@@ -2,6 +2,9 @@ import { useEffect } from 'preact/hooks';
 import { db } from './data/db';
 import { useLiveQuery } from './data/live';
 import { ensureDefaultSettings, getSettings } from './data/settings';
+import { isCloudConfigured } from './sync/client';
+import { SignInScreen } from './ui/auth/SignInScreen';
+import { useAuth } from './ui/auth/useAuth';
 import { BlockBuilder } from './ui/blocks/BlockBuilder';
 import { BlocksScreen } from './ui/blocks/BlocksScreen';
 import { CardioRoutes } from './ui/cardio/CardioRoutes';
@@ -29,9 +32,15 @@ export function App() {
   const settings = useLiveQuery(async () => (await getSettings(db)) ?? null, []);
   const raw = useRoute();
   const route = canonicalRoute(raw);
+  const authState = useAuth();
+  const gated = !!settings && isCloudConfigured && (authState.recovery || authState.status === 'signed-out' ||
+    (route === '/sign-in' && authState.status === 'guest'));
   useEffect(() => {
     if (route !== raw) location.replace('#' + route);
   }, [raw, route]);
+  useEffect(() => {
+    if (route === '/sign-in' && (!isCloudConfigured || authState.status === 'signed-in')) location.replace('#/');
+  }, [route, authState.status]);
   // The Appearance control is gone, so the shell is always light; a stored value is kept but ignored.
   // Only apply once a row exists: applying while loading would flash the pre-painted theme back to light.
   const ready = !!settings;
@@ -46,12 +55,14 @@ export function App() {
   }, [settings]);
 
   let body;
-  if (!settings) {
+  if (!settings || authState.status === 'loading') {
     body = (
       <main class="screen">
         <h1>gym-plan</h1>
       </main>
     );
+  } else if (gated) {
+    body = <SignInScreen route={route} />;
   } else if (route === '/settings') {
     body = <SettingsScreen settings={settings} />;
   } else if (route === '/progress') {
@@ -86,7 +97,7 @@ export function App() {
   return (
     <>
       {body}
-      {settings && showTabs(route) && <TabBar route={route} />}
+      {settings && authState.status !== 'loading' && !gated && showTabs(route) && <TabBar route={route} />}
       <UpdatePrompt />
     </>
   );

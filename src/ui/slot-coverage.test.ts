@@ -7,6 +7,7 @@ const NO_FEEDBACK = [
   'CssTestScreen.tsx', // one-off test entry form, not a workout
   'BlocksScreen.tsx', // saved-block library, not a workout
   'ProgressScreen.tsx', // PRD 4 §7 pinned training log header omits More
+  'SignInScreen.tsx', // PRD 5 §7 sign-in header has a guest action and no feedback slot
 ];
 
 describe('feedback slot coverage (PRD §5: screen-level feedback via More)', () => {

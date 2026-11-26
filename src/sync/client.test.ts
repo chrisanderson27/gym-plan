@@ -12,6 +12,10 @@ beforeAll(async () => {
 it('uses the generated database schema for the client', () => {
   expectTypeOf(client.supabase).toEqualTypeOf<SupabaseClient<Database> | null>();
 });
+
+it('uses the same session storage key across builds', () => {
+  expect(client.AUTH_STORAGE_KEY).toBe('gym-plan:auth');
+});
 afterAll(() => vi.unstubAllEnvs());
 
 describe('readCloudConfig', () => {

@@ -204,6 +204,13 @@
   font-display: swap;
   src: url('./fonts/ibm-plex-mono-700.woff2') format('woff2');
 }
+@font-face {
+  font-family: 'IBM Plex Mono Auth';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./fonts/ibm-plex-mono-600.woff2') format('woff2');
+}
 
 :root, [data-theme='light'], [data-theme='system'] {
   color-scheme: light;

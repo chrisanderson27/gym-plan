@@ -5,6 +5,7 @@ export const PROGRESS_ROUTES = {
 /** The canonical allow-list: every route a user can land on, tagged with its Figma frame (or swim / legacy-resume). */
 export const MAPPED_ROUTES: readonly { pattern: RegExp; surface: string }[] = [
   { pattern: /^\/$/, surface: 'today' },
+  { pattern: /^\/sign-in$/, surface: 'sign-in' },
   { pattern: /^\/workouts$/, surface: 'workouts' },
   { pattern: /^\/blocks$/, surface: 'blocks' },
   { pattern: /^\/blocks\/(new|suggest|[^/]+)$/, surface: 'block-builder' },
