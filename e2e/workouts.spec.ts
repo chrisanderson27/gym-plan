@@ -306,6 +306,8 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   try {
     const fresh = await context.newPage();
     await fresh.goto('./');
+    // A frozen clock can stall the precache install, so let the worker activate first.
+    await expect.poll(() => fresh.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())?.active), { timeout: 20_000 }).toBe(true);
     // The seeded default row has an epoch updatedAt, so the incoming settings win.
     await fresh.clock.setFixedTime(new Date(+at - 1000));
     await onboard(fresh);
