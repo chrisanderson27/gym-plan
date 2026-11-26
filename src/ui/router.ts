@@ -8,6 +8,8 @@ export function useRoute(): string {
   useEffect(() => {
     const on = () => setRoute(current());
     addEventListener('hashchange', on);
+    // The hash can change between the first render and this subscription; re-read so that change isn't missed.
+    on();
     return () => removeEventListener('hashchange', on);
   }, []);
   return route;
