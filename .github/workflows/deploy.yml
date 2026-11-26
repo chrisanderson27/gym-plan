@@ -29,6 +29,15 @@ jobs:
       - run: npx playwright install --with-deps webkit
       # Playwright starts its own preview server through webServer.
       - run: npx playwright test --project=webkit
+      - name: Build for Pages
+        run: npm run build && test -f dist/sw.js && test $(du -sk dist | cut -f1) -lt 2048
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+      - name: Check CSP names the Supabase origin
+        run: grep -q "connect-src 'self' ${VITE_SUPABASE_URL%/}" <(python3 -c "import html,sys;print(html.unescape(open('dist/index.html').read()))")
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

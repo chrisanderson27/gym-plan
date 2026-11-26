@@ -85,6 +85,12 @@ h2 { font-size: var(--text-20); font-weight: var(--weight-semibold); margin: var
 .preferences .pref-cue:last-of-type { border-bottom: none; }
 .pref-cue-title { font-weight: 800; font-size: 14px; line-height: 20px; color: var(--shell-ink); }
 .pref-cue-sub { font-weight: 600; font-size: 12px; line-height: 17px; color: var(--shell-secondary); }
+.pref-account-identity { overflow-wrap: anywhere; }
+.preferences .pref-danger { color: var(--color-danger-text); border-color: var(--color-danger); }
+.preferences .pref-danger:disabled { color: var(--disabled-text); border-color: var(--disabled-border); }
+.preferences .pref-danger.primary:not(:disabled) { background: var(--color-danger-tint); }
+.preferences .pref-account-actions { flex-direction: column; }
+.preferences .pref-account-actions > .btn { flex: none; width: 100%; min-height: var(--tap); }
 .preferences label.pref-equip > input[type='checkbox'],
 .preferences label.pref-cue > input[type='checkbox'] { width: 20px; height: 20px; }
 .preferences label.check > input[type='checkbox'] { accent-color: var(--shell-check); }

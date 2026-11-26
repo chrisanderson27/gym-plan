@@ -15,4 +15,7 @@ test('keyless builds never show sign-in and only allow self connections', async 
   const policy = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
   expect(policy?.split(';').map((directive) => directive.trim()).find((directive) => directive.startsWith('connect-src ')))
     .toBe("connect-src 'self'");
+  await page.goto('./#/settings');
+  await expect(page.getByRole('heading', { name: 'Preferences' })).toBeVisible();
+  await expect(page.getByTestId('account-card')).toHaveCount(0);
 });

@@ -143,7 +143,7 @@ it('adopts legacy data at epoch or updatedAt and leaves newer server data intact
   expect(server.rows('library_blocks').get('block')?.client_updated_at).toBe(changedAt);
 });
 
-it('guest-then-sign-in uploads guest edits at their real timestamps and resumes adoption after failure', async () => {
+it('seeds adoption before a failed push and retries guest edits at their real timestamps', async () => {
   const { engine, setUser } = setup({ user: '' });
   const date = '2026-01-01';
   await db.bodyLogs.add(bodyLog(date));
@@ -153,7 +153,8 @@ it('guest-then-sign-in uploads guest edits at their real timestamps and resumes 
   setUser('a');
   server.failNext('error');
   await engine.syncNow();
-  expect(engine.getStatus()).toMatchObject({ state: 'error', pending: 2 });
+  expect(engine.getStatus()).toMatchObject({ state: 'error', pending: 1 });
+  expect(await db.syncMeta.get('adoption')).toBeUndefined();
   await engine.syncNow();
   expect(server.rows('body_logs').get(date)?.client_updated_at).toBe(entry!.clientUpdatedAt);
   expect(server.rows('equipment').size).toBeGreaterThan(0);
@@ -571,4 +572,35 @@ it('a signed-in offline launch reports pending changes without touching the netw
   expect(await db.syncMeta.get('owner')).toBeUndefined();
   expect(push).not.toHaveBeenCalled();
   expect(pull).not.toHaveBeenCalled();
+});
+
+it('retries idle errors with exponential backoff and cancels the retry on pause', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const { engine } = setup();
+  await owner();
+  await db.bodyLogs.put(bodyLog('2026-01-01'));
+  const push = vi.spyOn(server.transport, 'push').mockRejectedValue(new Error('Push unavailable'));
+  const nextError = () => new Promise<void>((resolve) => {
+    const unsubscribe = engine.subscribe(() => {
+      if (engine.getStatus().state !== 'error') return;
+      unsubscribe();
+      resolve();
+    });
+  });
+
+  await engine.syncNow();
+  expect(engine.getStatus().state).toBe('error');
+  expect(push).toHaveBeenCalledTimes(1);
+  for (const [delay, calls] of [[30_000, 2], [60_000, 3]] as const) {
+    await vi.advanceTimersByTimeAsync(delay - 1);
+    expect(push).toHaveBeenCalledTimes(calls - 1);
+    const failed = nextError();
+    // schedule() hands the retry off to the existing zero-delay debounce.
+    await vi.advanceTimersByTimeAsync(2);
+    await failed;
+    expect(push).toHaveBeenCalledTimes(calls);
+  }
+  await engine.pause();
+  await vi.advanceTimersByTimeAsync(300_000);
+  expect(push).toHaveBeenCalledTimes(3);
 });

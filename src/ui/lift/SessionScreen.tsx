@@ -17,6 +17,7 @@ import { pickSubstitute } from '../../engine/lift/generator';
 import { isWorking } from '../../engine/lift/types';
 import { loggedBlockPR, setPRs, type PR } from '../../engine/pr';
 import { isRampInWeek, weekIndex } from '../../engine/week';
+import { sync } from '../../sync/engine';
 import { MoreMenu } from '../MoreMenu';
 import { fmtMSS } from '../cardio/format';
 import { exerciseName, modalityName, podLabel, runKindName, stationEquipmentLabel } from '../labels';
@@ -61,6 +62,10 @@ export function SessionScreen({ sessionId }: { sessionId: string }) {
 }
 
 function SessionRunner({ sessionId }: { sessionId: string }) {
+  useEffect(() => {
+    sync.setOpenSession(sessionId);
+    return () => sync.setOpenSession(null);
+  }, [sessionId]);
   const data = useLiveQuery(async () => {
     const session = await db.sessions.get(sessionId);
     const sets = await db.sets.where('sessionId').equals(sessionId).toArray();

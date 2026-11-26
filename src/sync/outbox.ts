@@ -1,10 +1,26 @@
 import type { DBCoreMutateRequest, DBCoreMutateResponse } from 'dexie';
+import { SEED_EQUIPMENT } from '../content/equipment';
 import type { GymDb } from '../data/db';
-import { USER_STORES, type StoreName } from '../data/stores';
+import { isDefaultSettings } from '../data/settings';
+import { STORE_NAMES, USER_STORES, type StoreName } from '../data/stores';
 import type { SyncOutboxEntry } from '../data/types';
 import { isSyncApply } from './marker';
+import { rowUpdatedAt } from './tables';
 
 export const ADOPTION = 'adoption';
+
+const equipmentSeeds = new Map(SEED_EQUIPMENT.map((row) => [row.id, row]));
+const defaultKeys = [['settings', 'settings'], ...SEED_EQUIPMENT.map(({ id }) => ['equipment', id])];
+
+function isDefaultRow(store: StoreName, key: string, row: Record<string, unknown>): boolean {
+  if (store === 'settings') return isDefaultSettings(row);
+  if (store !== 'equipment') return false;
+  const seed = equipmentSeeds.get(key);
+  return !!seed && Object.keys(row).length === Object.keys(seed).length &&
+    Object.entries(seed).every(([field, value]) => field === 'steps'
+      ? JSON.stringify(row.steps) === JSON.stringify(seed.steps)
+      : row[field] === value);
+}
 
 let last = 0;
 
@@ -14,9 +30,28 @@ export function stamp(): string {
 }
 
 export function pendingCount(db: GymDb): Promise<number> {
-  return db.transaction('r', [db.syncOutbox, db.syncMeta], async () => {
-    const queued = await db.syncOutbox.count();
-    return queued + (await db.syncMeta.get(ADOPTION) ? 1 : 0);
+  return db.transaction('r', db.tables, async () => {
+    let pending = await db.syncOutbox.count();
+    if (pending > 0) {
+      // Adoption uploads built-in defaults at their legacy timestamps without counting them as edits.
+      const candidates = await db.syncOutbox.where('[store+key]').anyOf(defaultKeys).toArray();
+      for (const { store, key, op, clientUpdatedAt } of candidates) {
+        if (op !== 'put') continue;
+        const row = await db.table<Record<string, unknown>>(store).get(key);
+        if (row && clientUpdatedAt === rowUpdatedAt(store, row) && isDefaultRow(store, key, row)) pending--;
+      }
+    }
+    if (!await db.syncMeta.get(ADOPTION)) return pending;
+
+    // An older or interrupted run may have claimed ownership before queueing its legacy rows.
+    const queued = new Set((await db.syncOutbox.orderBy('[store+key]').keys()).map((key) => JSON.stringify(key)));
+    for (const store of STORE_NAMES) {
+      pending += await db.table<Record<string, unknown>>(store).filter((row) => {
+        const key = String(row[USER_STORES[store]]);
+        return !queued.has(JSON.stringify([store, key])) && !isDefaultRow(store, key, row);
+      }).count();
+    }
+    return pending;
   });
 }
 
@@ -87,6 +122,9 @@ export function installOutbox(db: GymDb, { onCapture }: { onCapture?: () => void
             mutate(req) {
               const trans = req.trans as IDBTransaction;
               if (isSyncApply(trans) || trans.mode === 'versionchange') return table.mutate(req);
+              // A file import or export updates local backup bookkeeping without editing preferences.
+              if (name === 'settings' && req.type === 'put' && req.changeSpec &&
+                Object.keys(req.changeSpec).length === 1 && Object.hasOwn(req.changeSpec, 'backupAt')) return table.mutate(req);
               // Concurrent calls in one transaction must see one another's compound-index writes.
               const previous = mutations.get(trans);
               const current = previous ? previous.catch(() => {}).then(() => capture(req)) : capture(req);

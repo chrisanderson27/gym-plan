@@ -1,38 +1,11 @@
-import { expect, test as base, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { persistedRows, seedBackup } from '../e2e/helpers';
 import { STORE_NAMES } from '../src/data/stores';
 import type { LibraryBlock, Session, Settings, SyncMeta } from '../src/data/types';
 import { SYNC_TABLES } from '../src/sync/tables';
-import {
-  accessToken, confirmViaApi, fillLogIn, foreground, localCount, serverRows, signedInContext, signUpViaApi, uniqueEmail,
-} from './helpers';
-
-const password = 'test-password-123';
-const test = base.extend<{ device: (email: string) => ReturnType<typeof signedInContext> }>({
-  // Contexts opened by the fixture need the same cleanup as Playwright's built-in context.
-  device: async ({ browser }, use) => {
-    const contexts: BrowserContext[] = [];
-    try {
-      await use(async (email) => {
-        const result = await signedInContext(browser, email, password);
-        contexts.push(result.context);
-        return result;
-      });
-    } finally {
-      await Promise.all(contexts.map((context) => context.close()));
-    }
-  },
-});
+import { fillLogIn, foreground, localCount, password, serverRows, test, user } from './helpers';
 
 test.setTimeout(60_000);
-
-async function user(request: APIRequestContext, tag: string) {
-  const email = uniqueEmail(tag);
-  const response = await signUpViaApi(request, { email, password, name: 'Gym Plan Tester' });
-  expect(response.ok()).toBe(true);
-  await confirmViaApi(request, email);
-  return { email, token: await accessToken(request, email, password) };
-}
 
 async function logIn(page: Page, email: string) {
   await fillLogIn(page, email, password);

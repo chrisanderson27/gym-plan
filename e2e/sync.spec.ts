@@ -81,11 +81,10 @@ test('pending changes from a different owner require a discard choice before syn
   await logIn(page, accountA.user.email);
   await expect(page.getByTestId('hero')).toBeVisible();
   await expect.poll(async () => (await meta(page)).find((row) => row.id === 'owner')?.ownerId).toBe(accountA.user.id);
-  await expect.poll(() => server.pushes.some(({ rows }) => rows.some((row) => row.id === 'old-owner'))).toBe(true);
-  // The sheet counts queued rows plus an unfinished legacy adoption, as pendingCount does.
-  const adopting = (await meta(page)).some((row) => row.id === 'adoption');
-  const pending = (await persistedRows(page, 'syncOutbox')).length + (adopting ? 1 : 0);
-  expect(pending).toBeGreaterThan(0);
+  await expect.poll(() => server.pushes.length).toBeGreaterThan(0);
+  await expect.poll(() => persistedRows(page, 'syncOutbox')).toContainEqual(
+    expect.objectContaining({ store: 'sessions', key: 'old-owner' }),
+  );
 
   await page.evaluate((key) => localStorage.removeItem(key), 'gym-plan:auth');
   await page.reload();
@@ -94,7 +93,7 @@ test('pending changes from a different owner require a discard choice before syn
   await logIn(page, accountB.user.email);
   const sheet = page.getByRole('dialog', { name: "This phone has someone else's workouts" });
   await expect(sheet).toBeVisible();
-  await expect(sheet.getByText(`${pending} changes from the previous account`, { exact: false })).toBeVisible();
+  await expect(sheet.getByText(/^1 change from the previous account\b/)).toBeVisible();
   expect(await tooSmall(page)).toEqual([]);
   expect(server.pushes.slice(pastPushes)).toEqual([]);
   await sheet.getByRole('button', { name: 'Remove and continue' }).click();

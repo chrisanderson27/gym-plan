@@ -13,11 +13,13 @@ import { weekIndex } from '../engine/week';
 import { isStandalone } from '../platform/display';
 import { deliverFile, backupFileName } from '../platform/share';
 import { isPersisted } from '../platform/storage';
+import { isCloudConfigured } from '../sync/client';
 import { FeedbackList } from './feedback/FeedbackList';
 import { ArrowRightIcon, CalendarIcon, ChevronIcon, PersonIcon, PlusIcon, WorkoutsIcon } from './icons';
 import { LIMITS, rangeError } from './limits';
 import { PoolSheet } from './PoolSheet';
 import { Sheet } from './Sheet';
+import { AccountSection } from './sync/AccountSection';
 
 declare const __APP_VERSION__: string;
 
@@ -174,6 +176,8 @@ export function SettingsScreen({ settings }: { settings: SettingsRow }) {
           </>
         )}
       </section>
+
+      {isCloudConfigured && <AccountSection />}
 
       {excludeOpen && (
         <Sheet label="Exclude an exercise" onClose={() => setExcludeOpen(false)}>

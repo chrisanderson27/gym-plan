@@ -180,17 +180,25 @@ describe('auth actions', () => {
     for (const action of [
       auth.signUp({ name: 'Alex', email, password }), auth.signIn({ email, password }),
       auth.signInWithGoogle(), auth.resend(email), auth.resetPassword(email),
-      auth.updatePassword(password), auth.signOut(), auth.deleteAccount(),
+      auth.updatePassword(password), auth.deleteAccount(),
     ]) {
       expect(await action).toEqual({ ok: false, error: 'offline' });
     }
     for (const method of Object.values(methods)) expect(method).not.toHaveBeenCalled();
     expect(rpc).not.toHaveBeenCalled();
+    expect(await auth.signOut()).toEqual({ ok: true });
+    expect(methods.signOut).toHaveBeenCalledWith({ scope: 'local' });
   });
 
   it('clears the guest flag on sign-out', async () => {
-    const { auth, storage } = setup({ guest: true, stored: true });
+    const { auth, methods, storage } = setup({ guest: true, stored: true });
+    const guestAtSignOut = vi.fn(() => storage.getItem(GUEST_KEY));
+    methods.signOut.mockImplementation(async () => {
+      guestAtSignOut();
+      return { error: new AuthRetryableFetchError('Network unavailable', 0) };
+    });
     expect(await auth.signOut()).toEqual({ ok: true });
+    expect(guestAtSignOut).toHaveReturnedWith(null);
     expect(auth.getState().status).toBe('signed-out');
     expect(storage.getItem(GUEST_KEY)).toBeNull();
   });
@@ -198,8 +206,10 @@ describe('auth actions', () => {
   it('keeps state and the guest flag when account deletion fails', async () => {
     const { auth, methods, rpc, storage } = setup({ guest: true, stored: true });
     const before = auth.getState();
+    const onDeleted = vi.fn();
     rpc.mockResolvedValue({ error: apiError('delete_failed') });
-    expect(await auth.deleteAccount()).toEqual({ ok: false, error: 'unknown' });
+    expect(await auth.deleteAccount(onDeleted)).toEqual({ ok: false, error: 'unknown' });
+    expect(onDeleted).not.toHaveBeenCalled();
     expect(methods.signOut).not.toHaveBeenCalled();
     expect(auth.getState()).toBe(before);
     expect(storage.getItem(GUEST_KEY)).toBe('1');
@@ -207,11 +217,29 @@ describe('auth actions', () => {
 
   it('signs out locally and clears the guest flag after account deletion', async () => {
     const { auth, methods, rpc, storage } = setup({ guest: true, stored: true });
-    expect(await auth.deleteAccount()).toEqual({ ok: true });
+    const onDeleted = vi.fn().mockResolvedValue(undefined);
+    expect(await auth.deleteAccount(onDeleted)).toEqual({ ok: true });
+    expect(onDeleted).toHaveBeenCalledOnce();
     expect(rpc).toHaveBeenCalledWith('delete_my_account');
+    expect(rpc).toHaveBeenCalledBefore(onDeleted);
+    expect(onDeleted).toHaveBeenCalledBefore(methods.signOut);
     expect(methods.signOut).toHaveBeenCalledWith({ scope: 'local' });
     expect(auth.getState().status).toBe('signed-out');
     expect(storage.getItem(GUEST_KEY)).toBeNull();
+  });
+
+  it('still signs out when the local clear fails after deletion', async () => {
+    const { auth, methods } = setup({ stored: true });
+    const error = new Error('IndexedDB unavailable');
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(await auth.deleteAccount(async () => { throw error; })).toEqual({ ok: true });
+      expect(warning).toHaveBeenCalledWith(expect.any(String), error);
+      expect(methods.signOut).toHaveBeenCalledWith({ scope: 'local' });
+      expect(auth.getState().status).toBe('signed-out');
+    } finally {
+      warning.mockRestore();
+    }
   });
 });
 

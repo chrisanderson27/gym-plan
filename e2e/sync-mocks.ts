@@ -15,7 +15,7 @@ export function syncServer() {
     return data;
   }
 
-  return { rows, pushes, rejectPush: false };
+  return { rows, pushes, rejectPush: false, rejectDelete: false, deleteCalls: 0 };
 }
 
 export async function mockRest(page: Page, server: ReturnType<typeof syncServer>) {
@@ -34,6 +34,15 @@ export async function mockRest(page: Page, server: ReturnType<typeof syncServer>
 
     const url = new URL(request.url());
     const path = url.pathname.split('/rest/v1/')[1]!;
+    if (path === 'rpc/delete_my_account' && request.method() === 'POST') {
+      server.deleteCalls++;
+      if (server.rejectDelete) {
+        await route.fulfill({ status: 500, headers, json: { code: 'test', message: 'Delete unavailable' } });
+      } else {
+        await route.fulfill({ status: 204, headers });
+      }
+      return;
+    }
     if (path === 'rpc/push_rows' && request.method() === 'POST') {
       const { p_table: table, p_rows: rows } = request.postDataJSON() as { p_table: TableName; p_rows: PushRow[] };
       server.pushes.push({ table, rows });

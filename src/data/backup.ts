@@ -113,18 +113,13 @@ export async function importExport(db: GymDb, file: ExportFile): Promise<{ writt
     }
     const incoming = (file.stores.settings?.[0] as Settings | undefined) ?? undefined;
     const local = await db.settings.get('settings');
-    if (incoming) {
-      const take = !local || Date.parse(incoming.updatedAt) > Date.parse(local.updatedAt);
-      const base = take ? incoming : local!;
-      await db.settings.put({
-        ...base,
-        backupAt: maxIso(local?.backupAt, incoming.backupAt, file.exportedAt),
-      });
-      written.settings = 1;
-    } else {
-      if (local) await db.settings.update('settings', { backupAt: maxIso(local.backupAt, file.exportedAt) });
-      written.settings = 0;
+    const backupAt = maxIso(local?.backupAt, incoming?.backupAt, file.exportedAt);
+    if (incoming && (!local || Date.parse(incoming.updatedAt) > Date.parse(local.updatedAt))) {
+      await db.settings.put({ ...incoming, backupAt });
+    } else if (local) {
+      await db.settings.update('settings', { backupAt });
     }
+    written.settings = incoming ? 1 : 0;
   });
   return { written };
 }

@@ -171,6 +171,15 @@ export function createAuth({ client, storage, win, baseUrl }: {
   };
   const result = (error: unknown): AuthResult => error ? failed(authErrorKind(error)) : ok;
 
+  async function signOut(): Promise<AuthResult> {
+    if (!client) return failed('unknown');
+    writeGuest(storage, false);
+    // The SDK removes the local session before attempting to revoke it.
+    try { await client.auth.signOut({ scope: 'local' }); } catch { /* Revocation is best-effort. */ }
+    signedOut('signed-out');
+    return ok;
+  }
+
   return {
     getState: () => state,
     subscribe(listener: () => void) {
@@ -206,21 +215,16 @@ export function createAuth({ client, storage, win, baseUrl }: {
       if (!error) update({ recovery: false });
       return result(error);
     }),
-    signOut: () => run(async ({ auth }) => {
-      const { error } = await auth.signOut();
-      if (!error) {
-        writeGuest(storage, false);
-        signedOut('signed-out');
-      }
-      return result(error);
-    }),
-    deleteAccount: () => run(async (cloud) => {
+    signOut,
+    deleteAccount: (onDeleted?: () => Promise<unknown>) => run(async (cloud) => {
       const { error } = await cloud.rpc('delete_my_account');
       if (error) return result(error);
-      const { error: signOutError } = await cloud.auth.signOut({ scope: 'local' });
-      writeGuest(storage, false);
-      if (!signOutError) signedOut('signed-out');
-      return result(signOutError);
+      try {
+        await onDeleted?.();
+      } catch (error) {
+        console.warn('Could not clear local data after account deletion', error);
+      }
+      return signOut();
     }),
   };
 }

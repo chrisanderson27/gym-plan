@@ -100,10 +100,11 @@ describe('outbox capture', () => {
     await db.syncMeta.put({ id: 'owner', ownerId: 'signed-in-user' });
     await ensureDefaultSettings(db);
     const settings = (await db.settings.get('settings'))!;
+    const updatedAt = '2026-01-01T00:00:00.000Z';
     await importExport(db, {
-      schemaVersion: 2, exportedAt: '2026-01-01T00:00:00.000Z', appVersion: 'test',
-      stores: { bodyLogs: [bodyLog(date), bodyLog('2026-01-02')], settings: [settings],
-        libraryBlocks: [{ id: 'block', name: 'Imported', updatedAt: '2026-01-01T00:00:00.000Z' }] },
+      schemaVersion: 2, exportedAt: updatedAt, appVersion: 'test',
+      stores: { bodyLogs: [bodyLog(date), bodyLog('2026-01-02')], settings: [{ ...settings, appearance: 'dark', updatedAt }],
+        libraryBlocks: [{ id: 'block', name: 'Imported', updatedAt }] },
     });
     expect((await db.syncOutbox.toArray()).map(({ store, key }) => [store, key])).toEqual([
       ['bodyLogs', date], ['bodyLogs', '2026-01-02'], ['libraryBlocks', 'block'], ['settings', 'settings'],

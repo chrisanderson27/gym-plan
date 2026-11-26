@@ -52,6 +52,8 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
   let active: Promise<void> | undefined;
   let controller: AbortController | undefined;
   let debounce: ReturnType<typeof setTimeout> | undefined;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let retryAttempt = 0;
   let again = false;
   let openSession: string | null = null;
   let observedUser: string | null | undefined;
@@ -126,8 +128,8 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     return db.syncOutbox.where('[store+key]').between([store, Dexie.minKey], [store, Dexie.maxKey], true, true);
   }
 
-  // Keep the adoption marker until the legacy scan commits, across failed pushes and reloads.
-  async function seedLegacy(run: Run, sent: Set<string>) {
+  // Keep the adoption marker until the legacy scan commits, including across reloads.
+  async function seedLegacy(run: Run) {
     await write(run, db.tables, async () => {
       await checkOwner(run);
       if (!await db.syncMeta.get(ADOPTION)) return;
@@ -138,7 +140,7 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
         const rows = await table(store).toArray();
         const unqueued = rows.flatMap((row): SyncOutboxEntry[] => {
           const key = String(row[USER_STORES[store]]);
-          return existing.has(key) || sent.has(deferredKey(store, key)) ? [] : [{
+          return existing.has(key) ? [] : [{
             store, key, op: 'put', clientUpdatedAt: rowUpdatedAt(store, row),
           }];
         });
@@ -148,7 +150,7 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     });
   }
 
-  async function push(cloud: SyncTransport, run: Run, sent?: Set<string>) {
+  async function push(cloud: SyncTransport, run: Run) {
     for (const store of STORE_NAMES) {
       check(run);
       const queued = await entries(store).sortBy('seq') as OwnedEntry[];
@@ -180,7 +182,6 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
             const key = deferredKey(store, entry.key);
             if (!accepted.has(entry.key)) deferred.set(key, { store, key: entry.key, reason: 'refetch' });
             if (current[i]?.clientUpdatedAt === entry.clientUpdatedAt) acked.push(entry.seq);
-            sent?.add(key);
           }
           await db.syncOutbox.bulkDelete(acked);
           await saveDeferred(deferred);
@@ -275,6 +276,7 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     generation++;
     again = false;
     clearTimeout(debounce);
+    clearTimeout(retryTimer);
     controller?.abort();
     update({ state });
   }
@@ -297,6 +299,7 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
   }
 
   async function runOnce(cloud: SyncTransport, run: Run) {
+    clearTimeout(retryTimer);
     let result: Partial<SyncStatus> = {};
     try {
       check(run);
@@ -310,11 +313,7 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
         result = { state: 'owner-mismatch', lastSyncedAt: null };
         return;
       }
-      if (ownership === 'adopt') {
-        const sent = new Set<string>();
-        await push(cloud, run, sent);
-        await seedLegacy(run, sent);
-      }
+      if (ownership === 'adopt') await seedLegacy(run);
       await push(cloud, run);
       await pull(cloud, run);
       const lastSyncedAt = now().toISOString();
@@ -331,6 +330,12 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     } finally {
       const pending = await readPending();
       update({ ...pending, ...(run.generation === generation ? result : {}) });
+      if (run.generation === generation) {
+        if (result.state === 'idle') retryAttempt = 0;
+        if (result.state === 'error') {
+          retryTimer = setTimeout(() => schedule(), Math.min(30_000 * 2 ** retryAttempt++, 300_000));
+        }
+      }
     }
   }
 

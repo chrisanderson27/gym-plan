@@ -7,6 +7,16 @@ import type { PoolUnit, Settings } from './types';
 
 export const DEFAULT_POOL_LENGTH = 25;
 
+const DEFAULT_SETTINGS = {
+  id: 'settings', daysPerWeek: 5, weightUnit: 'lb', distanceUnit: 'mi', updatedAt: new Date(0).toISOString(),
+} as const;
+
+export function isDefaultSettings(row: Record<string, unknown>): boolean {
+  return Object.entries(DEFAULT_SETTINGS).every(([key, value]) => row[key] === value) &&
+    Object.keys(row).every((key) => Object.hasOwn(DEFAULT_SETTINGS, key) ||
+      key === 'programStart' || key === 'onboardedAt' || key === 'backupAt');
+}
+
 export function poolOf(settings?: Settings): { poolUnit: PoolUnit; poolLength: number } | null {
   const { poolUnit, poolLength } = settings ?? {};
   return poolUnit && poolLength && poolLength > 0 ? { poolUnit, poolLength } : null;
@@ -51,14 +61,10 @@ export async function ensureDefaultSettings(db: GymDb, now = new Date()): Promis
     markSyncApply(tx);
     if (await db.settings.get('settings')) return;
     await db.settings.put({
-      id: 'settings',
-      daysPerWeek: 5,
-      weightUnit: 'lb',
-      distanceUnit: 'mi',
+      ...DEFAULT_SETTINGS,
       programStart: localDate(now),
       onboardedAt: now.toISOString(),
       backupAt: null,
-      updatedAt: new Date(0).toISOString(),
     });
   });
 }

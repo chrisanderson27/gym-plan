@@ -1,11 +1,12 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it } from 'vitest';
 import { SEED_EQUIPMENT } from '../content/equipment';
 import { STORE_NAMES, USER_STORES } from '../data/stores';
 import { openTestDb } from '../data/test-utils';
 import { clearLocalData } from './clear';
 import { installOutbox } from './outbox';
 
-const db = openTestDb();
+let db: ReturnType<typeof openTestDb>;
+beforeEach(() => { db = openTestDb(); });
 afterEach(async () => { await db.delete(); });
 
 it('clears every table and reseeds equipment without enqueuing tombstones or puts', async () => {
@@ -26,4 +27,17 @@ it('clears every table and reseeds equipment without enqueuing tombstones or put
       expect(await table.count(), table.name).toBe(0);
     }
   }
+});
+
+it('leaves every table untouched above the pending limit and clears at the limit', async () => {
+  installOutbox(db);
+  await db.table('sessions').bulkPut([{ id: 'one' }, { id: 'two' }, { id: 'three' }]);
+  await db.syncMeta.put({ id: 'owner', ownerId: 'old' });
+  const snapshot = await Promise.all(db.tables.map((table) => table.toArray()));
+
+  expect(await clearLocalData(db, { maxPending: 0 })).toEqual({ cleared: false, pending: 3 });
+  expect(await Promise.all(db.tables.map((table) => table.toArray()))).toEqual(snapshot);
+  expect(await clearLocalData(db, { maxPending: 3 })).toEqual({ cleared: true, pending: 3 });
+  expect(await db.sessions.count()).toBe(0);
+  expect(await db.syncOutbox.count()).toBe(0);
 });

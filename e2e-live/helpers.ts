@@ -1,8 +1,9 @@
 import { setTimeout } from 'node:timers/promises';
-import { devices, expect, type APIRequestContext, type Browser, type Page } from '@playwright/test';
+import { devices, expect, test as base, type APIRequestContext, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { readLocalStack } from '../scripts/supabase-env.mjs';
 
 export const baseURL = 'http://127.0.0.1:4174/gym-plan/';
+export const password = 'test-password-123';
 const runId = Date.now().toString(36);
 let emailCount = 0;
 let localStack: ReturnType<typeof readLocalStack> | undefined;
@@ -87,12 +88,12 @@ export async function fillLogIn(page: Page, email: string, password: string) {
   await page.getByLabel('Password', { exact: true }).fill(password);
 }
 
-export function secondDevice(browser: Browser) {
-  return browser.newContext({ ...devices['iPhone 14'], baseURL });
+export function secondDevice(browser: Browser, serviceWorkers?: 'allow' | 'block') {
+  return browser.newContext({ ...devices['iPhone 14'], baseURL, serviceWorkers });
 }
 
-export async function signedInContext(browser: Browser, email: string, password: string) {
-  const context = await secondDevice(browser);
+export async function signedInContext(browser: Browser, email: string, password: string, serviceWorkers?: 'allow' | 'block') {
+  const context = await secondDevice(browser, serviceWorkers);
   try {
     const page = await context.newPage();
     await page.goto('./');
@@ -104,6 +105,31 @@ export async function signedInContext(browser: Browser, email: string, password:
     await context.close();
     throw error;
   }
+}
+
+export const test = base.extend<{
+  device: (email: string, serviceWorkers?: 'allow' | 'block') => ReturnType<typeof signedInContext>;
+}>({
+  device: async ({ browser }, use) => {
+    const contexts: BrowserContext[] = [];
+    try {
+      await use(async (email, serviceWorkers) => {
+        const result = await signedInContext(browser, email, password, serviceWorkers);
+        contexts.push(result.context);
+        return result;
+      });
+    } finally {
+      await Promise.all(contexts.map((context) => context.close()));
+    }
+  },
+});
+
+export async function user(request: APIRequestContext, tag: string) {
+  const email = uniqueEmail(tag);
+  const response = await signUpViaApi(request, { email, password, name: 'Gym Plan Tester' });
+  expect(response.ok()).toBe(true);
+  await confirmViaApi(request, email);
+  return { email, token: await accessToken(request, email, password) };
 }
 
 export async function accessToken(request: APIRequestContext, email: string, password: string) {

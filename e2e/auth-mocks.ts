@@ -44,6 +44,7 @@ export async function mockAuth(page: Page, handlers: Partial<Record<AuthPath, Ha
     calls.push(key);
     const handler = handlers[key as AuthPath];
     if (handler) await handler(route, url);
+    else if (key === 'logout') await route.fulfill({ status: 204, headers: cors });
     else {
       const message = `unmocked ${request.method()} ${url.pathname}${url.search}`;
       await authResponse(route, { msg: message }, 500);
