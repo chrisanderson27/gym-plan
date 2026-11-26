@@ -2,7 +2,8 @@ import Dexie, { type Table } from 'dexie';
 import { db, type GymDb } from '../data/db';
 import { ensureDefaultSettings } from '../data/settings';
 import { STORE_NAMES, USER_STORES, type StoreName } from '../data/stores';
-import type { SyncMeta, SyncOutboxEntry } from '../data/types';
+import type { Equipment, SyncMeta, SyncOutboxEntry } from '../data/types';
+import { validateRows } from '../data/validate';
 import { auth, type createAuth } from './auth';
 import { clearLocalData } from './clear';
 import { supabase } from './client';
@@ -32,7 +33,9 @@ const OVERLAP_MS = 60_000;
 const cursorId = (store: StoreName) => 'cursor:' + store;
 const pair = (row: SyncRow) => ({ updatedAt: row.updated_at, id: row.id });
 const deferredKey = (store: StoreName, key: string) => JSON.stringify([store, key]);
-const applyGroups = [RELATED_STORES, ...STORE_NAMES.filter((store) => !RELATED_STORES.includes(store)).map((store) => [store])];
+// Active coached sessions may reference equipment arriving in the same pull.
+const sessionGroup: readonly StoreName[] = ['equipment', ...RELATED_STORES];
+const applyGroups = [sessionGroup, ...STORE_NAMES.filter((store) => !sessionGroup.includes(store)).map((store) => [store])];
 
 class Aborted extends Error {}
 
@@ -210,15 +213,24 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     }
   }
 
-  async function applyRow(store: StoreName, row: SyncRow, deferred: Map<string, DeferredRow>) {
+  async function applyRow(store: StoreName, row: SyncRow, deferred: Map<string, DeferredRow>, equipment?: ReadonlyMap<string, Equipment>) {
     const key = deferredKey(store, row.id);
+    if (!row.deleted_at) {
+      if (!row.id || row.data?.[USER_STORES[store]] !== row.id) {
+        console.warn('Skipping sync row with an invalid primary key', store);
+        deferred.delete(key);
+        return;
+      }
+      try {
+        validateRows(store, [row.data], equipment && { equipment });
+      } catch {
+        console.warn('Skipping malformed sync row', store);
+        deferred.delete(key);
+        return;
+      }
+    }
     const pending = await db.syncOutbox.get({ store, key: row.id });
     if (pending && Date.parse(pending.clientUpdatedAt) > Date.parse(row.client_updated_at)) return;
-    if (!row.deleted_at && row.data?.[USER_STORES[store]] !== row.id) {
-      console.warn('Skipping sync row with a mismatched primary key', store);
-      deferred.delete(key);
-      return;
-    }
     if (openSession !== null && RELATED_STORES.includes(store)) {
       // Tombstones carry no data, so use the local set's parent or the session-keyed table's id.
       const sessionId = row.deleted_at
@@ -257,7 +269,10 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
         const parked = await readDeferred();
         for (const store of group) {
           const { rows, cursor, missing } = pulled.get(store)!;
-          for (const row of rows.values()) await applyRow(store, row, parked);
+          const equipment = store === 'sessions' && rows.size
+            ? new Map((await db.equipment.toArray()).map((item) => [item.id, item]))
+            : undefined;
+          for (const row of rows.values()) await applyRow(store, row, parked, equipment);
           for (const id of missing) parked.delete(deferredKey(store, id));
           if (cursor) await db.syncMeta.put({ id: cursorId(store), cursor });
         }

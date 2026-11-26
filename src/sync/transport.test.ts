@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { expect, it, vi } from 'vitest';
+import { mixedSetId } from '../data/mixedSets';
 import type { Database } from './database.types';
 import { createSupabaseTransport } from './transport';
 
@@ -43,7 +44,7 @@ it('supports the overlap bound and chunks deferred ids at 100', async () => {
   await transport.fetchByIds('body_logs', Array.from({ length: 101 }, (_, i) => 'id-' + i), signal);
   expect(fetch).toHaveBeenCalledTimes(3);
   expect(new URL(String(fetch.mock.calls[1]?.[0])).searchParams.get('id')?.split(',')).toHaveLength(100);
-  expect(new URL(String(fetch.mock.calls[2]?.[0])).searchParams.get('id')).toBe('in.(id-100)');
+  expect(new URL(String(fetch.mock.calls[2]?.[0])).searchParams.get('id')).toBe('in.("id-100")');
 });
 
 it('classifies a fetch TypeError as offline and REST errors as errors', async () => {
@@ -52,4 +53,19 @@ it('classifies a fetch TypeError as offline and REST errors as errors', async ()
   await expect(transport.push('sessions', [], signal)).rejects.toMatchObject({ offline: true });
   fetch.mockResolvedValueOnce(Response.json({ message: 'denied' }, { status: 403 }));
   await expect(transport.pull('sessions', null, 1000, signal)).rejects.toMatchObject({ offline: false });
+});
+
+it('escapes reserved characters in deferred IDs without losing valid mixed-set IDs', async () => {
+  const { fetch, transport, signal } = setup();
+  const mixedId = mixedSetId('session', 'block', 1);
+  const row = { id: mixedId, data: {} };
+  fetch.mockImplementationOnce(async (input) => {
+    const filter = new URL(String(input)).searchParams.get('id');
+    return filter === String.raw`in.("[\"session\",\"block\",1]","bad,(\"\\)")`
+      ? Response.json([row])
+      : Response.json({ message: 'Invalid id filter' }, { status: 400 });
+  });
+
+  await expect(transport.fetchByIds('sets', [mixedId, 'bad,("\\)', ''], signal)).resolves.toEqual([row]);
+  expect(fetch).toHaveBeenCalledOnce();
 });

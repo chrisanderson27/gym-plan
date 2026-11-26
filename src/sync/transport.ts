@@ -57,9 +57,11 @@ export function createSupabaseTransport(client: SupabaseClient<Database>): SyncT
       return read<SyncRow[]>(query.order('updated_at').order('id').limit(limit).abortSignal(signal));
     },
     async fetchByIds(table, ids, signal) {
+      const keys = ids.filter((id) => typeof id === 'string' && id !== '');
       const rows: SyncRow[] = [];
-      for (let start = 0; start < ids.length; start += 100) {
-        rows.push(...await read<SyncRow[]>(select(table).in('id', ids.slice(start, start + 100)).abortSignal(signal)));
+      for (let start = 0; start < keys.length; start += 100) {
+        const values = [...new Set(keys.slice(start, start + 100))].map(quoted).join(',');
+        rows.push(...await read<SyncRow[]>(select(table).filter('id', 'in', `(${values})`).abortSignal(signal)));
       }
       return rows;
     },

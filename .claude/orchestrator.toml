@@ -33,7 +33,16 @@ profile        = ".claude/e2e/profile.md"
 session_prefix = "gym-plan-e2e"
 
 [worker]
-allow = ["npm install", "npm ci", "npm run", "npm test", "npx playwright", "npx vite", "npx tsc", "npx vitest", "npx supabase", "node scripts/"]
+allow = [
+  "npm install", "npm ci", "npm run", "npm test", "npx playwright", "npx vite", "npx tsc", "npx vitest",
+  "Bash(npx supabase start)", "Bash(npx supabase stop)",
+  "Bash(npx supabase status)", "Bash(npx supabase status -o env)",
+  "Bash(npx supabase db reset)", "Bash(npx supabase test db)",
+  "Bash(npx supabase gen types typescript --local)",
+  "Bash(npx supabase gen types typescript --local --schema public)",
+  "Bash(node scripts/live-server.mjs)", "Bash(node scripts/make-icons.mjs)",
+  "Bash(node scripts/gen-gym.mjs)", "Bash(node scripts/check-gym-privacy.mjs)"
+]
 
 [figma]
 checks     = "per-phase"

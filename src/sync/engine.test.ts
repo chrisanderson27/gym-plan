@@ -1,4 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { exerciseById } from '../content';
+import { startMixedSession, updateMixedSession } from '../data/mixedSession';
+import { COACHED_TEMPLATE, MIXED_AT } from '../data/mixedSession.test-fixture';
+import { session, topSets } from '../data/p4-test-utils';
 import { ensureDefaultSettings } from '../data/settings';
 import { STORE_NAMES } from '../data/stores';
 import { openTestDb } from '../data/test-utils';
@@ -11,9 +15,16 @@ import type { SyncRow } from './transport';
 
 const epoch = new Date(0).toISOString();
 const later = '2090-01-01T00:00:00.000Z';
-const remote = (id: string, data: SyncRow['data'] = { id }, client_updated_at = later) =>
+const sessionRow = (id: string) => ({ ...session(id, 0) });
+const remote = (id: string, data: SyncRow['data'] = sessionRow(id), client_updated_at = later) =>
   ({ id, data, client_updated_at, deleted_at: null });
 const bodyLog = (date: string, weightLb = 150) => ({ date, weightLb, protein: false });
+const seedRelated = (sessionId: string) => {
+  const set = { ...topSets(sessionId, 0)[0]!, id: 'set' };
+  server.seed('sets', [remote(set.id, set)]);
+  server.seed('runs', [remote(sessionId, { sessionId, kind: 'easy', distanceMi: 2, durationSec: 1200, intervals: [], rpe: 5, painFlag: false })]);
+  server.seed('swims', [remote(sessionId, { sessionId, poolLength: 25, poolUnit: 'yd', distance: 100, sets: [], rpe: 5, shoulderPainFlag: false })]);
+};
 
 let db: ReturnType<typeof openTestDb>;
 let server: ReturnType<typeof createFakeServer>;
@@ -66,10 +77,10 @@ it('pull applies without requeueing, and overlap replay is idempotent', async ()
   const push = vi.spyOn(server.transport, 'push');
   const pull = vi.spyOn(server.transport, 'pull');
   await engine.syncNow();
-  expect(await db.sessions.get('s')).toEqual({ id: 's' });
+  expect(await db.sessions.get('s')).toEqual(sessionRow('s'));
   expect(await db.syncOutbox.count()).toBe(0);
   await engine.syncNow();
-  expect(await db.sessions.toArray()).toEqual([{ id: 's' }]);
+  expect(await db.sessions.toArray()).toEqual([sessionRow('s')]);
   expect(await db.syncOutbox.count()).toBe(0);
   expect(push).not.toHaveBeenCalled();
   expect(pull).toHaveBeenCalledWith('sessions', { since: '2025-12-31T23:59:00.000Z' }, 1000, expect.any(AbortSignal));
@@ -206,9 +217,7 @@ it('rolls back all related stores and their cursors when applying sets fails', a
   const { engine } = setup();
   await owner();
   server.seed('sessions', [remote('s')]);
-  server.seed('sets', [remote('set', { id: 'set', sessionId: 's' })]);
-  server.seed('runs', [remote('s', { sessionId: 's' })]);
-  server.seed('swims', [remote('s', { sessionId: 's' })]);
+  seedRelated('s');
   db.sets.hook('creating', () => { throw new Error('injected set write failure'); });
 
   await engine.syncNow();
@@ -244,11 +253,9 @@ it('parks open session rows, advances the cursor, and refetches behind it on clo
   engine.setOpenSession('s');
   const cursorTime = '2026-01-03T00:00:00.000001+00:00';
   server.seed('sessions', [remote('s'), { ...remote('other'), updated_at: cursorTime }]);
-  server.seed('sets', [remote('set', { id: 'set', sessionId: 's' })]);
-  server.seed('runs', [remote('s', { sessionId: 's' })]);
-  server.seed('swims', [remote('s', { sessionId: 's' })]);
+  seedRelated('s');
   await engine.syncNow();
-  expect(await db.sessions.toArray()).toEqual([{ id: 'other' }]);
+  expect(await db.sessions.toArray()).toEqual([sessionRow('other')]);
   expect(await db.sets.count()).toBe(0);
   expect(await db.runs.count()).toBe(0);
   expect(await db.swims.count()).toBe(0);
@@ -260,7 +267,7 @@ it('parks open session rows, advances the cursor, and refetches behind it on clo
   ]);
   expect(await db.syncMeta.get('cursor:sessions')).toHaveProperty('cursor', { updatedAt: cursorTime, id: 'other' });
   server.seed('sessions', [
-    remote('s', { id: 's', notes: 'latest' }),
+    remote('s', { ...sessionRow('s'), notes: 'latest' }),
     { ...remote('next'), updated_at: '2026-01-04T00:00:00.000001+00:00' },
   ]);
   engine.setOpenSession(null);
@@ -307,7 +314,7 @@ it('silently clears an old owner with no pending entries before pulling the new 
   const push = vi.spyOn(server.transport, 'push');
   await engine.syncNow();
   expect(push).not.toHaveBeenCalled();
-  expect(await db.sessions.toArray()).toEqual([{ id: 'new' }]);
+  expect(await db.sessions.toArray()).toEqual([sessionRow('new')]);
   expect(await db.syncMeta.get('owner')).toMatchObject({ ownerId: 'b' });
 });
 
@@ -322,7 +329,7 @@ it.each(['discard', 'keep'] as const)('blocks push on pending owner mismatch, th
   await engine.resolveMismatch(action);
   expect(push).not.toHaveBeenCalled();
   if (action === 'discard') {
-    expect(await db.sessions.toArray()).toEqual([{ id: 'new' }]);
+    expect(await db.sessions.toArray()).toEqual([sessionRow('new')]);
     expect(await db.syncOutbox.count()).toBe(0);
     expect(await db.syncMeta.get('owner')).toMatchObject({ ownerId: 'b' });
   } else {
@@ -342,6 +349,60 @@ it('skips and logs mismatched primary keys without blocking the cursor', async (
   expect(warn).toHaveBeenCalledOnce();
   expect(await db.sessions.count()).toBe(0);
   expect(await db.syncMeta.get('cursor:sessions')).toHaveProperty('cursor.id', 's');
+});
+
+it('skips malformed rows, preserving the local edit and applying the rest of the page', async () => {
+  const { engine } = setup();
+  await owner();
+  const local = bodyLog('2026-01-01');
+  const valid = bodyLog('2026-01-02');
+  const last = '2026-01-03';
+  server.seed('body_logs', [
+    remote(local.date, { ...local, weightLb: 'invalid' }),
+    remote(valid.date, valid),
+    remote(last, { date: last }),
+  ]);
+  const pull = server.transport.pull;
+  vi.spyOn(server.transport, 'pull').mockImplementationOnce(async (...args) => {
+    await db.bodyLogs.put(local);
+    return pull(...args);
+  });
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  await engine.syncNow();
+
+  expect(await db.bodyLogs.toArray()).toEqual([local, valid]);
+  expect(await db.syncOutbox.toArray()).toMatchObject([{ store: 'bodyLogs', key: local.date, op: 'put' }]);
+  expect(warn).toHaveBeenCalledTimes(2);
+  expect(await db.syncMeta.get('cursor:bodyLogs')).toHaveProperty('cursor.id', last);
+  expect(engine.getStatus().state).toBe('idle');
+});
+
+it('accepts an active coached session with custom equipment pulled in the same sync', async () => {
+  const machine = {
+    id: 'legacy-leg-press', name: `${exerciseById.get('leg-press')!.name} — Plate-loaded machine`,
+    kind: 'machine' as const, steps: [100],
+  };
+  const workout = COACHED_TEMPLATE.ordered!;
+  const block = workout.blocks[2]!;
+  if (block.kind !== 'coached' || !block.stations) throw new Error('Missing coached workout fixture');
+  const stations = block.stations.map((s) => s.slotId === 'squat' ? { ...s, exerciseId: 'leg-press', equipmentId: machine.id } : s);
+  await db.equipment.add(machine);
+  await db.templates.put({ ...COACHED_TEMPLATE, ordered: { ...workout, blocks: [{ ...block, stations }, workout.blocks.at(-1)!] } });
+  const id = await startMixedSession(db, { templateId: COACHED_TEMPLATE.id }, MIXED_AT);
+  const initial = (await db.sessions.get(id))!;
+  const active = (await updateMixedSession(db, id, initial.mixed!.cursor, { type: 'start' }, MIXED_AT))!;
+  expect(active.mixed?.stations.rotation).toContainEqual(expect.objectContaining({ equipmentId: machine.id }));
+  await db.sessions.clear();
+  await db.equipment.clear();
+  const { engine } = setup();
+  await owner();
+  server.seed('sessions', [remote(id, { ...active })]);
+  server.seed('equipment', [remote(machine.id, machine)]);
+
+  await engine.syncNow();
+
+  expect(await db.sessions.get(id)).toEqual(active);
 });
 
 it('pause during pull prevents any apply, and a new sign-in resumes sync automatically', async () => {
@@ -528,7 +589,7 @@ it('resumes push and pull for the same signed-in user after a pause', async () =
   await engine.resume();
 
   expect(server.rows('body_logs').get(row.date)?.data).toEqual(row);
-  expect(await db.sessions.get('s')).toEqual({ id: 's' });
+  expect(await db.sessions.get('s')).toEqual(sessionRow('s'));
   expect(engine.getStatus()).toMatchObject({ state: 'idle', pending: 0 });
 });
 
