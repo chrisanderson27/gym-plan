@@ -8,7 +8,6 @@ it('pre-approves only exact local Supabase commands and named scripts', () => {
 
   expect(allow.filter((rule) => /supabase|node scripts\//.test(rule)).sort()).toEqual([
     'Bash(node scripts/check-gym-privacy.mjs)',
-    'Bash(node scripts/gen-gym.mjs)',
     'Bash(node scripts/live-server.mjs)',
     'Bash(node scripts/make-icons.mjs)',
     'Bash(npx supabase db reset)',

@@ -41,7 +41,7 @@ allow = [
   "Bash(npx supabase gen types typescript --local)",
   "Bash(npx supabase gen types typescript --local --schema public)",
   "Bash(node scripts/live-server.mjs)", "Bash(node scripts/make-icons.mjs)",
-  "Bash(node scripts/gen-gym.mjs)", "Bash(node scripts/check-gym-privacy.mjs)"
+  "Bash(node scripts/check-gym-privacy.mjs)"
 ]
 
 [figma]

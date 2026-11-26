@@ -12,6 +12,8 @@ import { ADOPTION, pendingCount, unqueuedRows } from './outbox';
 import { RELATED_STORES, SYNC_TABLES, rowUpdatedAt, sessionIdOf } from './tables';
 import { SyncError, createSupabaseTransport, type PushRow, type SyncRow, type SyncTransport } from './transport';
 
+declare const __APP_VERSION__: string;
+
 export type SyncStatus = {
   state: 'off' | 'idle' | 'syncing' | 'offline' | 'error' | 'paused' | 'owner-mismatch';
   pending: number;
@@ -30,6 +32,7 @@ type Run = { generation: number; ownerId: string; signal: AbortSignal };
 const PUSH_LIMIT = 500;
 const PULL_LIMIT = 1000;
 const OVERLAP_MS = 60_000;
+const INVALID_RETRY_MS = 60 * 60_000;
 const cursorId = (store: StoreName) => 'cursor:' + store;
 const pair = (row: SyncRow) => ({ updatedAt: row.updated_at, id: row.id });
 const deferredKey = (store: StoreName, key: string) => JSON.stringify([store, key]);
@@ -37,15 +40,38 @@ const deferredKey = (store: StoreName, key: string) => JSON.stringify([store, ke
 const sessionGroup: readonly StoreName[] = ['equipment', ...RELATED_STORES];
 const applyGroups = [sessionGroup, ...STORE_NAMES.filter((store) => !sessionGroup.includes(store)).map((store) => [store])];
 
+function validRow(store: StoreName, row: SyncRow, equipment?: ReadonlyMap<string, Equipment>): boolean {
+  if (row.deleted_at) return true;
+  if (!row.id || row.data?.[USER_STORES[store]] !== row.id) {
+    console.warn('Skipping sync row with an invalid primary key', store);
+    return false;
+  }
+  try {
+    validateRows(store, [row.data], equipment && { equipment });
+    return true;
+  } catch {
+    console.warn('Skipping malformed sync row', store);
+    return false;
+  }
+}
+
+function relatedSessionId(store: StoreName, row: SyncRow): string | undefined {
+  return store === 'sets' ? sessionIdOf(store, row.data ?? {}) : row.id;
+}
+
 class Aborted extends Error {}
 
-export function createSyncEngine({ db, transport, auth, win, now = () => new Date(), debounceMs = 2000 }: {
+export function createSyncEngine({
+  db, transport, auth, win, now = () => new Date(), debounceMs = 2000,
+  appVersion = typeof __APP_VERSION__ === 'undefined' ? 'dev' : __APP_VERSION__,
+}: {
   db: GymDb;
   transport: SyncTransport | null;
   auth: Pick<ReturnType<typeof createAuth>, 'getState' | 'subscribe' | 'signOut'>;
   win?: SyncWindow;
   now?: () => Date;
   debounceMs?: number;
+  appVersion?: string;
 }) {
   const listeners = new Set<() => void>();
   let status: SyncStatus = { state: transport ? 'idle' : 'off', pending: 0, lastSyncedAt: null };
@@ -213,24 +239,13 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     }
   }
 
-  async function applyRow(store: StoreName, row: SyncRow, deferred: Map<string, DeferredRow>, equipment?: ReadonlyMap<string, Equipment>) {
+  async function applyRow(store: StoreName, row: SyncRow, deferred: Map<string, DeferredRow>) {
     const key = deferredKey(store, row.id);
-    if (!row.deleted_at) {
-      if (!row.id || row.data?.[USER_STORES[store]] !== row.id) {
-        console.warn('Skipping sync row with an invalid primary key', store);
-        deferred.delete(key);
-        return;
-      }
-      try {
-        validateRows(store, [row.data], equipment && { equipment });
-      } catch {
-        console.warn('Skipping malformed sync row', store);
-        deferred.delete(key);
-        return;
-      }
-    }
     const pending = await db.syncOutbox.get({ store, key: row.id });
-    if (pending && Date.parse(pending.clientUpdatedAt) > Date.parse(row.client_updated_at)) return;
+    if (pending && Date.parse(pending.clientUpdatedAt) > Date.parse(row.client_updated_at)) {
+      if (deferred.get(key)?.reason === 'invalid') deferred.delete(key);
+      return;
+    }
     if (openSession !== null && RELATED_STORES.includes(store)) {
       // Tombstones carry no data, so use the local set's parent or the session-keyed table's id.
       const sessionId = row.deleted_at
@@ -250,29 +265,78 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
 
   async function pull(cloud: SyncTransport, run: Run) {
     const deferred = await readDeferred();
+    const pulledAt = now().getTime();
     const pulled = new Map<StoreName, { rows: Map<string, SyncRow>; cursor?: SyncMeta['cursor']; missing: string[] }>();
     for (const store of STORE_NAMES) {
       const pageRows = await pullPages(cloud, run, store);
       const last = pageRows.at(-1);
       const rows = new Map(pageRows.map((row) => [row.id, row]));
-      const ids = [...deferred.values()].filter((row) => row.store === store &&
-        (row.reason === 'refetch' || openSession === null || row.sessionId !== openSession)).map((row) => row.key);
+      pulled.set(store, { rows, cursor: last && pair(last), missing: [] });
+    }
+
+    // When one parked session row can be retried, refetch its whole parked group.
+    const retry = new Set<string>();
+    const retrySessions = new Set<string>();
+    for (const [key, row] of deferred) {
+      if (row.reason !== 'invalid') continue;
+      const latest = pulled.get(row.store)!.rows.get(row.key);
+      if (row.appVersion !== appVersion || row.retryAt <= pulledAt ||
+        (latest && (latest.deleted_at || latest.updated_at !== row.updatedAt))) {
+        retry.add(key);
+        if (row.sessionId) retrySessions.add(row.sessionId);
+      }
+    }
+
+    const blockedSessions = new Set<string>();
+    for (const [store, batch] of pulled) {
+      const ids: string[] = [];
+      for (const [key, row] of deferred) {
+        if (row.store !== store) continue;
+        if (row.reason === 'invalid' && !retry.has(key) && !(row.sessionId && retrySessions.has(row.sessionId))) {
+          batch.rows.delete(row.key); // Ignore unchanged rows replayed by the cursor overlap.
+          if (row.sessionId) blockedSessions.add(row.sessionId);
+        } else if (row.reason !== 'open-session' || openSession === null || row.sessionId !== openSession) {
+          ids.push(row.key);
+        }
+      }
       check(run);
       if (ids.length) {
-        for (const row of await cloud.fetchByIds(SYNC_TABLES[store], ids, run.signal)) rows.set(row.id, row);
+        for (const row of await cloud.fetchByIds(SYNC_TABLES[store], ids, run.signal)) batch.rows.set(row.id, row);
+        batch.missing = ids.filter((id) => !batch.rows.has(id));
       }
-      pulled.set(store, { rows, cursor: last && pair(last), missing: ids.filter((id) => !rows.has(id)) });
     }
     for (const group of applyGroups) {
       await write(run, [...group.map(table), db.syncOutbox, db.syncMeta], async () => {
         await checkOwner(run);
         const parked = await readDeferred();
+        const rejected = new Set<SyncRow>();
         for (const store of group) {
           const { rows, cursor, missing } = pulled.get(store)!;
-          const equipment = store === 'sessions' && rows.size
-            ? new Map((await db.equipment.toArray()).map((item) => [item.id, item]))
-            : undefined;
-          for (const row of rows.values()) await applyRow(store, row, parked, equipment);
+          if (store === 'sessions') {
+            // Equipment has applied in this transaction. Check all related rows before writing any.
+            const equipment = rows.size ? new Map((await db.equipment.toArray()).map((item) => [item.id, item])) : undefined;
+            for (const related of RELATED_STORES) {
+              for (const row of pulled.get(related)!.rows.values()) {
+                if (validRow(related, row, equipment)) continue;
+                rejected.add(row);
+                const sessionId = relatedSessionId(related, row);
+                if (sessionId) blockedSessions.add(sessionId);
+              }
+            }
+          }
+          const related = RELATED_STORES.includes(store);
+          for (const row of rows.values()) {
+            const sessionId = related && !row.deleted_at ? relatedSessionId(store, row) : undefined;
+            const invalid = related ? rejected.has(row) || (sessionId && blockedSessions.has(sessionId)) : !validRow(store, row);
+            if (invalid) {
+              if (row.id) parked.set(deferredKey(store, row.id), {
+                store, key: row.id, reason: 'invalid', sessionId, appVersion,
+                updatedAt: row.updated_at, retryAt: pulledAt + INVALID_RETRY_MS,
+              });
+            } else {
+              await applyRow(store, row, parked);
+            }
+          }
           for (const id of missing) parked.delete(deferredKey(store, id));
           if (cursor) await db.syncMeta.put({ id: cursorId(store), cursor });
         }

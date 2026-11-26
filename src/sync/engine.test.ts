@@ -38,7 +38,9 @@ afterEach(async () => {
   await db.delete();
 });
 
-function setup({ user = 'a', online = true, capture = true }: { user?: string; online?: boolean; capture?: boolean } = {}) {
+function setup({ user = 'a', online = true, capture = true, appVersion = '1.0.0', now = () => new Date(later) }: {
+  user?: string; online?: boolean; capture?: boolean; appVersion?: string; now?: () => Date;
+} = {}) {
   const handlers = new Set<() => void>();
   const win = Object.assign(new EventTarget(), {
     navigator: { onLine: online },
@@ -55,7 +57,7 @@ function setup({ user = 'a', online = true, capture = true }: { user?: string; o
     return { ok: true } as const;
   });
   const engine = createSyncEngine({
-    db, transport: server.transport, win, now: () => new Date(later),
+    db, transport: server.transport, win, now, appVersion,
     auth: {
       getState: () => state, signOut,
       subscribe(listener) {
@@ -376,6 +378,95 @@ it('skips malformed rows, preserving the local edit and applying the rest of the
   expect(warn).toHaveBeenCalledTimes(2);
   expect(await db.syncMeta.get('cursor:bodyLogs')).toHaveProperty('cursor.id', last);
   expect(engine.getStatus().state).toBe('idle');
+});
+
+it('retries parked rows behind the cursor on upgrade and throttles unchanged malformed rows', async () => {
+  const { engine } = setup();
+  await owner();
+  const good = bodyLog('2026-01-01');
+  const bad = bodyLog('2026-01-02');
+  const end = bodyLog('2026-01-03');
+  const oldTime = '2026-01-01T00:00:00.000Z';
+  const newTime = '2026-01-02T00:00:00.000Z';
+  server.seed('body_logs', [good, bad, end].map((log) => ({
+    ...remote(log.date, { ...log, weightLb: 'invalid' }), updated_at: log === end ? newTime : oldTime,
+  })));
+  const fetch = vi.spyOn(server.transport, 'fetchByIds');
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  await engine.syncNow();
+  await engine.syncNow();
+  expect(warn).toHaveBeenCalledTimes(3);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(await db.syncMeta.get('cursor:bodyLogs')).toHaveProperty('cursor.id', end.date);
+
+  server.seed('body_logs', [{ ...remote(good.date, good), updated_at: oldTime }]);
+  const upgraded = setup({ capture: false, appVersion: '2.0.0' }).engine;
+  await upgraded.syncNow();
+  await upgraded.syncNow();
+
+  expect(fetch).toHaveBeenCalledExactlyOnceWith('body_logs', [good.date, bad.date, end.date], expect.any(AbortSignal));
+  expect(await db.bodyLogs.toArray()).toEqual([good]);
+  expect((await db.syncMeta.get('deferred'))?.rows).toMatchObject([
+    { store: 'bodyLogs', key: bad.date, reason: 'invalid' },
+    { store: 'bodyLogs', key: end.date, reason: 'invalid' },
+  ]);
+  expect(warn).toHaveBeenCalledTimes(5);
+  expect(upgraded.getStatus().state).toBe('idle');
+});
+
+it('retries a still malformed row only after the same-version backoff expires', async () => {
+  let time = Date.parse(later);
+  const { engine } = setup({ now: () => new Date(time) });
+  await owner();
+  const date = '2026-01-01';
+  server.seed('body_logs', [remote(date, { date })]);
+  const fetch = vi.spyOn(server.transport, 'fetchByIds');
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  await engine.syncNow();
+  time += 60 * 60_000 - 1;
+  await engine.syncNow();
+  expect(fetch).not.toHaveBeenCalled();
+  expect(warn).toHaveBeenCalledOnce();
+
+  time++;
+  await engine.syncNow();
+  await engine.syncNow();
+  expect(fetch).toHaveBeenCalledExactlyOnceWith('body_logs', [date], expect.any(AbortSignal));
+  expect(warn).toHaveBeenCalledTimes(2);
+  expect((await db.syncMeta.get('deferred'))?.rows).toMatchObject([{ key: date, reason: 'invalid' }]);
+});
+
+it.each(['sessions', 'sets'] as const)('parks the session and its children together when %s validation fails', async (store) => {
+  const { engine } = setup();
+  await owner();
+  seedRelated('s');
+  server.seed('sessions', [remote('s'), remote('unrelated')]);
+  const id = store === 'sessions' ? 's' : 'set';
+  const valid = server.rows(store).get(id)!;
+  const invalid = store === 'sessions' ? { type: 'invalid' } : { exerciseId: null };
+  server.rows(store).set(id, { ...valid, data: { ...valid.data, ...invalid } });
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  await engine.syncNow();
+
+  expect(await db.sessions.toArray()).toEqual([sessionRow('unrelated')]);
+  for (const child of ['sets', 'runs', 'swims'] as const) expect(await db.table(child).count(), child).toBe(0);
+  expect((await db.syncMeta.get('deferred'))?.rows).toMatchObject([
+    { store: 'sessions', key: 's', reason: 'invalid' },
+    { store: 'sets', key: 'set', reason: 'invalid' },
+    { store: 'runs', key: 's', reason: 'invalid' },
+    { store: 'swims', key: 's', reason: 'invalid' },
+  ]);
+  expect(engine.getStatus().state).toBe('idle');
+
+  server.seed(store, [{ ...valid, updated_at: '2026-01-02T00:00:00.000Z' }]);
+  await engine.syncNow();
+
+  expect(await db.sessions.get('s')).toEqual(sessionRow('s'));
+  for (const child of ['sets', 'runs', 'swims'] as const) expect(await db.table(child).count(), child).toBe(1);
+  expect(await db.syncMeta.get('deferred')).toBeUndefined();
 });
 
 it('accepts an active coached session with custom equipment pulled in the same sync', async () => {
