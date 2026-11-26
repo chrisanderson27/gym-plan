@@ -29,6 +29,15 @@ export function stamp(): string {
   return new Date(last).toISOString();
 }
 
+export async function unqueuedRows(db: GymDb, store: StoreName) {
+  const queued = new Set((await db.syncOutbox.where('store').equals(store).toArray()).map(({ key }) => key));
+  const rows = await db.table<Record<string, unknown>>(store).toArray();
+  return rows.flatMap((row) => {
+    const key = String(row[USER_STORES[store]]);
+    return queued.has(key) ? [] : [{ key, row }];
+  });
+}
+
 export function pendingCount(db: GymDb): Promise<number> {
   return db.transaction('r', db.tables, async () => {
     let pending = await db.syncOutbox.count();
@@ -44,12 +53,9 @@ export function pendingCount(db: GymDb): Promise<number> {
     if (!await db.syncMeta.get(ADOPTION)) return pending;
 
     // An older or interrupted run may have claimed ownership before queueing its legacy rows.
-    const queued = new Set((await db.syncOutbox.orderBy('[store+key]').keys()).map((key) => JSON.stringify(key)));
     for (const store of STORE_NAMES) {
-      pending += await db.table<Record<string, unknown>>(store).filter((row) => {
-        const key = String(row[USER_STORES[store]]);
-        return !queued.has(JSON.stringify([store, key])) && !isDefaultRow(store, key, row);
-      }).count();
+      const rows = await unqueuedRows(db, store);
+      pending += rows.filter(({ key, row }) => !isDefaultRow(store, key, row)).length;
     }
     return pending;
   });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { account } from '../../sync/account';
 import { sync } from '../../sync/engine';
 import { Sheet } from '../Sheet';
@@ -18,8 +18,15 @@ export function AccountSection() {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [pending, setPending] = useState<number | null>(null);
+  const pendingSignOut = useRef(false);
+  const unmounted = useRef(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState('');
+
+  useLayoutEffect(() => () => {
+    unmounted.current = true;
+    if (pendingSignOut.current) void account.cancelSignOut();
+  }, []);
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -46,13 +53,20 @@ export function AccountSection() {
   }
 
   const signOut = (discardUpTo?: number) => run(async () => {
+    pendingSignOut.current = false;
     const result = await account.signOut({ discardUpTo });
+    if (result.kind === 'pending' && unmounted.current) {
+      await account.cancelSignOut();
+      return;
+    }
+    pendingSignOut.current = result.kind === 'pending';
     setPending(result.kind === 'pending' ? result.count : null);
     if (result.kind === 'done') navigate('/');
     if (result.kind === 'error') setError("Couldn't sign out. Try again.");
   });
 
   const cancelSignOut = () => run(async () => {
+    pendingSignOut.current = false;
     await account.cancelSignOut();
     setPending(null);
   });

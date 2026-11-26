@@ -30,7 +30,7 @@ jobs:
       # Playwright starts its own preview server through webServer.
       - run: npx playwright test --project=webkit
       - name: Build for Pages
-        run: npm run build && test -f dist/sw.js && test $(du -sk dist | cut -f1) -lt 2048
+        run: npm run build && test -f dist/sw.js && test $(du -sk dist | cut -f1) -lt 2048 && test -f dist/manifest.webmanifest
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}

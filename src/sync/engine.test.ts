@@ -6,7 +6,7 @@ import type { AuthState } from './auth';
 import { createSyncEngine } from './engine';
 import { createFakeServer } from './fake-server.test-fixture';
 import { withSyncApply } from './marker';
-import { installOutbox } from './outbox';
+import { ADOPTION, installOutbox, pendingCount } from './outbox';
 import type { SyncRow } from './transport';
 
 const epoch = new Date(0).toISOString();
@@ -161,6 +161,31 @@ it('seeds adoption before a failed push and retries guest edits at their real ti
   expect(server.rows('settings').get('settings')?.client_updated_at).toBe(epoch);
   expect(await db.syncOutbox.count()).toBe(0);
   expect(await db.syncMeta.get('adoption')).toBeUndefined();
+});
+
+it('counts the same pending edits before and after seeding legacy rows', async () => {
+  const { engine } = setup();
+  const queuedDate = '2026-01-01';
+  const legacyDate = '2026-01-02';
+  await owner();
+  await db.syncMeta.put({ id: ADOPTION });
+  await db.bodyLogs.add(bodyLog(queuedDate));
+  await withSyncApply(db, [db.bodyLogs, db.sessions], async () => {
+    await db.bodyLogs.add(bodyLog(legacyDate));
+    await db.table('sessions').add({ id: queuedDate });
+  });
+
+  const before = await pendingCount(db);
+  expect(before).toBe(3);
+  server.failNext('error');
+  await engine.syncNow();
+
+  expect(await db.syncMeta.get(ADOPTION)).toBeUndefined();
+  const queued = await db.syncOutbox.toArray();
+  expect(queued.filter(({ store }) => store === 'bodyLogs' || store === 'sessions')).toHaveLength(before);
+  expect(queued.some(({ store }) => store === 'settings')).toBe(true);
+  expect(await pendingCount(db)).toBe(before);
+  await engine.pause();
 });
 
 it('downloads 2500 rows at one updated_at without omissions or duplicates', async () => {
@@ -603,4 +628,23 @@ it('retries idle errors with exponential backoff and cancels the retry on pause'
   await engine.pause();
   await vi.advanceTimersByTimeAsync(300_000);
   expect(push).toHaveBeenCalledTimes(3);
+});
+
+it('starts retry backoff at 30 seconds after signing out and back in', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const timers = vi.spyOn(globalThis, 'setTimeout');
+  const { engine, setUser } = setup();
+  await owner();
+  vi.spyOn(server.transport, 'pull').mockRejectedValue(new Error('Pull unavailable'));
+  await engine.syncNow();
+  expect(timers).toHaveBeenCalledWith(expect.any(Function), 30_000);
+
+  engine.start();
+  setUser('');
+  setUser('a');
+  timers.mockClear();
+  await vi.waitFor(() => expect(engine.getStatus().state).toBe('error'));
+
+  expect(timers).toHaveBeenCalledWith(expect.any(Function), 30_000);
+  await engine.pause();
 });

@@ -7,7 +7,7 @@ import { auth, type createAuth } from './auth';
 import { clearLocalData } from './clear';
 import { supabase } from './client';
 import { withSyncApply } from './marker';
-import { ADOPTION, pendingCount } from './outbox';
+import { ADOPTION, pendingCount, unqueuedRows } from './outbox';
 import { RELATED_STORES, SYNC_TABLES, rowUpdatedAt, sessionIdOf } from './tables';
 import { SyncError, createSupabaseTransport, type PushRow, type SyncRow, type SyncTransport } from './transport';
 
@@ -136,15 +136,10 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
       // A stored sign-in can start before the shell's settings effect.
       await ensureDefaultSettings(db, now());
       for (const store of STORE_NAMES) {
-        const existing = new Set((await entries(store).toArray()).map((entry) => entry.key));
-        const rows = await table(store).toArray();
-        const unqueued = rows.flatMap((row): SyncOutboxEntry[] => {
-          const key = String(row[USER_STORES[store]]);
-          return existing.has(key) ? [] : [{
-            store, key, op: 'put', clientUpdatedAt: rowUpdatedAt(store, row),
-          }];
-        });
-        await db.syncOutbox.bulkAdd(unqueued);
+        const rows = await unqueuedRows(db, store);
+        await db.syncOutbox.bulkAdd(rows.map(({ key, row }) => ({
+          store, key, op: 'put', clientUpdatedAt: rowUpdatedAt(store, row),
+        })));
       }
       await db.syncMeta.delete(ADOPTION);
     });
@@ -277,6 +272,7 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     again = false;
     clearTimeout(debounce);
     clearTimeout(retryTimer);
+    retryAttempt = 0;
     controller?.abort();
     update({ state });
   }

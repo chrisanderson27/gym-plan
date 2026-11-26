@@ -116,6 +116,20 @@ test('online failed flush warns, cancel resumes sync, and explicit discard clear
   expect(server.rows('sessions').has('discard-me')).toBe(false);
 });
 
+test('leaving Preferences with a sign-out warning resumes sync', async ({ page }) => {
+  const { server, authCalls } = await signedIn(page);
+  server.rejectPush = true;
+  await seedBackup(page, { sessions: [workout('keep-on-leave')] });
+  await signOut(page);
+  await expect(signOutSheet(page)).toBeVisible();
+
+  server.rejectPush = false;
+  await page.evaluate(() => { window.location.hash = '/'; });
+  await expect(card(page)).toHaveCount(0);
+  await expect.poll(() => server.rows('sessions').has('keep-on-leave')).toBe(true);
+  expect(authCalls).not.toContain('logout');
+});
+
 test('offline sign-out warns about both pending workouts and signs out on confirmation', async ({ page, context }) => {
   const { server } = await signedIn(page);
   server.rejectPush = true;
