@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import type { Database } from './database.types';
 
 export function readCloudConfig(env: {
   VITE_SUPABASE_URL?: string;
@@ -11,8 +12,7 @@ export function readCloudConfig(env: {
 
 const cfg = readCloudConfig(import.meta.env);
 export const isCloudConfigured = cfg !== null;
-// TODO(P1): regenerate types from the local Supabase stack.
-export const supabase = cfg ? createClient(cfg.url, cfg.key, {
+export const supabase = cfg ? createClient<Database>(cfg.url, cfg.key, {
   auth: {
     flowType: 'pkce',
     persistSession: true,

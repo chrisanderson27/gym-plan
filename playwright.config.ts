@@ -1,9 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const liveUrl = 'http://127.0.0.1:4174/gym-plan/';
-const runLive = process.argv.some((arg, index, args) =>
+// Workers reload this config without the CLI arguments and inherit the selection.
+process.env.GYM_PLAN_LIVE ??= process.argv.some((arg, index, args) =>
   arg === '--project=webkit-live' || (arg === '--project' && args[index + 1] === 'webkit-live'),
-);
+) ? '1' : '0';
+const runLive = process.env.GYM_PLAN_LIVE === '1';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -12,7 +14,9 @@ export default defineConfig({
   use: { baseURL: 'http://localhost:4173/gym-plan/' },
   projects: [
     { name: 'webkit', testDir: 'e2e', use: { ...devices['iPhone 14'], colorScheme: 'dark' } },
-    { name: 'webkit-live', testDir: 'e2e-live', use: { ...devices['iPhone 14'], baseURL: liveUrl } },
+    ...(runLive ? [
+      { name: 'webkit-live', testDir: 'e2e-live', use: { ...devices['iPhone 14'], baseURL: liveUrl } },
+    ] : []),
   ],
   // webServer applies to the whole config, so the WebKit suite must never start the Docker-dependent server.
   webServer: [

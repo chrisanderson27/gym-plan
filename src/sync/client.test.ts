@@ -1,10 +1,16 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from './database.types';
 
 let client: typeof import('./client');
 beforeAll(async () => {
   vi.stubEnv('VITE_SUPABASE_URL', '');
   vi.stubEnv('VITE_SUPABASE_PUBLISHABLE_KEY', '');
   client = await import('./client');
+});
+
+it('uses the generated database schema for the client', () => {
+  expectTypeOf(client.supabase).toEqualTypeOf<SupabaseClient<Database> | null>();
 });
 afterAll(() => vi.unstubAllEnvs());
 

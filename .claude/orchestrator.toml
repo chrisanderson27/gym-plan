@@ -15,7 +15,7 @@ levels = [
   { name = "no-personal-data", cmd = "test $(git ls-files | grep -cE '\\.jsonl$|exports/') -eq 0", expect = "0 tracked personal-data files" },
   { name = "no-secrets", cmd = "test $(git grep --untracked -lE 'sb_secret_[A-Za-z0-9]|SUPABASE_SERVICE_ROL[E]|GOCSP[X]-' | wc -l) -eq 0", expect = "0 files" },
   { name = "no-env-file", cmd = "test $(git ls-files | grep -cE '(^|/)\\.env$') -eq 0", expect = "0 tracked .env files" },
-  { name = "rls", cmd = "npx supabase start && npx supabase test db", expect = "exit 0; all pgTAP assertions pass" },
+  { name = "rls", cmd = "npx supabase start && npx supabase db reset && npx supabase test db", expect = "exit 0; all pgTAP assertions pass" },
   { name = "e2e-live", cmd = "npx supabase start && npx supabase db reset && npx playwright test --project=webkit-live", expect = "exit 0" },
 ]
 

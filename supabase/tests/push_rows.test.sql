@@ -2,7 +2,8 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions, pg_temp;
 
-select plan(50);
+select plan(29 + 2 * count(*)::int)
+from pg_catalog.pg_tables where schemaname = 'public';
 
 insert into auth.users (id, email, aud, role) values
   ('00000000-0000-4000-8000-000000000001', 'push-a@example.test', 'authenticated', 'authenticated'),
@@ -65,6 +66,25 @@ select is((select data from public.sessions where id = 's1'), '{"owner":"B"}'::j
 
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8000-000000000001","role":"authenticated"}', true);
 select is((select data from public.sessions where id = 's1'), '{"restored":true}'::jsonb, 'B push cannot change A row');
+
+select is(
+  (select array_agg(value->>'id' order by value->>'id')
+   from jsonb_array_elements(public.push_rows('sessions', '[
+     {"id":"s1","client_updated_at":"2026-11-03T00:00:00Z"},
+     {"id":"repeated","data":{"first":true},"client_updated_at":"2026-11-05T00:00:00Z"},
+     {"id":"fresh","client_updated_at":"2026-11-05T00:00:00Z"},
+     {"id":"repeated","data":{"last":true},"client_updated_at":"2026-11-05T00:00:00Z"},
+     {"id":"repeated","data":{"stale":true},"client_updated_at":"2026-11-04T00:00:00Z"},
+     {"id":"s1","client_updated_at":"2026-11-02T00:00:00Z"}
+   ]'))),
+  array['fresh', 'repeated'], 'batch returns one winner per accepted id and excludes stale rows'
+);
+select is((select data from public.sessions where id = 'repeated'), '{"last":true}'::jsonb,
+  'duplicate ids use the newest timestamp and last row on a tie');
+select throws_ok(
+  $$select public.push_rows('sessions', '[{"id":"repeated"},{"id":"repeated","client_updated_at":"2026-11-05T00:00:00Z"}]')$$,
+  '23502', null, 'deduplication does not hide a missing client timestamp'
+);
 reset role;
 
 create function pg_temp.account_rows(check_deleted boolean) returns setof text
@@ -75,10 +95,9 @@ declare
   table_name text;
   row_count bigint;
 begin
-  foreach table_name in array array[
-    'sessions', 'sets', 'runs', 'swims', 'tests', 'body_logs',
-    'templates', 'library_blocks', 'feedback', 'settings', 'equipment', 'exercise_overrides'
-  ] loop
+  for table_name in
+    select tablename from pg_catalog.pg_tables where schemaname = 'public' order by tablename
+  loop
     if not check_deleted then
       if table_name <> 'sessions' then
         execute format('insert into public.%I (user_id, id, data, client_updated_at)
