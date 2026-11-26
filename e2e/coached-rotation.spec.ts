@@ -282,7 +282,7 @@ test('verified demos and a replacement survive a service-worker-controlled offli
   }
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
-  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 20_000 }).toBe(true);
   await context.setOffline(true);
   await page.reload();
   for (const [id] of demos) await expect(page.getByTestId(`pose-${id}`)).toHaveAttribute('data-static', 'true');

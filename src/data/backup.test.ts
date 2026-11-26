@@ -102,6 +102,18 @@ describe('export/import', () => {
     expect(await db.sessions.get(old.id)).toEqual(old);
   });
 
+  it('excludes sync bookkeeping from export and preserves it on import', async () => {
+    const db = open();
+    const clientUpdatedAt = '2026-11-10T10:00:00.000Z';
+    await db.syncOutbox.add({ store: 'sessions', key: 's1', op: 'put', clientUpdatedAt });
+    await db.syncMeta.put({ id: 'sessions', cursor: { updatedAt: clientUpdatedAt, id: 's1' } });
+    const backup = await buildExport(db, new Date(), 'test');
+    expect(Object.keys(backup.stores)).toEqual(STORE_NAMES);
+    await importExport(db, parseExport(JSON.stringify(backup)).file);
+    expect(await db.syncOutbox.count()).toBe(1);
+    expect(await db.syncMeta.count()).toBe(1);
+  });
+
   it('rejects a circuit with an invalid station target unit', async () => {
     const db = open();
     const backup = await buildExport(db, new Date(), 'test');

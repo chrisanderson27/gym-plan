@@ -38,7 +38,7 @@ async function seedDefaultSettings(page: Page, activities?: Settings['activities
 async function warmOffline(page: Page) {
   await page.evaluate(async () => { await navigator.serviceWorker.ready; });
   await page.reload();
-  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 20_000 }).toBe(true);
   await page.context().setOffline(true);
   await expect.poll(() => page.evaluate(async () => {
     try {

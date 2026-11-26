@@ -1,3 +1,4 @@
+/** Backup file version, independent of the Dexie database version. */
 export const SCHEMA_VERSION = 2;
 
 /**
@@ -23,4 +24,11 @@ export const V1_STORES = {
 export const V2_STORES = {
   ...V1_STORES,
   libraryBlocks: 'id',
+} as const;
+
+/** Sync bookkeeping stays outside USER_STORES and backups, which remain at version 2. */
+export const V3_STORES = {
+  ...V2_STORES,
+  syncOutbox: '++seq, &[store+key]',
+  syncMeta: 'id',
 } as const;

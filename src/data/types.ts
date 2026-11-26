@@ -1,4 +1,5 @@
 import type { Activity } from '../engine/plan/activities';
+import type { StoreName } from './stores';
 /**
  * The data contract. Every row type and the `Block` union live here so that later phases never need
  * a Dexie migration for a missing field.
@@ -26,6 +27,22 @@ import type { Activity } from '../engine/plan/activities';
  * `YYYY-MM-DD`, so the JSON export round-trips.
  */
 export type ISODateTime = string;
+
+export interface SyncOutboxEntry {
+  seq?: number;
+  store: StoreName;
+  key: string;
+  op: 'put' | 'delete';
+  clientUpdatedAt: ISODateTime;
+}
+
+export interface SyncMeta {
+  id: string;
+  cursor?: { updatedAt: string; id: string };
+  lastSyncedAt?: ISODateTime;
+  ownerId?: string;
+}
+
 export type LocalDate = string;
 export type SessionType = 'lift' | 'burn' | 'run' | 'swim' | 'hybrid' | 'custom';
 export type LiftVariant = 'upper-a' | 'upper-b' | 'lower-a' | 'lower-b';

@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import { SEED_EQUIPMENT } from '../content/equipment';
-import { SCHEMA_VERSION, V1_STORES, V2_STORES } from './schema';
+import { SCHEMA_VERSION, V1_STORES, V2_STORES, V3_STORES } from './schema';
 import type {
   BodyLog,
   CssTest,
@@ -13,6 +13,8 @@ import type {
   SetRow,
   Settings,
   SwimRow,
+  SyncMeta,
+  SyncOutboxEntry,
   Template,
 } from './types';
 
@@ -32,6 +34,8 @@ export class GymDb extends Dexie {
   feedback!: Table<FeedbackRow, string>;
   settings!: Table<Settings, string>;
   libraryBlocks!: Table<LibraryBlock, string>;
+  syncOutbox!: Table<SyncOutboxEntry, number>;
+  syncMeta!: Table<SyncMeta, string>;
 
   constructor(name = 'gym-plan') {
     super(name);
@@ -39,6 +43,7 @@ export class GymDb extends Dexie {
     // Data may read content; content never reads data. Populate runs only when the database is created, so an upgrade keeps the v1 equipment seed.
     this.on('populate', (tx) => tx.table('equipment').bulkAdd(SEED_EQUIPMENT));
     this.version(2).stores(V2_STORES);
+    this.version(3).stores(V3_STORES);
     // A delete sets newVersion to null. Dexie's own handler runs after this one and would turn auto-open back on,
     // so the next put would recreate an empty gym and look successful. Returning false keeps that handler from running.
     this.on('versionchange', (ev) => {

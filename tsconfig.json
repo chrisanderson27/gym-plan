@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "types": ["node", "vite/client", "vite-plugin-pwa/preact"]
   },
-  "include": ["src", "e2e", "scripts", "*.config.ts"]
+  "include": ["src", "e2e", "e2e-live", "scripts", "*.config.ts"]
 }

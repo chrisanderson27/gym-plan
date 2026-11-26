@@ -1,6 +1,9 @@
+import Dexie from 'dexie';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SEED_EQUIPMENT } from '../content/equipment';
 import { V1_STORES } from './db';
+import { V2_STORES, V3_STORES } from './schema';
+import { STORE_NAMES } from './stores';
 import { openTestDb } from './test-utils';
 
 const dbs: ReturnType<typeof openTestDb>[] = [];
@@ -11,6 +14,52 @@ const fresh = () => {
 };
 afterEach(async () => {
   await Promise.all(dbs.splice(0).map((d) => d.delete()));
+});
+
+describe('GymDb v3', () => {
+  it('adds exactly two sync stores to V2_STORES', () => {
+    expect(V3_STORES).toEqual({ ...V2_STORES, syncOutbox: '++seq, &[store+key]', syncMeta: 'id' });
+  });
+
+  it('upgrades v2 while preserving every user store', async () => {
+    const db = fresh();
+    const old = new Dexie(db.name);
+    old.version(2).stores(V2_STORES);
+    const date = '2026-11-10';
+    const ts = `${date}T10:00:00.000Z`;
+    const rows = {
+      exerciseOverrides: { exerciseId: 'leg-press', notAtMyGym: true, preferredEquipmentId: 'pin-stack' },
+      equipment: SEED_EQUIPMENT[0],
+      sessions: { id: 's1', date: ts, type: 'lift', blocks: [], hard: false, hardCardio: false, rpe: null, durationMin: 45, notes: 'n' },
+      sets: { id: 'x1', sessionId: 's1', exerciseId: 'leg-press', equipmentId: 'pin-stack', idx: 0, targetWeight: 100, targetReps: 8, weight: 100, reps: 8, painFlag: false },
+      runs: { sessionId: 's2', kind: 'easy', modality: 'bike', distanceMi: 3, durationSec: 1200, intervals: [], rpe: 5, painFlag: false },
+      swims: { sessionId: 's3', poolLength: 25, poolUnit: 'yd', distance: 1000, sets: [], rpe: 6, shoulderPainFlag: false },
+      tests: { id: 't1', kind: 'css', date: ts, poolUnit: 'yd', t400: 480, t200: 220 },
+      bodyLogs: { date, weightLb: 245, waistIn: 40, protein: true },
+      templates: { id: 'tp1', name: 'Mine', type: 'lift', blocks: [], source: 'saved', createdAt: ts },
+      feedback: { id: 'f1', v: 1, ts, kind: 'app', tags: ['other'], text: 'hi', context: {} },
+      settings: { id: 'settings', daysPerWeek: 5, weightUnit: 'lb', distanceUnit: 'mi', programStart: date, onboardedAt: ts, backupAt: null, updatedAt: ts },
+      libraryBlocks: { id: 'b1', name: 'Block A', kind: 'self-paced', durationSec: 480, stations: [], recommend: true, createdAt: ts, updatedAt: ts },
+    };
+    try {
+      for (const store of STORE_NAMES) await old.table(store).add(rows[store]);
+    } finally {
+      old.close();
+    }
+    await db.open();
+    for (const store of STORE_NAMES) expect(await db.table(store).toArray(), store).toEqual([rows[store]]);
+    expect(db.verno).toBe(3);
+    expect(await db.syncOutbox.count()).toBe(0);
+    expect(await db.syncMeta.count()).toBe(0);
+    expect(await db.equipment.count()).toBe(1);
+  });
+
+  it('enforces a unique outbox entry per store and key', async () => {
+    const db = fresh();
+    const entry = { store: 'sessions', key: 's1', op: 'put', clientUpdatedAt: '2026-11-10T10:00:00.000Z' } as const;
+    await db.syncOutbox.add(entry);
+    await expect(db.syncOutbox.add({ ...entry, op: 'delete' })).rejects.toHaveProperty('name', 'ConstraintError');
+  });
 });
 
 describe('GymDb v1', () => {

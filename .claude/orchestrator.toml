@@ -1,5 +1,4 @@
-# Orchestrator config for gym-plan. Levels mirror PRD 1 §14; the npm scripts they call are
-# created by P1 (PRD §14 "config gap"), so every level except no-personal-data is red until P1 lands.
+# Orchestrator config for gym-plan. The rls and e2e-live levels need Docker Desktop running.
 
 [skills]
 plan = "plan-feature"
@@ -14,6 +13,10 @@ levels = [
   { name = "e2e", cmd = "npx playwright test --project=webkit", expect = "exit 0" },
   { name = "precache-size", cmd = "test $(du -sk dist | cut -f1) -lt 2048", expect = "dist under 2048 KB" },
   { name = "no-personal-data", cmd = "test $(git ls-files | grep -cE '\\.jsonl$|exports/') -eq 0", expect = "0 tracked personal-data files" },
+  { name = "no-secrets", cmd = "test $(git grep --untracked -lE 'sb_secret_[A-Za-z0-9]|SUPABASE_SERVICE_ROL[E]|GOCSP[X]-' | wc -l) -eq 0", expect = "0 files" },
+  { name = "no-env-file", cmd = "test $(git ls-files | grep -cE '(^|/)\\.env$') -eq 0", expect = "0 tracked .env files" },
+  { name = "rls", cmd = "npx supabase start && npx supabase test db", expect = "exit 0; all pgTAP assertions pass" },
+  { name = "e2e-live", cmd = "npx supabase start && npx supabase db reset && npx playwright test --project=webkit-live", expect = "exit 0" },
 ]
 
 [surface]
@@ -30,7 +33,7 @@ profile        = ".claude/e2e/profile.md"
 session_prefix = "gym-plan-e2e"
 
 [worker]
-allow = ["npm install", "npm ci", "npm run", "npm test", "npx playwright", "npx vite", "npx tsc", "npx vitest"]
+allow = ["npm install", "npm ci", "npm run", "npm test", "npx playwright", "npx vite", "npx tsc", "npx vitest", "npx supabase", "node scripts/"]
 
 [figma]
 checks     = "per-phase"

@@ -13,7 +13,7 @@ const restrict = (patterns, paths = []) => ({
 });
 
 export default tseslint.config(
-  { ignores: ['dist/', 'playwright-report/', 'test-results/', 'coverage/', 'dev-dist/'] },
+  { ignores: ['dist/', 'dist-live/', 'playwright-report/', 'test-results/', 'coverage/', 'dev-dist/'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
@@ -22,15 +22,18 @@ export default tseslint.config(
     files: ['src/engine/**/*.ts'],
     ignores: ['src/engine/**/*.test.ts'],
     rules: restrict(
-      ['preact/*', '@preact/*', 'virtual:*', '**/data/db*', '**/data/backup*', '**/data/settings*', '**/platform/**', '**/ui/**', '**/content/**'],
-      ['dexie', 'preact'],
+      ['preact/*', '@preact/*', 'virtual:*', '**/data/db*', '**/data/backup*', '**/data/settings*', '**/platform/**', '**/ui/**', '**/content/**', '**/sync/**', '@supabase/*'],
+      ['dexie', 'preact', '@supabase/supabase-js'],
     ),
   },
   {
     // content/ is static data: it reads nothing else.
     files: ['src/content/**/*.ts'],
     ignores: ['src/content/**/*.test.ts'],
-    rules: restrict(['preact/*', '**/data/db*', '**/platform/**', '**/ui/**', '**/engine/**'], ['dexie', 'preact']),
+    rules: restrict(
+      ['preact/*', '**/data/db*', '**/platform/**', '**/ui/**', '**/engine/**', '**/sync/**', '@supabase/*'],
+      ['dexie', 'preact', '@supabase/supabase-js'],
+    ),
   },
   {
     files: ['src/data/**/*.ts'],

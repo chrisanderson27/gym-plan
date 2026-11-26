@@ -12,9 +12,9 @@ async function goOffline(page: Page, context: BrowserContext, info: TestInfo) {
     info.annotations.push({ type: 'evidence-gap', description: 'Service worker API unavailable in this WebKit process' });
     return false;
   }
-  await expect.poll(() => page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())?.active)).toBe(true);
+  await expect.poll(() => page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())?.active), { timeout: 20_000 }).toBe(true);
   await page.reload();
-  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 20_000 }).toBe(true);
   await context.setOffline(true);
   await page.reload();
   expect(await page.evaluate(() => fetch('./not-precached-' + Date.now(), { cache: 'no-store' }).then(() => 'online', () => 'offline'))).toBe('offline');

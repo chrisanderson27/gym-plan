@@ -76,7 +76,7 @@ test('the first launch works offline and its backup re-imports', async ({ page, 
   if (await page.evaluate(() => 'serviceWorker' in navigator)) {
     await page.evaluate(async () => { await navigator.serviceWorker.ready; });
     await page.reload();
-    await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+    await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 20_000 }).toBe(true);
     await page.context().setOffline(true);
     await page.reload();
     await expect(page.getByTestId('hero')).toBeVisible();

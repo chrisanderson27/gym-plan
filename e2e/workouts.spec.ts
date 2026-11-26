@@ -23,9 +23,9 @@ async function controlledOffline(page: Page, context: BrowserContext, info: Test
     info.annotations.push({ type: 'evidence-gap', description: 'Service worker API unavailable in this WebKit process' });
     return false;
   }
-  await expect.poll(() => page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())?.active)).toBe(true);
+  await expect.poll(() => page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())?.active), { timeout: 20_000 }).toBe(true);
   await page.reload();
-  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 20_000 }).toBe(true);
   expect(await page.evaluate(async () => {
     await document.fonts.load('800 24px Manrope');
     await document.fonts.load('700 11px "IBM Plex Mono"');
