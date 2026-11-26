@@ -7,7 +7,7 @@ import { auth, type createAuth } from './auth';
 import { clearLocalData } from './clear';
 import { supabase } from './client';
 import { withSyncApply } from './marker';
-import { pendingCount } from './outbox';
+import { ADOPTION, pendingCount } from './outbox';
 import { RELATED_STORES, SYNC_TABLES, rowUpdatedAt, sessionIdOf } from './tables';
 import { SyncError, createSupabaseTransport, type PushRow, type SyncRow, type SyncTransport } from './transport';
 
@@ -29,7 +29,6 @@ type Run = { generation: number; ownerId: string; signal: AbortSignal };
 const PUSH_LIMIT = 500;
 const PULL_LIMIT = 1000;
 const OVERLAP_MS = 60_000;
-const ADOPTION = 'adoption';
 const cursorId = (store: StoreName) => 'cursor:' + store;
 const pair = (row: SyncRow) => ({ updatedAt: row.updated_at, id: row.id });
 const deferredKey = (store: StoreName, key: string) => JSON.stringify([store, key]);
@@ -286,14 +285,15 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     await active;
   }
 
-  async function resume() {
-    const ownerId = signedInUser();
-    const resumeGen = generation;
+  async function resumeIfCurrent(ownerId: string | null, resumeGen: number, canResume: () => boolean = () => true) {
     await active;
-    if (!transport || !paused || resolving || !ownerId || signedInUser() !== ownerId ||
-      generation !== resumeGen || status.state === 'owner-mismatch') return;
+    if (!transport || !ownerId || generation !== resumeGen || signedInUser() !== ownerId || !canResume()) return;
     paused = false;
     await syncNow();
+  }
+
+  function resume() {
+    return resumeIfCurrent(signedInUser(), generation, () => paused && !resolving && status.state !== 'owner-mismatch');
   }
 
   async function runOnce(cloud: SyncTransport, run: Run) {
@@ -371,16 +371,18 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
           try {
             await checkOwner(run);
             await push(cloud, run);
-          } catch {
-            // Leave unsent entries for the caller's pending-changes warning.
+          } catch (error) {
+            if (error instanceof SyncError || error instanceof Aborted ||
+              (error instanceof DOMException && error.name === 'AbortError') ||
+              (run.signal.aborted && error instanceof Dexie.AbortError)) return;
+            console.error('Unexpected sync flush failure', error);
           }
         });
       }
       await active;
     }
-    const pending = await pendingCount(db);
-    update({ pending });
-    return pending;
+    update(await readPending());
+    return status.pending;
   }
 
   async function readPending(): Promise<Partial<SyncStatus>> {
@@ -415,12 +417,8 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     }
     const resumeGen = generation;
     // The auth store notifies synchronously from Supabase's auth callback.
-    setTimeout(async () => {
-      await active;
-      if (generation !== resumeGen || signedInUser() !== user) return;
-      paused = false;
-      await syncNow();
-    }, 0);
+    // An auth transition can release the pause while syncNow still blocks on a mismatch or its resolution.
+    setTimeout(() => void resumeIfCurrent(user, resumeGen), 0);
   }
 
   async function resolveMismatch(action: 'discard' | 'keep') {

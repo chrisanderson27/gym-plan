@@ -82,7 +82,9 @@ test('pending changes from a different owner require a discard choice before syn
   await expect(page.getByTestId('hero')).toBeVisible();
   await expect.poll(async () => (await meta(page)).find((row) => row.id === 'owner')?.ownerId).toBe(accountA.user.id);
   await expect.poll(() => server.pushes.some(({ rows }) => rows.some((row) => row.id === 'old-owner'))).toBe(true);
-  const pending = (await persistedRows(page, 'syncOutbox')).length;
+  // The sheet counts queued rows plus an unfinished legacy adoption, as pendingCount does.
+  const adopting = (await meta(page)).some((row) => row.id === 'adoption');
+  const pending = (await persistedRows(page, 'syncOutbox')).length + (adopting ? 1 : 0);
   expect(pending).toBeGreaterThan(0);
 
   await page.evaluate((key) => localStorage.removeItem(key), 'gym-plan:auth');

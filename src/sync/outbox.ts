@@ -4,6 +4,8 @@ import { USER_STORES, type StoreName } from '../data/stores';
 import type { SyncOutboxEntry } from '../data/types';
 import { isSyncApply } from './marker';
 
+export const ADOPTION = 'adoption';
+
 let last = 0;
 
 export function stamp(): string {
@@ -12,7 +14,10 @@ export function stamp(): string {
 }
 
 export function pendingCount(db: GymDb): Promise<number> {
-  return db.syncOutbox.count();
+  return db.transaction('r', [db.syncOutbox, db.syncMeta], async () => {
+    const queued = await db.syncOutbox.count();
+    return queued + (await db.syncMeta.get(ADOPTION) ? 1 : 0);
+  });
 }
 
 export function installOutbox(db: GymDb, { onCapture }: { onCapture?: () => void } = {}): void {

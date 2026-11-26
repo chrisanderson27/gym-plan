@@ -153,7 +153,7 @@ it('guest-then-sign-in uploads guest edits at their real timestamps and resumes 
   setUser('a');
   server.failNext('error');
   await engine.syncNow();
-  expect(engine.getStatus()).toMatchObject({ state: 'error', pending: 1 });
+  expect(engine.getStatus()).toMatchObject({ state: 'error', pending: 2 });
   await engine.syncNow();
   expect(server.rows('body_logs').get(date)?.client_updated_at).toBe(entry!.clientUpdatedAt);
   expect(server.rows('equipment').size).toBeGreaterThan(0);
@@ -357,6 +357,30 @@ it('pause during pull prevents any apply, and a new sign-in resumes sync automat
   expect(await db.sessions.count()).toBe(1);
 });
 
+it('lets an auth change release the pause during mismatch resolution without syncing until it finishes', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const { engine, setUser, signOut } = setup({ user: 'b' });
+  await owner();
+  const row = bodyLog('2026-01-01');
+  await db.bodyLogs.put(row);
+  engine.start();
+  await engine.syncNow();
+  expect(engine.getStatus().state).toBe('owner-mismatch');
+
+  const finish = Promise.withResolvers<{ ok: true }>();
+  signOut.mockReturnValueOnce(finish.promise);
+  const resolving = engine.resolveMismatch('keep');
+  setUser('');
+  setUser('a');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(server.rows('body_logs').size).toBe(0);
+
+  finish.resolve({ ok: true });
+  await resolving;
+  await engine.syncNow();
+  expect(server.rows('body_logs').get(row.date)?.data).toEqual(row);
+});
+
 it.each(['syncNow', 'flush'] as const)('pause before %s acknowledges a push leaves its outbox entries intact', async (method) => {
   const { engine } = setup();
   await owner();
@@ -416,6 +440,55 @@ it.each(['offline', 'error', 'wrong owner'] as const)('flush leaves pending chan
   expect(await engine.flush()).toBe(1);
   expect(push).toHaveBeenCalledTimes(condition === 'error' ? 1 : 0);
   expect(engine.getStatus()).toMatchObject({ state: 'paused', pending: 1 });
+});
+
+it('flush logs an unexpected push failure and still returns the pending count', async () => {
+  const { engine } = setup();
+  await owner();
+  await db.bodyLogs.put(bodyLog('2026-01-01'));
+  const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  await engine.pause();
+
+  server.failNext('abort');
+  expect(await engine.flush()).toBe(1);
+  expect(log).not.toHaveBeenCalled();
+
+  const error = new TypeError('unexpected push failure');
+  vi.spyOn(server.transport, 'push').mockRejectedValueOnce(error);
+  expect(await engine.flush()).toBe(1);
+  expect(log).toHaveBeenCalledExactlyOnceWith('Unexpected sync flush failure', error);
+});
+
+it('flush returns its last pending count when IndexedDB is unavailable', async () => {
+  const { engine } = setup({ online: false });
+  await owner();
+  await db.bodyLogs.put(bodyLog('2026-01-01'));
+  await engine.syncNow();
+  await engine.pause();
+  db.close();
+
+  expect(await engine.flush()).toBe(1);
+  expect(engine.getStatus().pending).toBe(1);
+});
+
+it('protects unqueued legacy rows after interrupted adoption during flush and account switching', async () => {
+  const { engine, setUser } = setup();
+  await db.transaction('rw', db.syncMeta, async () => {
+    await owner();
+    await db.syncMeta.put({ id: 'adoption' });
+  });
+  const row = bodyLog('2026-01-01');
+  await withSyncApply(db, [db.bodyLogs], () => db.bodyLogs.put(row));
+  expect(await db.syncOutbox.count()).toBe(0);
+  await engine.pause();
+
+  expect(await engine.flush()).toBe(1);
+  setUser('b');
+  await engine.resume();
+
+  expect(engine.getStatus()).toMatchObject({ state: 'owner-mismatch', pending: 1 });
+  expect(await db.syncMeta.get('owner')).toMatchObject({ ownerId: 'a' });
+  expect(await db.bodyLogs.get(row.date)).toEqual(row);
 });
 
 it('resumes push and pull for the same signed-in user after a pause', async () => {
