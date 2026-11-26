@@ -318,7 +318,7 @@ it('skips and logs mismatched primary keys without blocking the cursor', async (
   expect(await db.syncMeta.get('cursor:sessions')).toHaveProperty('cursor.id', 's');
 });
 
-it('pause during pull prevents any apply, and only resumes on the next sign-in', async () => {
+it('pause during pull prevents any apply, and a new sign-in resumes sync automatically', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   const { engine, setUser } = setup({ user: '' });
   await owner();
@@ -357,24 +357,96 @@ it('pause during pull prevents any apply, and only resumes on the next sign-in',
   expect(await db.sessions.count()).toBe(1);
 });
 
-it('pause before acknowledging a push leaves its outbox entries intact', async () => {
+it.each(['syncNow', 'flush'] as const)('pause before %s acknowledges a push leaves its outbox entries intact', async (method) => {
   const { engine } = setup();
   await owner();
   await db.bodyLogs.put(bodyLog('2026-01-01'));
-  const sending = Promise.withResolvers<void>();
+  const sending = Promise.withResolvers<AbortSignal>();
   const finish = Promise.withResolvers<[]>();
-  vi.spyOn(server.transport, 'push').mockImplementationOnce(async () => {
-    sending.resolve();
+  vi.spyOn(server.transport, 'push').mockImplementationOnce(async (_table, _rows, signal) => {
+    sending.resolve(signal);
     return finish.promise;
   });
-  const run = engine.syncNow();
-  await sending.promise;
+  if (method === 'flush') await engine.pause();
+  const run = engine[method]();
+  const signal = await sending.promise;
   const paused = engine.pause();
+  expect(signal.aborted).toBe(true);
   finish.resolve([]);
   await paused;
   await run;
   expect(await db.syncOutbox.count()).toBe(1);
   expect(await db.syncMeta.get('deferred')).toBeUndefined();
+});
+
+it('flush pushes once while paused and leaves ordinary sync triggers blocked', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  const { engine, win } = setup();
+  await owner();
+  const row = bodyLog('2026-01-01');
+  await db.bodyLogs.put(row);
+  const push = vi.spyOn(server.transport, 'push');
+  const pull = vi.spyOn(server.transport, 'pull');
+  engine.start();
+  await engine.pause();
+
+  const flushing = engine.flush();
+  const concurrentFlush = engine.flush();
+  engine.notifyCapture();
+  win.dispatchEvent(new Event('online'));
+  win.document.dispatchEvent(new Event('visibilitychange'));
+  await engine.syncNow();
+  await vi.runAllTimersAsync();
+
+  expect(await Promise.all([flushing, concurrentFlush])).toEqual([0, 0]);
+  expect(push).toHaveBeenCalledOnce();
+  expect(server.rows('body_logs').get(row.date)?.data).toEqual(row);
+  expect(pull).not.toHaveBeenCalled();
+  expect(engine.getStatus()).toMatchObject({ state: 'paused', pending: 0 });
+});
+
+it.each(['offline', 'error', 'wrong owner'] as const)('flush leaves pending changes on %s', async (condition) => {
+  const { engine } = setup({ online: condition !== 'offline' });
+  await owner(condition === 'wrong owner' ? 'b' : 'a');
+  await db.bodyLogs.put(bodyLog('2026-01-01'));
+  if (condition === 'error') server.failNext('error');
+  const push = vi.spyOn(server.transport, 'push');
+  await engine.pause();
+
+  expect(await engine.flush()).toBe(1);
+  expect(push).toHaveBeenCalledTimes(condition === 'error' ? 1 : 0);
+  expect(engine.getStatus()).toMatchObject({ state: 'paused', pending: 1 });
+});
+
+it('resumes push and pull for the same signed-in user after a pause', async () => {
+  const { engine } = setup();
+  await owner();
+  await engine.pause();
+  const row = bodyLog('2026-01-01');
+  await db.bodyLogs.put(row);
+  server.seed('sessions', [remote('s')]);
+
+  await engine.resume();
+
+  expect(server.rows('body_logs').get(row.date)?.data).toEqual(row);
+  expect(await db.sessions.get('s')).toEqual({ id: 's' });
+  expect(engine.getStatus()).toMatchObject({ state: 'idle', pending: 0 });
+});
+
+it.each(['guest', 'owner-mismatch'] as const)('resume leaves sync blocked for %s', async (state) => {
+  const { engine } = setup({ user: state === 'guest' ? '' : 'b' });
+  await owner();
+  await db.bodyLogs.put(bodyLog('2026-01-01'));
+  await engine.syncNow();
+  await engine.pause();
+  const push = vi.spyOn(server.transport, 'push');
+  const pull = vi.spyOn(server.transport, 'pull');
+
+  await engine.resume();
+
+  expect(engine.getStatus().state).toBe(state === 'guest' ? 'paused' : 'owner-mismatch');
+  expect(push).not.toHaveBeenCalled();
+  expect(pull).not.toHaveBeenCalled();
 });
 
 it('debounces capture and runs on coming online and becoming visible', async () => {

@@ -181,6 +181,7 @@ test('Feedback list reads as words, wraps long text, and never widens the page',
   await page.getByTestId('feedback-tag-too-easy').click();
   await page.getByLabel('Notes').fill('x'.repeat(240));
   await page.getByTestId('feedback-save').click();
+  await expect(page.getByRole('status').filter({ hasText: 'Feedback saved' }).first()).toBeVisible();
   await page.goto('./#/settings');
   await page.getByTestId('developer').locator('summary').click();
   const row = page.getByTestId('feedback-row').first();

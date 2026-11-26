@@ -74,6 +74,7 @@ test('eligibility and targets survive a backup import', async ({ page, browser }
   await page.getByLabel('Leg press load (lb)').fill('140');
   await page.getByRole('checkbox', { name: 'Include in my plan' }).check();
   await page.getByRole('button', { name: 'Save to My Blocks' }).click();
+  await expect(page.getByRole('heading', { name: 'My Blocks' })).toBeVisible();
   await page.getByRole('link', { name: 'Settings' }).click();
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -103,6 +104,7 @@ test('a v1 backup with no library still imports', async ({ page }) => {
   await page.getByLabel('Block name').fill('Bench & Core');
   await addExercise(page, 'Leg press');
   await page.getByRole('button', { name: 'Save to My Blocks' }).click();
+  await expect(page.getByRole('heading', { name: 'My Blocks' })).toBeVisible();
   await seedBackup(page, { bodyLogs: [{ date: '2026-11-01', protein: true }] });
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Blocks' }).click();
   await expect(page.getByRole('link', { name: 'Bench & Core' })).toBeVisible();

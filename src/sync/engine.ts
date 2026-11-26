@@ -271,19 +271,29 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     }
   }
 
-  function cancel() {
+  function cancel(state: 'paused' | 'owner-mismatch' = 'paused') {
     paused = true;
     generation++;
     again = false;
     clearTimeout(debounce);
     controller?.abort();
-    update({ state: 'paused' });
+    update({ state });
   }
 
   async function pause() {
     if (!transport) return;
-    cancel();
+    cancel(status.state === 'owner-mismatch' ? 'owner-mismatch' : 'paused');
     await active;
+  }
+
+  async function resume() {
+    const ownerId = signedInUser();
+    const resumeGen = generation;
+    await active;
+    if (!transport || !paused || resolving || !ownerId || signedInUser() !== ownerId ||
+      generation !== resumeGen || status.state === 'owner-mismatch') return;
+    paused = false;
+    await syncNow();
   }
 
   async function runOnce(cloud: SyncTransport, run: Run) {
@@ -324,6 +334,16 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     }
   }
 
+  function startRun(ownerId: string, execute: (run: Run) => Promise<void>) {
+    controller = new AbortController();
+    const run: Run = { generation, ownerId, signal: controller.signal };
+    active = execute(run).finally(() => {
+      active = undefined;
+      controller = undefined;
+    });
+    return active;
+  }
+
   function syncNow(): Promise<void> {
     const ownerId = signedInUser();
     if (!transport || paused || resolving || !ownerId || status.state === 'owner-mismatch') return Promise.resolve();
@@ -332,18 +352,35 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
       return active;
     }
     const cloud = transport;
-    const current = controller = new AbortController();
-    const run: Run = { generation, ownerId, signal: current.signal };
-    active = (async () => {
+    return startRun(ownerId, async (run) => {
       do {
         again = false;
         await runOnce(cloud, run);
       } while (again && !paused && run.generation === generation && status.state !== 'owner-mismatch');
-    })().finally(() => {
-      active = undefined;
-      controller = undefined;
     });
-    return active;
+  }
+
+  // Called after pause(): push the current owner's outbox once, with triggers still paused.
+  async function flush(): Promise<number> {
+    const cloud = transport;
+    const ownerId = signedInUser();
+    if (cloud && paused && !resolving && ownerId && status.state !== 'owner-mismatch' && win?.navigator.onLine !== false) {
+      if (!active) {
+        generation++;
+        startRun(ownerId, async (run) => {
+          try {
+            await checkOwner(run);
+            await push(cloud, run);
+          } catch {
+            // Leave unsent entries for the caller's pending-changes warning.
+          }
+        });
+      }
+      await active;
+    }
+    const pending = await pendingCount(db);
+    update({ pending });
+    return pending;
   }
 
   async function readPending(): Promise<Partial<SyncStatus>> {
@@ -399,10 +436,10 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
       return;
     }
 
-    const stopped = pause();
+    cancel();
     const resetGen = generation;
     try {
-      await stopped;
+      await active;
       // Invalidate the old run before clearing, without waiting on the replacement run itself.
       await claim({ generation: resetGen, ownerId, signal: new AbortController().signal }, true);
     } catch (error) {
@@ -428,6 +465,8 @@ export function createSyncEngine({ db, transport, auth, win, now = () => new Dat
     },
     syncNow,
     pause,
+    flush,
+    resume,
     getStatus: () => status,
     subscribe(listener: () => void) {
       if (!transport) return () => {};

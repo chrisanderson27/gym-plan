@@ -42,6 +42,7 @@ test('Preferences: pool length rejects invalid values, explains, and resets to t
   await page.getByRole('link', { name: 'Settings' }).click();
   await page.getByTestId('pref-swim-open').click();
   await page.getByRole('button', { name: 'Save pool' }).click();
+  await expect(page.getByTestId('swim-change')).toBeVisible();
   await page.goto('./#/settings');
   const field = page.getByLabel('Pool length');
   await field.fill('25');

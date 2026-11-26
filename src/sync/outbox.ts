@@ -84,7 +84,7 @@ export function installOutbox(db: GymDb, { onCapture }: { onCapture?: () => void
               if (isSyncApply(trans) || trans.mode === 'versionchange') return table.mutate(req);
               // Concurrent calls in one transaction must see one another's compound-index writes.
               const previous = mutations.get(trans);
-              const current = previous ? previous.then(() => capture(req)) : capture(req);
+              const current = previous ? previous.catch(() => {}).then(() => capture(req)) : capture(req);
               mutations.set(trans, current);
               return current;
             },

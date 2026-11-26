@@ -70,6 +70,18 @@ describe('outbox capture', () => {
     expect(await db.syncOutbox.toArray()).toEqual([expect.objectContaining({ key: '2026-01-01', op: 'delete' })]);
   });
 
+  it('captures a later write after a caught mutation rejection in the same transaction', async () => {
+    installOutbox(db);
+    const row = bodyLog('2026-01-01');
+    const uncloneable = { ...row, extra: () => {} };
+    await db.transaction('rw', db.bodyLogs, async () => {
+      await expect(db.bodyLogs.put(uncloneable)).rejects.toMatchObject({ name: 'DataCloneError' });
+      await db.bodyLogs.put(row);
+    });
+    expect(await db.bodyLogs.get(row.date)).toEqual(row);
+    expect(await db.syncOutbox.toArray()).toEqual([expect.objectContaining({ key: row.date, op: 'put' })]);
+  });
+
   it('rolls back outbox entries and skips notification when the user write aborts', async () => {
     const onCapture = vi.fn();
     installOutbox(db, { onCapture });
