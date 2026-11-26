@@ -90,3 +90,56 @@ export async function fillLogIn(page: Page, email: string, password: string) {
 export function secondDevice(browser: Browser) {
   return browser.newContext({ ...devices['iPhone 14'], baseURL });
 }
+
+export async function signedInContext(browser: Browser, email: string, password: string) {
+  const context = await secondDevice(browser);
+  try {
+    const page = await context.newPage();
+    await page.goto('./');
+    await fillLogIn(page, email, password);
+    await page.getByRole('button', { name: 'Log in', exact: true }).click();
+    await expect(page.getByTestId('hero')).toBeVisible();
+    return { context, page };
+  } catch (error) {
+    await context.close();
+    throw error;
+  }
+}
+
+export async function accessToken(request: APIRequestContext, email: string, password: string) {
+  const { apiUrl, publishableKey } = stack();
+  const response = await request.post(`${apiUrl}/auth/v1/token?grant_type=password`, {
+    headers: { apikey: publishableKey }, data: { email, password },
+  });
+  expect(response.ok()).toBe(true);
+  const { access_token: token } = await response.json() as { access_token: string };
+  return token;
+}
+
+export async function serverRows(request: APIRequestContext, token: string, table: string) {
+  const { apiUrl, publishableKey } = stack();
+  const response = await request.get(`${apiUrl}/rest/v1/${table}?select=id,deleted_at&order=id.asc`, {
+    headers: { apikey: publishableKey, Authorization: `Bearer ${token}` },
+  });
+  expect(response.ok()).toBe(true);
+  return await response.json() as { id: string; deleted_at: string | null }[];
+}
+
+export async function foreground(page: Page) {
+  await page.bringToFront();
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+}
+
+export function localCount(page: Page, store: string) {
+  return page.evaluate((name) => new Promise<number>((resolve, reject) => {
+    const open = indexedDB.open('gym-plan');
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const transaction = db.transaction(name);
+      const count = transaction.objectStore(name).count();
+      transaction.oncomplete = () => { db.close(); resolve(count.result); };
+      transaction.onerror = () => { db.close(); reject(transaction.error); };
+    };
+  }), store);
+}

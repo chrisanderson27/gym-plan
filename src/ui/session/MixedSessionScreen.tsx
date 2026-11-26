@@ -10,6 +10,7 @@ import { elapsedClamped, remainingMs } from '../../engine/block/session';
 import { runPhases, runSegmentAt } from '../../engine/run/segments';
 import { beep, unlockAudio } from '../../platform/audio';
 import { holdWakeLock } from '../../platform/wakelock';
+import { sync } from '../../sync/engine';
 import { StationCard, stationTargetLine } from '../blocks/StationCard';
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, EditIcon, MutedIcon, PauseIcon, PlayIcon, SoundIcon } from '../icons';
 import { exerciseName, mixedBlockName, modalityName, runKindName } from '../labels';
@@ -37,6 +38,10 @@ const stationIdentity = (s: EffectiveStation, poseId?: string) => `${s.slotId}:$
 export function MixedSessionScreen({ id }: { id: string }) {
   const session = useLiveQuery(() => db.sessions.get(id).then((row) => row ?? null), [id]);
   const complete = !!session?.mixed && !!session.endedAt;
+  useEffect(() => {
+    sync.setOpenSession(id);
+    return () => sync.setOpenSession(null);
+  }, [id]);
   useEffect(() => { if (complete) navigate('/workout/summary/' + id); }, [complete, id]);
   if (session === undefined || complete) return <main class="screen" aria-busy="true"><h1>Workout</h1></main>;
   if (!session?.mixed) return <main class="screen"><h1>Workout unavailable</h1><a class="btn" href="#/progress/history">History</a></main>;

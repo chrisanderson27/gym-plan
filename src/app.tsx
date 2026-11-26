@@ -24,6 +24,7 @@ import { SettingsScreen } from './ui/Settings';
 import { setCuesEnabled } from './platform/audio';
 import { requestPersistence } from './platform/storage';
 import { applyAppearance } from './ui/theme';
+import { OwnerMismatchSheet } from './ui/sync/OwnerMismatchSheet';
 import { UpdatePrompt } from './ui/UpdatePrompt';
 import { WorkoutsScreen } from './ui/workouts/WorkoutsScreen';
 
@@ -99,6 +100,7 @@ export function App() {
       {body}
       {settings && authState.status !== 'loading' && !gated && showTabs(route) && <TabBar route={route} />}
       <UpdatePrompt />
+      <OwnerMismatchSheet />
     </>
   );
 }

@@ -9,6 +9,8 @@
 - **Service worker:** registers with `registerType: 'prompt'`; an update shows a prompt, never reloads.
 
 ## Learned quirks
+
+- **Two-device sync runs (PRD 5 P3):** use two named browser sessions as two devices. Trigger a sync with `eval "document.dispatchEvent(new Event('visibilitychange'))"`, and foreground both devices once more before asserting, because the first foreground can pull before the other device's push lands. `set offline on|off` toggles offline. The pending count is the `syncOutbox` store in IndexedDB.
 <!-- e2e workers append here -->
 
 ### Seed rest-day Today inside the current program week

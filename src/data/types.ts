@@ -41,6 +41,7 @@ export interface SyncMeta {
   cursor?: { updatedAt: string; id: string };
   lastSyncedAt?: ISODateTime;
   ownerId?: string;
+  rows?: { store: StoreName; key: string; reason: 'open-session' | 'refetch'; sessionId?: string }[];
 }
 
 export type LocalDate = string;

@@ -1,6 +1,7 @@
 import { EQUIPMENT_PREFS } from '../content/equipment-prefs';
 import { localDate } from '../engine/dates';
 import { enabled } from '../engine/plan/activities';
+import { markSyncApply } from '../sync/marker';
 import type { GymDb } from './db';
 import type { PoolUnit, Settings } from './types';
 
@@ -43,10 +44,11 @@ export async function toggleUnavailableEquipment(
 
 /**
  * First launch: seed a default row so Today opens with no setup questions. No goal, activities or weight row are written;
- * the epoch updatedAt makes any imported settings row win on a new device.
+ * Only the first-sign-in upload captures this row, at its epoch updatedAt so imported and remote settings win.
  */
 export async function ensureDefaultSettings(db: GymDb, now = new Date()): Promise<void> {
-  await db.transaction('rw', db.settings, async () => {
+  await db.transaction('rw', db.settings, async (tx) => {
+    markSyncApply(tx);
     if (await db.settings.get('settings')) return;
     await db.settings.put({
       id: 'settings',
