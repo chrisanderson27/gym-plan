@@ -6,6 +6,7 @@ import { coachedSchedule, initialCoached, projectCoached } from '../engine/block
 import { GymDb } from './db';
 import { listHistory, loadSessionPRs } from './history';
 import { findOpenLiftSession, findStaleOpenLifts } from './lift';
+import { guidedSchedule } from './guided';
 import { findOpenMixedSession, mixedOptions, rateMixedSession, startMixedSession, updateMixedSession } from './mixedSession';
 import { COACHED_TEMPLATE, MIXED_AT, MIXED_TEMPLATE, PRIOR_LIFT, PRIOR_SET } from './mixedSession.test-fixture';
 import { settings } from './p4-test-utils';
@@ -71,6 +72,15 @@ const roundTap = (mixed: MixedExecution) => ({
   expectedTapped: mixed.drafts.circuit!.tapped,
   expectedStations: mixed.stations.circuit!,
 });
+
+/** A circuit started before guided pacing has no checkpoint and logs rounds by tapping. */
+async function asTapCircuit(id: string) {
+  const row = (await db.sessions.get(id))!;
+  const timer = { ...row.mixed!.timers.circuit! };
+  delete timer.coached;
+  row.mixed!.timers = { ...row.mixed!.timers, circuit: timer };
+  await db.sessions.put(row);
+}
 
 async function logCurrentSet(id: string, weight: number) {
   const { strength, cursor } = (await current(id)).mixed!;
@@ -386,6 +396,7 @@ test('clock, actuals, swaps, failure retry, repeat and optional effort survive b
   expect(options.available?.size).toBe(6);
   expect(options.stations?.lunge?.find((s) => s.exerciseId === 'step-up')?.poseId).toBe('step-up');
   await action(id, { type: 'start' }, 356_000);
+  await asTapCircuit(id);
   await action(id, { type: 'swap-station', slotId: 'lunge', exerciseId: 'step-up', expectedExerciseId: 'reverse-lunge' }, 358_000);
   mixed = (await current(id)).mixed!;
   expect(mixed.stations.circuit?.[0]).toMatchObject({ exerciseId: 'step-up', poseId: 'step-up', swappedFromExerciseId: 'reverse-lunge', target: { unit: 'reps', amount: 12 } });
@@ -437,6 +448,7 @@ test('unsupported stations are readable and can be skipped, with untouched round
   await expect(action(id, { type: 'start' })).rejects.toThrow('Replace or skip');
   await action(id, { type: 'swap-station', slotId: 'lunge', exerciseId: null, expectedExerciseId: 'old-lunge' });
   await action(id, { type: 'start' });
+  await asTapCircuit(id);
   await action(id, { type: 'expire' }, 3_000_000);
   await action(id, { type: 'continue' }, 3_000_001);
   const result = (await current(id)).mixed!.results.circuit;
@@ -456,6 +468,7 @@ test('a concurrent round retry counts once and replacement is rechecked before w
   const circuit = MIXED_TEMPLATE.ordered!.blocks[3]!;
   const id = await startBlocks(circuit);
   await action(id, { type: 'start' });
+  await asTapCircuit(id);
   const mixed = (await current(id)).mixed!;
   expect((await mixedOptions(db, circuit, mixed, at())).stations?.lunge).toEqual(expect.arrayContaining([expect.objectContaining({ exerciseId: 'step-up' })]));
   await db.settings.update('settings', { unavailableEquipment: ['plyo-box'] });
@@ -619,6 +632,7 @@ test('a strength swap reserves later accepted working sets under the weekly ceil
 test('station changes preserve tapped rounds across restore without changing the timer', async () => {
   const id = await startBlocks(MIXED_TEMPLATE.ordered!.blocks[3]!);
   await action(id, { type: 'start' });
+  await asTapCircuit(id);
   await action(id, roundTap((await current(id)).mixed!), 1_000);
   await action(id, { type: 'swap-station', slotId: 'lunge', exerciseId: 'step-up', expectedExerciseId: 'reverse-lunge' }, 2_000);
   await action(id, roundTap((await current(id)).mixed!), 3_000);
@@ -641,6 +655,7 @@ test('station changes preserve tapped rounds across restore without changing the
 test.each(['step-up', null])('a stale round tap is rejected after a station changes to %s', async (exerciseId) => {
   const id = await startBlocks(MIXED_TEMPLATE.ordered!.blocks[3]!);
   await action(id, { type: 'start' });
+  await asTapCircuit(id);
   await action(id, roundTap((await current(id)).mixed!), 1_000);
   const stale = (await current(id)).mixed!;
   await action(id, { type: 'swap-station', slotId: 'lunge', exerciseId, expectedExerciseId: 'reverse-lunge' }, 2_000);
@@ -712,4 +727,52 @@ test('history hides an untouched open session without deleting it, and shows one
   expect(await db.sessions.get(id)).toBeDefined();
   await action(id, { type: 'skip' }, 2000);
   expect((await listHistory(db, 0)).map((i) => i.session.id)).toContain(id);
+});
+
+test('a self-paced circuit runs guided: the clock walks its stations, counts its rounds and survives a restore', async () => {
+  const circuit = MIXED_TEMPLATE.ordered!.blocks[3]!;
+  const id = await startBlocks(circuit);
+  await action(id, { type: 'start' });
+  let mixed = (await current(id)).mixed!;
+  expect(mixed.timers.circuit?.coached).toEqual(initialCoached);
+  // 12 reverse lunges a side is 24 reps at 3 s, then a 10 s switch.
+  expect(guidedSchedule(circuit, mixed.stations.circuit!)![0]).toEqual([{ role: 'work', sec: 72 }, { role: 'transition', sec: 10 }]);
+
+  await action(id, roundTap(mixed), 1_000);
+  expect((await current(id)).mixed!.drafts.circuit).toMatchObject({ tapped: 0, rounds: null });
+  await action(id, { type: 'swap-station', slotId: 'push', exerciseId: null, expectedExerciseId: 'push-up' }, 2_000);
+  expect((await current(id)).mixed!.stations.circuit?.[1]?.skipped).toBeUndefined();
+  await action(id, { type: 'swap-station', slotId: 'lunge', exerciseId: 'step-up', expectedExerciseId: 'reverse-lunge' }, 5_000);
+  mixed = (await current(id)).mixed!;
+  expect(mixed.timers.circuit?.coached).toEqual({ station: 0, phase: 'work', phaseStartMs: 5_000, rotations: 0 });
+
+  await action(id, { type: 'next', observed: mixed.timers.circuit!.coached! }, 6_000);
+  expect((await current(id)).mixed!.timers.circuit?.coached).toEqual({ station: 1, phase: 'work', phaseStartMs: 6_000, rotations: 0 });
+  await roundTrip(id, at(7_000));
+
+  // From station 2 at 6 s the first pass ends at 282 s; the second would end at 640 s, after the 480 s block.
+  await action(id, { type: 'expire' }, 480_000);
+  mixed = (await current(id)).mixed!;
+  expect(mixed.cursor.stage).toBe('review');
+  expect(mixed.drafts.circuit?.rounds).toBe(1);
+  await roundTrip(id, at(480_000));
+  await action(id, { type: 'continue' }, 481_000);
+  expect((await current(id)).mixed!.results.circuit).toMatchObject({ status: 'completed', rounds: 1 });
+  await roundTrip(id, at(481_000));
+});
+
+test('an eight-station rotation reaches its last station and still validates', async () => {
+  const preset = WORKOUT_PRESETS.find((p) => p.id === 'two-rotations')!;
+  const rotation = preset.blocks.find((b) => b.kind === 'coached')!;
+  if (rotation.kind !== 'coached' || rotation.stations?.length !== 8) throw new Error('Expected an 8-station rotation');
+  const id = await startBlocks(rotation);
+  await action(id, { type: 'start' });
+  for (let k = 1; k < 8; k++) {
+    const { timers, cursor } = (await current(id)).mixed!;
+    await updateMixedSession(db, id, cursor, { type: 'next', observed: timers[rotation.id]!.coached! }, at(k * 1_000));
+  }
+  expect((await current(id)).mixed!.timers[rotation.id]?.coached).toMatchObject({ station: 7, rotations: 0 });
+  const row = JSON.parse(JSON.stringify(await current(id)));
+  expect(() => validateRows('sessions', [row])).not.toThrow();
+  await roundTrip(id, at(8_000));
 });

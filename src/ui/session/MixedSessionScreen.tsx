@@ -5,7 +5,10 @@ import { MixedInputError, mixedOptions, updateMixedSession } from '../../data/mi
 import { saveSettings } from '../../data/settings';
 import type { AcceptedStrength, CardioModality, EffectiveStation, MixedCursor, MixedDraft, MixedExecution, OrderedBlock, RunBlock, Session } from '../../data/types';
 import { blockBeeps } from '../../engine/block/clock';
-import { blockRemainingSec, coachedSchedule, nextStation, projectCoached, sameCoachedPhase, stationWorkSec } from '../../engine/block/coached';
+import { blockRemainingSec, nextStation, projectCoached, sameCoachedPhase, stationWorkSec } from '../../engine/block/coached';
+import { stationPaceSec } from '../../engine/templates';
+import { guidedSchedule } from '../../data/guided';
+import { blockExerciseOf } from '../../data/liftday';
 import { elapsedClamped, remainingMs } from '../../engine/block/session';
 import { runPhases, runSegmentAt } from '../../engine/run/segments';
 import { beep, unlockAudio } from '../../platform/audio';
@@ -34,6 +37,14 @@ const FRESH_CUE_MS = 1000;
 const blockKind = (block: OrderedBlock) => block.kind === 'coached' ? 'Coached rotation'
   : block.kind === 'self-paced' ? 'Self-paced circuit' : block.kind === 'run' ? 'Running' : block.kind;
 const stationIdentity = (s: EffectiveStation, poseId?: string) => `${s.slotId}:${s.exerciseId}:${s.equipmentId ?? ''}:${poseId ?? ''}`;
+// Blocks that run on their own clock and need nothing typed: they continue, and start, without a tap.
+// Strength and runs are logged, so they still wait for the user.
+const HANDS_OFF: ReadonlySet<OrderedBlock['kind']> = new Set(['preparation', 'coached', 'self-paced', 'recovery']);
+const CONTINUE_SEC = 10;
+const START_SEC = 15;
+// The block the last Continue led to in this page session. Only its entry screen counts down, so reopening the app
+// later never starts a block unasked.
+let armedStart: string | null = null;
 
 export function MixedSessionScreen({ id }: { id: string }) {
   const session = useLiveQuery(() => db.sessions.get(id).then((row) => row ?? null), [id]);
@@ -58,9 +69,13 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
   const active = stage === 'active' && !!clock && clock.pausedAt === null;
   const coached = block.kind === 'coached' && block.stations ? block : undefined;
   const circuit = block.kind === 'self-paced';
+  // A circuit with a checkpoint is guided: its clock walks the stations like a rotation. Older circuits log by tapping.
+  const guidedCircuit = circuit && !!clock?.coached;
+  const guided = !!coached || guidedCircuit;
   const stations = circuit || coached ? mixed.stations[block.id] ?? [] : [];
   const draft = circuit || coached ? mixed.drafts[block.id] : undefined;
-  const lineup = coached ? stations.filter((s) => !s.skipped) : [];
+  const lineup = guided ? stations.filter((s) => !s.skipped) : [];
+  const schedule = useMemo(() => guided ? guidedSchedule(block, stations) : undefined, [guided, block, stations]);
   const options = useLiveQuery(() => mixedOptions(db, block, mixed), [block, mixed]);
   const sound = useLiveQuery(() => db.settings.get('settings').then((s) => s?.soundCues !== false), []);
   const [now, setNow] = useState(Date.now);
@@ -69,13 +84,15 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
   const [retry, setRetry] = useState<Retry | null>(null);
   const [editing, setEditing] = useState(false);
   const [swap, setSwap] = useState<{ slotId: string } | 'strength' | null>(null);
+  // Wait stops this screen's countdown; the usual buttons stay.
+  const [held, setHeld] = useState(false);
   const writing = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
   useLayoutEffect(() => { heading.current?.focus(); }, []);
   const elapsed = clock ? elapsedClamped(clock, now) : 0;
-  const rotation = coached && clock?.coached && stage === 'active' && options?.ready
-    ? projectCoached(coachedSchedule(coached, lineup), clock.coached, Math.min(elapsed, clock.durationMs - 1)) : undefined;
+  const rotation = schedule && clock?.coached && stage === 'active' && options?.ready
+    ? projectCoached(schedule, clock.coached, Math.min(elapsed, clock.durationMs - 1)) : undefined;
   const remaining = coached && clock?.startedAt != null && stage === 'active'
     ? blockRemainingSec(clock.startedAt, clock.pausedMs, clock.pausedAt, coached.durationSec, now)
     : clock ? Math.ceil(remainingMs(clock, now) / 1000) : block.kind === 'strength' ? 0 : block.durationSec;
@@ -105,8 +122,10 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
     setRetry(null);
     try {
       const row = await updateMixedSession(db, session.id, expected, action);
+      if (action.type === 'continue' && row?.mixed?.cursor.stage === 'entry') armedStart = row.mixed.cursor.blockId;
+      if (action.type === 'start' || action.type === 'skip') armedStart = null;
       const updated = row?.mixed?.timers[block.id];
-      if (coached && sound !== false && document.visibilityState === 'visible') {
+      if ((coached || circuit) && sound !== false && document.visibilityState === 'visible') {
         if (action.type === 'start' && row?.mixed?.cursor.stage === 'active') beep('go');
         if (action.type === 'finish' && updated?.frozenElapsedMs !== undefined && updated.frozenElapsedMs < updated.durationMs) beep('complete');
       }
@@ -161,7 +180,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
     };
   }, [active]);
   useEffect(() => {
-    if (!active || coached) return;
+    if (!active || guided) return;
     if (previous.current !== null && document.visibilityState === 'visible') {
       for (const current of blockBeeps(previous.current, remaining)) beep(current);
     }
@@ -215,6 +234,16 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
   const paused = stage === 'active' && !!clock && clock.pausedAt !== null;
   const nextBlock = mixed.prescription.blocks[index + 1];
   const finish = !nextBlock;
+  const quiet = !held && !busy && !swap && !error && !retry;
+  // Wait removes the countdown under the pointer, so focus returns to the screen's heading instead of the page.
+  const hold = () => {
+    setHeld(true);
+    (stage === 'review' ? reviewHeading : heading).current?.focus();
+  };
+  const autoContinue = quiet && stage === 'review' && !!nextBlock && HANDS_OFF.has(block.kind) && !editing;
+  const autoStart = quiet && stage === 'entry' && index > 0 && armedStart === block.id && HANDS_OFF.has(block.kind) && ready;
+  const continueCountdown = autoContinue && nextBlock && <AutoCountdown key="continue" seconds={CONTINUE_SEC} sound={sound !== false}
+    label={`Continuing to ${mixedBlockName(nextBlock)}`} onHold={hold} onDone={() => { void submit({ type: 'continue' }); }} />;
   const selectSwap = async (exerciseId: string | null) => {
     const action = swapped
       ? { type: 'swap-station' as const, slotId: swapped.slotId, expectedExerciseId: swapped.exerciseId, exerciseId }
@@ -223,35 +252,36 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
   };
 
   return (
-    <main class={`screen mixed-live${coached ? ' mixed-coached' : ''}`} data-testid="mixed-runner">
+    <main class={`screen mixed-live${coached || circuit ? ' mixed-coached' : ''}`} data-testid="mixed-runner">
       <header class="mixed-live-top">
-        <a class="btn" href={back}>{coached ? <><ArrowLeftIcon /> Back</> : '← Back'}</a>
+        <a class="btn" href={back}>{coached || circuit ? <><ArrowLeftIcon /> Back</> : '← Back'}</a>
         <span>{mixed.prescription.name}</span>
         <button type="button" aria-label="Sound cues" aria-pressed={sound !== false} onClick={async () => {
           if (sound === false) unlockAudio(true);
           try { await saveSettings(db, { soundCues: sound === false }); }
           catch { setError('Could not save sound preference. Try again.'); }
-        }}>{coached ? sound === false ? <MutedIcon /> : <SoundIcon /> : sound === false ? 'Muted' : 'Sound'}</button>
+        }}>{coached || circuit ? sound === false ? <MutedIcon /> : <SoundIcon /> : sound === false ? 'Muted' : 'Sound'}</button>
         <MoreMenu feedback={{ kind: 'workout', context: { sessionId: session.id, templateId: session.templateId } }} />
       </header>
-      {(!coached || stage !== 'review') && <>
+      {(!guided || stage !== 'review') && <>
         <p class="mixed-eyebrow num">Block {index + 1} / {mixed.prescription.blocks.length}<span class="mixed-dot"> · </span>{kind}</p>
         <h1 ref={heading} tabIndex={-1}>{title}</h1>
       </>}
       {(error || retry) && !swap && <SaveError error={error} retry={retry} submit={submit} busy={busy} />}
-      {stage === 'review' && coached ? (
+      {stage === 'review' && guided ? (
         <section class="mixed-coached-review" aria-labelledby="rotation-review-title">
           <span class="mixed-complete-mark" aria-hidden="true"><CheckIcon /></span>
           <p class="mixed-eyebrow num">Block {index + 1} / {mixed.prescription.blocks.length} {clock?.startedAt === null ? 'skipped' : 'complete'}</p>
           <h1 id="rotation-review-title" ref={reviewHeading} tabIndex={-1} aria-describedby={editing ? undefined : 'rotation-review-count'}>{editing ? 'Edit what I did' : title}</h1>
           {editing ? <ReviewForm draft={draft} stations={stations} finish={finish} busy={busy} submit={submit} edit /> : <>
-            <p id="rotation-review-count" role="status">{clock?.startedAt === null ? 'Block skipped' : draft?.rounds == null ? 'Rotations unreported'
-              : `${draft.rounds} full ${draft.rounds === 1 ? 'rotation' : 'rotations'} completed`}</p>
+            <p id="rotation-review-count" role="status">{clock?.startedAt === null ? 'Block skipped' : draft?.rounds == null ? `${coached ? 'Rotations' : 'Rounds'} unreported`
+              : `${draft.rounds} full ${coached ? 'rotation' : 'round'}${draft.rounds === 1 ? '' : 's'} completed`}</p>
             {nextBlock && <div class="mixed-countdown mixed-coached-next">
               <p class="mixed-eyebrow num">Up next</p>
               <h2>{mixedBlockName(nextBlock)}</h2>
               <p>{nextBlock.kind === 'strength' ? `${nextBlock.sets} sets` : `${Math.floor(nextBlock.durationSec / 60)} min${nextBlock.durationSec % 60 ? ` ${nextBlock.durationSec % 60} sec` : ''}`} · {blockKind(nextBlock)}</p>
             </div>}
+            {continueCountdown}
             <button type="button" class="primary" disabled={busy} onClick={() => submit({ type: 'continue' })}>
               {nextBlock ? <>Continue to {mixedBlockName(nextBlock)}<span class="visually-hidden"> →</span><ArrowRightIcon /></> : 'Finish workout'}
             </button>
@@ -259,8 +289,9 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
           </>}
         </section>
       ) : stage === 'review' ? (
-        <section class="mixed-review">
+        <section class="mixed-review" onInput={() => setHeld(true)}>
           <h2 ref={reviewHeading} tabIndex={-1}>Review block</h2>
+          {continueCountdown}
           {clock && <p>{formatClock(Math.floor((clock.frozenElapsedMs ?? 0) / 1000))} elapsed</p>}
           {strength && <p>{setSlot ? `${setSlot} of ${strength.sets} sets logged` : 'Skipped'}</p>}
           {block.kind === 'run' && startedClock(clock)
@@ -283,7 +314,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
             {rotation && <div><span class="mixed-eyebrow num">Current interval <span class="mixed-phase">{rotation.at.phase}</span></span>
               <strong class="num" role="timer" aria-label="Phase time left">{formatClock(remaining ? rotation.remainingSec : 0)}</strong></div>}
             <div class={rotation ? 'mixed-rounds' : undefined}><span class="mixed-eyebrow num">{paused ? 'Paused · time left' : 'Block time left'}</span>
-              <strong class="num" role="timer" aria-label={coached ? 'Block time left' : undefined}>{formatClock(remaining)}</strong></div>
+              <strong class="num" role="timer" aria-label={coached || circuit ? 'Block time left' : undefined}>{formatClock(remaining)}</strong></div>
             {circuit && draft && <div class="mixed-rounds"><span class="mixed-eyebrow num">Rounds logged</span>
               <strong class="num" aria-label={draft.rounds === null ? 'Rounds unreported' : undefined}>{String(draft.rounds ?? 0).padStart(2, '0')}</strong></div>}
             <progress aria-label="Block time left" max={block.kind === 'strength' ? 1 : clock ? clock.durationMs / 1000 : block.durationSec} value={remaining} />
@@ -294,16 +325,19 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
                 <div class="mixed-stations-head"><span><b>Up next:</b> {exerciseName(nextStationInLineup.exerciseId)}</span>
                   <span class="num">Round {rotation.at.rotations + 1}</span></div>
                 <p class="mixed-coached-announcement" role="status">{exerciseName(currentStation.exerciseId)} · {rotation.at.phase} · Round {rotation.at.rotations + 1}</p>
-              </> : <div class="mixed-stations-head"><span>{coached ? `Sound cues ${sound === false ? 'off' : 'on'}` : 'Go in order. Repeat at your pace.'}</span><span class="num">{stations.length} stations</span></div>}
+              </> : <div class="mixed-stations-head"><span>{coached ? `Sound cues ${sound === false ? 'off' : 'on'}`
+                : guidedCircuit || stage === 'entry' ? 'The timer moves you through each exercise. Pause if you need longer.'
+                  : 'Go in order. Repeat at your pace.'}</span><span class="num">{stations.length} stations</span></div>}
               <div class="gym-grid">
                 {stations.map((station, i) => (
                   <StationCard key={station.slotId} exerciseId={station.exerciseId} equipmentId={station.equipmentId}
                     poseId={options?.available?.has(station.slotId) ? station.poseId : undefined} index={i}
                     target={stationTargetLine(station.exerciseId, station.target.amount, station.target.unit, station.load)}
-                    interval={coached && station.target.unit !== 'sec' ? stationWorkSec(station.target, coached.workSec) : undefined}
+                    interval={coached ? station.target.unit !== 'sec' ? stationWorkSec(station.target, coached.workSec) : undefined
+                      : circuit && !station.skipped ? Math.round(stationPaceSec(station, blockExerciseOf)) : undefined}
                     marker={station === currentStation ? 'Now' : station === nextStationInLineup ? 'Next' : undefined}
                     playing={demo.playingId === stationIdentity(station, stationPose(station))} onPlay={() => demo.toggle(stationIdentity(station, stationPose(station)))}
-                    onSwap={coached && stage === 'active' && station.skipped ? undefined : () => setSwap({ slotId: station.slotId })} disabled={busy}
+                    onSwap={guided && stage === 'active' && station.skipped ? undefined : () => setSwap({ slotId: station.slotId })} disabled={busy}
                     status={station.skipped ? 'Skipped' : options && !options.available?.has(station.slotId) ? 'Movement unavailable' : undefined} />
                 ))}
               </div>
@@ -324,16 +358,18 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
             <MixedDemo key={`${block.id}:${(acceptedRun?.modality ?? block.modality)}:${options?.poseId}`} scope={block.id} exerciseId={runExerciseId(acceptedRun?.modality ?? block.modality)} poseId={options?.poseId || undefined} />
             {options && !ready && <p>Movement unavailable</p>}
           </>}
+          {autoStart && <AutoCountdown key="start" seconds={START_SEC} sound={sound !== false} label="Get set · starting"
+            onHold={hold} onDone={() => { if (sound !== false) unlockAudio(); void submit({ type: 'start' }); }} />}
           <div class="mixed-live-actions actions">
             {stage === 'entry' ? <>
               <button type="button" class="primary" disabled={busy || !ready} onClick={() => { if (sound !== false) unlockAudio(); void submit({ type: 'start' }); }}>Start block</button>
               <button type="button" disabled={busy} onClick={() => submit({ type: 'skip' })}>Skip block</button>
             </> : <>
               <button type="button" disabled={busy || remaining === 0} onClick={() => { if (paused && sound !== false) unlockAudio(); void submit({ type: paused ? 'resume' : 'pause' }); }}>
-                {coached && (paused ? <PlayIcon /> : <PauseIcon />)}{paused ? 'Resume' : 'Pause'}
+                {(coached || circuit) && (paused ? <PlayIcon /> : <PauseIcon />)}{paused ? 'Resume' : 'Pause'}
               </button>
               {rotation && <button type="button" disabled={busy || paused || remaining === 0} onClick={() => submit({ type: 'next', observed: rotation.at })}><ArrowRightIcon /> Next</button>}
-              {circuit && <button type="button" class="primary" disabled={busy || paused || !ready || remaining === 0}
+              {circuit && !guidedCircuit && <button type="button" class="primary" disabled={busy || paused || !ready || remaining === 0}
                 onClick={() => submit({ type: 'round', expectedTapped: draft?.tapped ?? 0, expectedStations: stations })}>+1 round</button>}
               <button type="button" disabled={busy || remaining === 0} onClick={() => submit({ type: 'finish' })}>Finish block</button>
             </>}
@@ -347,7 +383,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
             {(swapped ? options?.stations?.[swapped.slotId]?.map((s) => s.exerciseId) : options?.strength)?.filter((id) => !stations.some((s) => s.exerciseId === id)).map((id) => (
               <button type="button" key={id} disabled={busy} onClick={() => selectSwap(id)}>{exerciseName(id)}</button>
             ))}
-            {swapped && !swapped.skipped && (!coached || stage === 'entry') && <button type="button" disabled={busy} onClick={() => selectSwap(null)}>Skip station</button>}
+            {swapped && !swapped.skipped && (!guided || stage === 'entry') && <button type="button" disabled={busy} onClick={() => selectSwap(null)}>Skip station</button>}
             <button type="button" onClick={() => setSwap(null)}>Close</button>
           </div>
           {error && <SaveError error={error} retry={retry} submit={submit} busy={busy} />}
@@ -355,6 +391,39 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
       )}
     </main>
   );
+}
+
+/** A visible countdown that acts when it reaches zero. It keeps the screen awake and ticks the last three seconds. */
+function AutoCountdown({ seconds, label, sound, onDone, onHold }: {
+  seconds: number; label: string; sound: boolean; onDone: () => void; onHold: () => void;
+}) {
+  const [left, setLeft] = useState(seconds);
+  const done = useRef(onDone);
+  done.current = onDone;
+  useEffect(() => {
+    const end = Date.now() + seconds * 1000;
+    let last = seconds;
+    const release = holdWakeLock();
+    const tick = () => {
+      const next = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+      if (next === last) return;
+      last = next;
+      setLeft(next);
+      if (next === 0) {
+        window.clearInterval(timer);
+        done.current();
+      } else if (next <= 3 && sound && document.visibilityState === 'visible') beep('tick');
+    };
+    const timer = window.setInterval(tick, 250);
+    return () => {
+      window.clearInterval(timer);
+      release();
+    };
+  }, [seconds, sound]);
+  return <div class="mixed-auto" data-testid="auto-countdown">
+    <p role="timer" aria-label={`${label} in ${left} seconds`}>{label} in <strong class="num">{left}</strong> s</p>
+    <button type="button" onClick={onHold}>Wait</button>
+  </div>;
 }
 
 function MixedDemo({ scope, exerciseId, poseId }: { scope: string; exerciseId: string; poseId?: string }) {

@@ -254,22 +254,28 @@ test('saved work agrees in Today, Progress and History after an offline reload a
   await page.clock.fastForward(rotation.durationSec * 1000);
   await page.getByRole('button', { name: /Continue to/ }).click();
   await ready.click();
-  await page.getByRole('button', { name: '+1 round', exact: true }).click();
-  await expect.poll(async () => (await sessions(page))[0]?.mixed?.drafts[blocks[3]!.id]?.tapped).toBe(1);
+  // The circuit runs guided: Next walks its four stations, and leaving the last one completes a round on its own.
+  const next = page.getByRole('button', { name: 'Next' });
+  for (let station = 0; station < 4; station++) await next.click();
+  await expect(page.getByText('Round 2', { exact: true })).toBeVisible();
+  expect(await page.getByRole('button', { name: '+1 round' }).count()).toBe(0);
   const swap = page.getByRole('button', { name: 'Swap Reverse lunge' });
   await swap.click();
   const sheet = page.getByRole('dialog', { name: 'Swap Reverse lunge' });
+  // Skipping would reshuffle the running schedule, so only a swap is offered while the clock runs.
+  await expect(sheet.getByRole('button', { name: 'Skip station' })).toHaveCount(0);
   await sheet.getByRole('button', { name: 'Step-up to box' }).click();
   await expect(sheet).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Step-up to box' })).toBeVisible();
-  await page.getByRole('button', { name: 'Swap Rower' }).click();
-  await page.getByRole('dialog', { name: 'Swap Rower' }).getByRole('button', { name: 'Skip station' }).click();
   await finish.click();
+  await expect(page.getByText('1 full round completed')).toBeVisible();
+  await page.getByRole('button', { name: 'Edit what I did' }).click();
   await page.getByLabel('Completed rounds').fill('0');
-  // Every Today circuit now takes one move per role. With the rower skipped, the step-up is the third station left.
-  await page.getByLabel('Partial station').selectOption({ label: '3. Step-up to box' });
+  // Every Today circuit takes one move per role: row, dead bug, rower, then the lunge swapped for the step-up.
+  await page.getByLabel('Partial station').selectOption({ label: '4. Step-up to box' });
   await page.getByLabel('Partial work (reps)').fill('3');
-  await proceed.click();
+  await page.getByRole('button', { name: 'Save edits' }).click();
+  await page.getByRole('button', { name: /^Continue to Core & posture circuit/ }).click();
 
   for (const [index, name] of ['Core & posture circuit', 'Easy movement circuit', 'Recovery'].entries()) {
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();

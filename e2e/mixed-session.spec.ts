@@ -108,7 +108,7 @@ test('saved mixed session runs offline, resumes a live swap and can reopen and r
   await page.getByRole('button', { name: 'Start block' }).click();
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled();
   await advanceClock(19_000);
-  await expect(page.getByRole('timer')).toHaveText('07:41');
+  await expect(page.getByRole('timer', { name: 'Block time left' })).toHaveText('07:41');
   await page.screenshot({ path: info.outputPath('3-424-live.png') });
 
   await expect(page.getByTestId('pose-reverse-lunge')).toBeVisible();
@@ -118,7 +118,7 @@ test('saved mixed session runs offline, resumes a live swap and can reopen and r
   await expect(page.getByTestId('pose-reverse-lunge')).toHaveCount(0);
   await expect(page.locator('[data-exercise-id="step-up"]')).toHaveAttribute('data-equipment-id', 'dumbbells');
   await expect(page.locator('[data-exercise-id="step-up"]')).toContainText('12 reps / side');
-  await expect(page.getByRole('timer')).toHaveText('07:41');
+  await expect(page.getByRole('timer', { name: 'Block time left' })).toHaveText('07:41');
 
   const hasSw = await page.evaluate(() => 'serviceWorker' in navigator);
   if (hasSw) {
@@ -129,7 +129,7 @@ test('saved mixed session runs offline, resumes a live swap and can reopen and r
   }
   await page.reload();
   await expect(page).toHaveURL(new RegExp('/workout/session/' + id + '$'));
-  await expect(page.getByRole('timer')).toHaveText('07:41');
+  await expect(page.getByRole('timer', { name: 'Block time left' })).toHaveText('07:41');
   await expect(page.getByTestId('pose-step-up')).toHaveAttribute('data-running', 'true');
   await page.getByRole('button', { name: 'Pause Step-up to box' }).focus();
   await page.keyboard.press('Enter');
@@ -145,20 +145,25 @@ test('saved mixed session runs offline, resumes a live swap and can reopen and r
   await page.screenshot({ path: info.outputPath('circuit-paused.png') });
   await advanceClock(90_000);
   await page.reload();
-  await expect(page.getByRole('timer')).toHaveText('07:41');
+  await expect(page.getByRole('timer', { name: 'Block time left' })).toHaveText('07:41');
   await page.getByRole('button', { name: 'Resume' }).click();
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled();
   await advanceClock(461_000);
-  await expect(page.getByRole('heading', { name: 'Review block' })).toBeFocused();
-  await expect(page.getByLabel('Completed rounds')).toHaveValue('');
+  // A guided circuit ends on the rotation-style review with its rounds already counted.
+  await expect(page.getByRole('heading', { name: 'Legs & core circuit' })).toBeFocused();
+  await expect(page.getByText(/^\d+ full rounds? completed$/)).toBeVisible();
+  await page.getByRole('button', { name: 'Wait', exact: true }).click();
   await page.screenshot({ path: info.outputPath('circuit-review.png') });
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Review block' })).toBeVisible();
+  await expect(page.getByText(/^\d+ full rounds? completed$/)).toBeVisible();
+  // Editing holds the review; the next block waits until Continue.
+  await page.getByRole('button', { name: 'Edit what I did' }).click();
   await expect(page.getByRole('heading', { name: 'Recovery' })).toHaveCount(0);
   await page.getByLabel('Completed rounds').fill('2');
   await page.getByLabel('Partial station').selectOption('lunge');
   await page.getByLabel('Partial work (reps)').fill('4');
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Save edits' }).click();
+  await page.getByRole('button', { name: /^Continue to Recovery/ }).click();
   await expect(page.getByRole('heading', { name: 'Recovery' })).toBeVisible();
   await finishTimed(page, true);
   await expect(page).toHaveURL(new RegExp('/workout/summary/' + id + '$'));
@@ -185,7 +190,7 @@ test('saved mixed session runs offline, resumes a live swap and can reopen and r
   await expect(page.getByRole('button', { name: 'Hard' })).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('unsupported movement remains readable and skipped work keeps untapped rounds unreported', async ({ page }, info) => {
+test('unsupported movement remains readable and a guided circuit finished at once reports zero rounds', async ({ page }, info) => {
   await page.setViewportSize({ width: 320, height: 844 });
   const original = MIXED_TEMPLATE.ordered!.blocks[3]!;
   if (original.kind !== 'self-paced') throw new Error('Missing circuit fixture');
@@ -214,6 +219,7 @@ test('unsupported movement remains readable and skipped work keeps untapped roun
   await expect(page.getByTestId('mixed-pr')).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('summary-no-pr.png') });
   await page.getByRole('link', { name: 'View workout details' }).click();
-  await expect(page.getByTestId('mixed-result-circuit')).toContainText('Rounds unreported');
+  // A guided circuit counts its own rounds, so Finish at once logs 0 rather than leaving them unreported.
+  await expect(page.getByTestId('mixed-result-circuit')).toContainText('0 rounds');
   await expect(page.getByTestId('mixed-result-circuit')).toContainText('Skipped');
 });

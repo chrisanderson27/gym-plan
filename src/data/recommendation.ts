@@ -1,4 +1,4 @@
-import { exerciseById, LIFT_TEMPLATES } from '../content';
+import { exerciseById, LIFT_TEMPLATES, PER_SIDE_IDS } from '../content';
 import { coachedSchedule, COACHED_TRANSITION_SEC, COACHED_WORK_SEC } from '../engine/block/coached';
 import { generateLiftDay } from '../engine/block/generate';
 import { DEFAULT_LIFT_BUDGET_MIN, JOINT_FRIENDLY_WEEKS, LIFT_DAY_SHAPES, SEC_PER_UNIT } from '../engine/config';
@@ -34,9 +34,8 @@ export type TodayDecision = TodayRecommendation | (TodayState & { kind: 'rest' |
 
 const stores = (db: GymDb) => [db.sessions, db.sets, db.settings, db.equipment, db.exerciseOverrides, db.libraryBlocks, db.runs];
 const maxLiftSec = DEFAULT_LIFT_BUDGET_MIN * 60;
-const perSide = new Set(['reverse-lunge', 'step-up', 'bulgarian-split-squat', 'dead-bug']);
 const accessoryWorkSec = ({ exerciseId, target }: Pick<OrderedStation, 'exerciseId' | 'target'>) =>
-  target.amount * SEC_PER_UNIT[target.unit] * (target.unit === 'reps' && perSide.has(exerciseId) ? 2 : 1);
+  target.amount * SEC_PER_UNIT[target.unit] * (target.unit === 'reps' && PER_SIDE_IDS.has(exerciseId) ? 2 : 1);
 
 export function todaySessionRoute(s: Session) {
   return s.mixed ? `/workout/session/${s.id}` : `/${s.type === 'custom' ? 'lift' : s.type}/session/${s.id}`;
@@ -65,7 +64,7 @@ function generatedAccessory(g: Gym, variant: LiftVariant, main: string, source: 
         || (group === 'core' && groups.includes('core'))) continue;
       const ex = exerciseById.get(exerciseId)!;
       const unit = ex.prescription.unit === 'reps' || ex.prescription.unit === 'amrap' ? 'reps' : 'sec';
-      const repCap = coached ? Math.floor(COACHED_WORK_SEC / SEC_PER_UNIT.reps / (perSide.has(exerciseId) ? 2 : 1)) : 8;
+      const repCap = coached ? Math.floor(COACHED_WORK_SEC / SEC_PER_UNIT.reps / (PER_SIDE_IDS.has(exerciseId) ? 2 : 1)) : 8;
       // Self-paced holds run 30 s, so four stations make a round long enough for an 8-minute block to loop at most 4 times.
       const amount = unit === 'reps' ? Math.min(ex.prescription.min || 6, repCap) : coached ? 20 : 30;
       const station = { slotId: `${source.id}-${stations.length + 1}`, exerciseId, target: { unit, amount } } as const;

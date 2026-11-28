@@ -2,7 +2,7 @@ import { exerciseById } from '../content';
 import { EQUIPMENT_PREFS } from '../content/equipment-prefs';
 import { RUN_FORMATS } from '../content/run-formats';
 import { COACHED_EXERCISE_IDS, PHASE3_EXERCISE_IDS, coachedEquipmentId, coachedPose, phase3EquipmentId, phase3Pose, runDemo, runExerciseId } from '../content/stationDemos';
-import { coachedSchedule, initialCoached, nextCoached, projectCoached, sameCoachedPhase } from '../engine/block/coached';
+import { initialCoached, nextCoached, projectCoached, sameCoachedPhase } from '../engine/block/coached';
 import { elapsedClamped, finishClock, pauseClock, reconcileClock, resumeClock, startClock } from '../engine/block/session';
 import { stationUnits } from '../engine/block/progression';
 import { FINISH_RPE, LOWER_MUSCLES, PRIMARY_SET_WEIGHT, SECONDARY_SET_WEIGHT } from '../engine/config';
@@ -18,6 +18,7 @@ import { runPhases, runTotalMs } from '../engine/run/segments';
 import { workoutShortfallSec } from '../engine/templates';
 import { weekIndex } from '../engine/week';
 import { loadCardioSnapshot, runWalkRatioOf, type CardioSnapshot } from './cardio';
+import { guidedSchedule } from './guided';
 import type { GymDb } from './db';
 import { newId } from './ids';
 import { blockPrescriptionPatch, ensureEquipmentInstance, LIFT_EXERCISES, loadLiftSnapshot, resolveEquipmentId } from './lift';
@@ -460,8 +461,9 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
     const saveClock = (next: MixedTimer) => { m.timers = { ...m.timers, [blockId]: next }; };
     const saveDraft = (next: MixedDraft) => { m.drafts = { ...m.drafts, [blockId]: next }; };
     const reconcile = stage === 'active' && clock ? reconcileClock(clock, nowMs) : undefined;
-    if (stage === 'active' && b.kind === 'coached' && b.stations && clock?.coached && stations) {
-      const schedule = coachedSchedule(b, stations.filter((s) => !s.skipped));
+    // Rotations and guided circuits keep a checkpoint; catch it up to now before any action reads it.
+    const schedule = stage === 'active' && clock?.coached && stations ? guidedSchedule(b, stations) : undefined;
+    if (schedule && clock?.coached) {
       clock = { ...clock, coached: projectCoached(schedule, clock.coached, elapsedClamped(clock, nowMs)).at };
       saveClock(clock);
     }
@@ -483,7 +485,8 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         const acceptedRun = b.kind === 'run' ? session.blocks.find((row): row is RunBlock => row.kind === 'run' && row.id === b.id) : undefined;
         const durationMs = acceptedRun ? runTotalMs(runPhases(acceptedRun)) : b.durationSec * 1000;
         saveClock({ ...startClock({ startedAt: null, pausedAt: null, pausedMs: 0, durationMs }, nowMs),
-          ...(b.kind === 'coached' ? { coached: initialCoached } : {}) });
+          // A self-paced circuit now runs guided: the clock walks its stations at their estimated pace.
+          ...(b.kind === 'coached' || b.kind === 'self-paced' ? { coached: initialCoached } : {}) });
         setStage('active');
         break;
       }
@@ -503,7 +506,9 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         break;
       }
       case 'round':
-        if (b.kind !== 'self-paced' || stage !== 'active' || !draft || !stations || !clock || clock.pausedAt !== null || draft.tapped !== action.expectedTapped) return session;
+        // A guided circuit counts its own rounds; tapping is only for circuits started before guidance.
+        if (b.kind !== 'self-paced' || stage !== 'active' || !draft || !stations || !clock || clock.coached || clock.pausedAt !== null
+          || draft.tapped !== action.expectedTapped) return session;
         if (!sameLineup(stations, action.expectedStations)) throw new MixedInputError('The station lineup changed. Check the current stations before logging a round.');
         if (!(await mixedOptions(db, b, m, now)).ready) throw new MixedInputError('Replace or skip unavailable movements first.');
         saveDraft({ ...draft, tapped: draft.tapped + 1, rounds: draft.tapped + 1 });
@@ -532,7 +537,8 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         const original = b.stations.find((s) => s.slotId === action.slotId);
         const current = stations.find((s) => s.slotId === action.slotId);
         if (!original || !current || current.exerciseId !== action.expectedExerciseId) return session;
-        if (b.kind === 'coached' && stage === 'active' && (action.exerciseId === null || current.skipped)) return session;
+        // Skipping or restoring a station mid-block would reshuffle the schedule the checkpoint walks.
+        if ((b.kind === 'coached' || clock?.coached) && stage === 'active' && (action.exerciseId === null || current.skipped)) return session;
         if (draft.partial?.slotId === current.slotId) throw new MixedInputError('This station already has partial work recorded.');
         const next = action.exerciseId === null ? { ...current, skipped: true }
           : stationChoices(await loadMixedGym(db, now), original, current, b.kind === 'coached').find((s) => s.exerciseId === action.exerciseId);
@@ -545,6 +551,10 @@ export async function updateMixedSession(db: GymDb, id: string, expected: MixedC
         m.stations = { ...m.stations, [blockId]: stations.map((s) => s.slotId !== next.slotId ? s : {
           ...next, swappedFromExerciseId: next.exerciseId !== original.exerciseId ? original.exerciseId : undefined,
         }) };
+        // A swapped exercise can have a different pace, so a guided circuit restarts the current phase from now.
+        if (b.kind === 'self-paced' && stage === 'active' && clock?.coached) {
+          saveClock({ ...clock, coached: { ...clock.coached, phaseStartMs: elapsedClamped(clock, nowMs) } });
+        }
         break;
       }
       case 'swap-strength': {

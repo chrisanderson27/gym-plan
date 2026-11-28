@@ -33,7 +33,8 @@ async function seed(page: Page, source = COACHED_TEMPLATE, prefs: Parameters<typ
 async function finishTimed(page: Page, finish = false) {
   await button(page, 'Start block').click();
   await button(page, 'Finish block').click();
-  await button(page, finish ? 'Finish workout' : 'Continue').click();
+  // A guided circuit ends on the rotation-style review, whose Continue names the next block.
+  await page.getByRole('button', { name: finish ? 'Finish workout' : /^Continue( to |$)/ }).click();
 }
 
 async function rotationEntry(page: Page) {
@@ -50,7 +51,7 @@ async function rotationEntry(page: Page) {
 
 const continueRotation = (page: Page) => button(page, 'Continue to Legs & core circuit →');
 
-test('one Start, sixteen scheduled edges, one editable result and the next block waits', async ({ page }, info) => {
+test('one Start, sixteen scheduled edges, one editable result, and Wait holds the review', async ({ page }, info) => {
   await page.setViewportSize({ width: 402, height: 874 });
   await rotationEntry(page);
   const id = page.url().split('/').pop();
@@ -79,6 +80,10 @@ test('one Start, sixteen scheduled edges, one editable result and the next block
   await expect(page.getByText('4 full rotations completed')).toBeVisible();
   await expect(page.getByTestId('mixed-runner')).toHaveAttribute('data-user-events', '0');
   await expect(continueRotation(page)).toHaveCount(1);
+  // The review counts down to the next block on its own; Wait keeps it here to edit.
+  await expect(page.getByTestId('auto-countdown')).toContainText('Continuing to Legs & core circuit in 10 s');
+  await button(page, 'Wait').click();
+  await expect(page.getByTestId('auto-countdown')).toHaveCount(0);
   await capture(page, info.outputPath('coached-four-rotations.png'));
   await page.clock.setFixedTime(at(900_000));
   await expect(page.getByRole('heading', { name: blockTitle })).toBeFocused();

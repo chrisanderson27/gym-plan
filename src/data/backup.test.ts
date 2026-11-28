@@ -397,7 +397,8 @@ it('restores authored workouts and history after the source changes, keeping loc
   expect(Object.keys(restored.mixed!.results)).toEqual(ordered.blocks.map((b) => b.id));
   const circuitId = ordered.blocks[3]!.id;
   expect(restored.mixed!.results[circuitId]).toMatchObject({
-    rounds: null, stations: [{ exerciseId: 'step-up', swappedFromExerciseId: 'reverse-lunge' }, { exerciseId: 'rower' }],
+    // A guided circuit counts its own rounds: finished 5 s in, none were complete.
+    rounds: 0, stations: [{ exerciseId: 'step-up', swappedFromExerciseId: 'reverse-lunge' }, { exerciseId: 'rower' }],
   });
   expect(await dst.sets.toArray()).toEqual(await src.sets.toArray());
   expect(await dst.libraryBlocks.count()).toBe(0);

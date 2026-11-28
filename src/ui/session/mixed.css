@@ -407,3 +407,20 @@
 .mixed-run-segment { margin: 12px 0; }
 .mixed-run-segment h2 { margin: 4px 0; }
 .mixed-run-segment p { margin: 4px 0; }
+
+/* Hands-off countdown before a block continues or starts on its own. */
+.mixed-auto {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--mixed-countdown-line);
+  border-radius: 14px;
+  background: var(--mixed-countdown);
+  color: var(--mixed-title);
+}
+.mixed-auto p { margin: 0; font-weight: 600; }
+.mixed-auto strong { color: var(--shell-lime); font-size: 22px; }
+.mixed-auto button { min-width: 88px; }

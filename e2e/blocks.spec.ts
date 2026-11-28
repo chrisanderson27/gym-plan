@@ -57,7 +57,7 @@ test('saves a named block and reopens the same targets', async ({ page }) => {
   await page.getByRole('button', { name: 'Save to My Blocks' }).click();
   await expect(page.getByRole('heading', { name: 'My Blocks' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Bench & Core' })).toBeVisible();
-  await expect(page.getByText('3 exercises × about 4 rounds · 8 min · Self-paced circuit')).toBeVisible();
+  await expect(page.getByText('3 exercises × about 3 rounds · 8 min · Self-paced circuit')).toBeVisible();
   await page.getByRole('link', { name: 'Bench & Core' }).click();
   await expect(page.getByLabel('Block name')).toHaveValue('Bench & Core');
   await expect(page.getByLabel('Minutes')).toHaveValue('8');

@@ -1,4 +1,4 @@
-import { EXERCISES, HOME_GYM, LIFT_TEMPLATES, defaultEquipmentFor, exerciseById, type EquipmentTag, type Exercise, type GymProfile } from '../content';
+import { EXERCISES, HOME_GYM, LIFT_TEMPLATES, PER_SIDE_IDS, defaultEquipmentFor, exerciseById, type EquipmentTag, type Exercise, type GymProfile } from '../content';
 import { blockedExerciseIds } from '../content/equipment-prefs';
 import { generateLiftDay, type LiftDayInput } from '../engine/block/generate';
 import { seedFrom } from '../engine/block/rng';
@@ -13,7 +13,7 @@ import type { LiftVariant, LocalDate } from './types';
 export function toBlockExercise(e: Exercise): BlockExerciseShape {
   return {
     ...toLiftExercise(e), group: e.group, unit: e.prescription.unit, unitMin: e.prescription.min, unitMax: e.prescription.max,
-    targets: e.targets && [...e.targets],
+    targets: e.targets && [...e.targets], ...(PER_SIDE_IDS.has(e.id) ? { perSide: true } : {}),
   };
 }
 

@@ -2,12 +2,13 @@ import { EXERCISES, SEED_EQUIPMENT } from '../content';
 import { EQUIPMENT_PREF_IDS } from '../content/equipment-prefs';
 import { POSES } from '../content/poses';
 import { coachedPose } from '../content/stationDemos';
-import { coachedSchedule, phaseMs, sameCoachedPhase, projectCoached } from '../engine/block/coached';
+import { coachedSchedule, phaseMs, sameCoachedPhase, projectCoached, type CoachedPhase } from '../engine/block/coached';
 import { elapsedClamped } from '../engine/block/session';
 import { stationUnits } from '../engine/block/progression';
 import { ACTIVITIES } from '../engine/plan/activities';
 import { BLOCK_MAX_STATIONS } from '../engine/templates';
 import { ImportError } from './errors';
+import { guidedSchedule } from './guided';
 import { toBlockExercise } from './liftday';
 import type { StoreName } from './stores';
 import { APPEARANCES, FEEDBACK_TAGS, GOAL_DIRECTIONS, STATION_UNITS } from './types';
@@ -189,7 +190,7 @@ const stations = keyed('slotId', 1, BLOCK_MAX_STATIONS, (v) => isRec(v) && effec
 const stationChanges = arr(shape({ afterRound: integer, stations }));
 const partial = shape({ slotId: id, unit: stationUnit, count: nonnegative });
 const coachedCheckpoint = (v: unknown) => isRec(v) && only(v, ['station', 'phase', 'phaseStartMs', 'rotations'])
-  && shape({ station: bounded(0, 5), phase: oneOf('work', 'rest', 'transition'), phaseStartMs: integer, rotations: integer })(v);
+  && shape({ station: bounded(0, BLOCK_MAX_STATIONS - 1), phase: oneOf('work', 'rest', 'transition'), phaseStartMs: integer, rotations: integer })(v);
 const timer = shape({ startedAt: nullable(num), pausedAt: nullable(num), pausedMs: nonnegative, durationMs: nonnegative,
   frozenElapsedMs: opt(nonnegative), coached: opt(coachedCheckpoint) });
 const draft = shape({ rounds: nullable(integer), tapped: integer, partial: opt(partial), stationChanges: opt(stationChanges) });
@@ -203,7 +204,8 @@ const mixedShape = shape({
   cursor: shape({ blockId: id, stage: oneOf('entry', 'active', 'review'), setSlot: integer }),
 });
 
-function validCoachedClock(block: ExecutableCoachedBlock, effective: EffectiveStation[], t: MixedTimer, row: Rec, latestAnchorAt?: number) {
+/** A checkpointed clock: a coached rotation's, or a guided circuit's. `schedule` is the plan its stations walk. */
+function validGuidedClock(schedule: CoachedPhase[][], t: MixedTimer, row: Rec, latestAnchorAt?: number) {
   const { coached: at, startedAt, pausedAt, pausedMs, frozenElapsedMs, durationMs } = t;
   if (!only(t as unknown as Rec, ['coached', 'startedAt', 'pausedAt', 'pausedMs', 'durationMs', 'frozenElapsedMs'])) return false;
   if (startedAt === null) return !at && pausedMs === 0 && frozenElapsedMs === 0;
@@ -216,9 +218,6 @@ function validCoachedClock(block: ExecutableCoachedBlock, effective: EffectiveSt
   if (latestAnchorAt !== undefined && (!Number.isFinite(latestAnchorAt) || (pausedAt ?? startedAt + pausedMs) > latestAnchorAt
     || at.phaseStartMs > elapsedClamped(t, latestAnchorAt))) return false;
   if (pausedAt !== null && (elapsedLimit >= durationMs || (frozenElapsedMs !== undefined && frozenElapsedMs !== elapsedClamped({ ...t, frozenElapsedMs: undefined }, pausedAt)))) return false;
-  const lineup = effective.filter((s) => !s.skipped);
-  if (!lineup.every((s) => s.poseId && s.equipmentId)) return false;
-  const schedule = coachedSchedule(block, lineup);
   if (!schedule[at.station]?.some((p) => p.role === at.phase)) return false;
   if (at.phase === 'rest' || at.phase === 'transition') {
     const phases = schedule[at.station]!;
@@ -245,7 +244,7 @@ function validMixed(row: Rec, context?: ValidationContext): boolean {
     const d = read(m.drafts);
     const t = read(m.timers);
     const r = read(m.results);
-    if (t?.coached && b.kind !== 'coached') return false;
+    if (t?.coached && b.kind !== 'coached' && b.kind !== 'self-paced') return false;
     if (!!r !== (i < current || (i === current && !!row.endedAt))) return false;
     if ((i === current && m.cursor.setSlot > (accepted?.sets ?? 0)) || (i > current && t)) return false;
     if (b.kind === 'strength') {
@@ -276,12 +275,17 @@ function validMixed(row: Rec, context?: ValidationContext): boolean {
     const validPartial = (value: MixedDraft['partial'], list: EffectiveStation[] | undefined) =>
       !value || list?.some((s) => !s.skipped && s.slotId === value.slotId && s.target.unit === value.unit);
     const validChanges = (changes: MixedDraft['stationChanges']) => !changes || changes.every((change, k) =>
-      change.afterRound > (changes[k - 1]?.afterRound ?? 0) && change.afterRound <= (b.kind === 'coached' ? t?.coached?.rotations ?? 0 : d?.tapped ?? 0)
+      change.afterRound > (changes[k - 1]?.afterRound ?? 0) && change.afterRound <= (t?.coached?.rotations ?? (b.kind === 'coached' ? 0 : d?.tapped ?? 0))
       && matches(change.stations) && (b.kind !== 'coached' || (only(change as unknown as Rec, ['afterRound', 'stations'])
         && change.stations.every((s, k) => !!s.skipped === !!effective?.[k]?.skipped && (s.skipped || (!!s.poseId && !!s.equipmentId))))));
     if (!matches(effective) || !d || !validPartial(d.partial, effective) || !validChanges(d.stationChanges)
       || (r && (r.rounds === undefined || !matches(r.stations) || !validPartial(r.partial, r.stations) || !validChanges(r.stationChanges)))) return false;
-    if (b.kind !== 'coached') return true;
+    const latestAnchorAt = i === current && m.cursor.stage === 'active' && context?.restoreAt !== undefined
+      ? (iso(context.exportedAt) ? Math.min(Date.parse(context.exportedAt), context.restoreAt) : NaN)
+      : undefined;
+    // A guided circuit counts its rounds from the checkpoint, never from taps.
+    if (b.kind !== 'coached') return !t?.coached || (d.tapped === 0 && (i >= current || t.frozenElapsedMs !== undefined)
+      && validGuidedClock(guidedSchedule(b, effective!)!, t, row, latestAnchorAt));
     if (!only(d as unknown as Rec, ['rounds', 'tapped', 'partial', 'stationChanges'])
       || (d.partial && !only(d.partial, ['slotId', 'unit', 'count']))
       || (r && !only(r as unknown as Rec, ['status', 'elapsedMs', 'rounds', 'partial', 'stations', 'stationChanges']))) return false;
@@ -292,10 +296,9 @@ function validMixed(row: Rec, context?: ValidationContext): boolean {
       const equipment = context?.equipment.get(s.equipmentId) ?? SEED_EQUIPMENT.find((e) => e.id === s.equipmentId);
       return equipment && coachedPose(s.exerciseId, equipment) === s.poseId;
     })) return false;
-    const latestAnchorAt = active && context?.restoreAt !== undefined
-      ? (iso(context.exportedAt) ? Math.min(Date.parse(context.exportedAt), context.restoreAt) : NaN)
-      : undefined;
-    if (t && (i < current && t.frozenElapsedMs === undefined || !validCoachedClock(b as ExecutableCoachedBlock, effective!, t, row, latestAnchorAt))) return false;
+    const lineup = effective!.filter((s) => !s.skipped);
+    if (t && (i < current && t.frozenElapsedMs === undefined || (t.startedAt !== null && !lineup.every((s) => s.poseId && s.equipmentId))
+      || !validGuidedClock(coachedSchedule(b as ExecutableCoachedBlock, lineup), t, row, latestAnchorAt))) return false;
     if (d.tapped !== 0 || ((!t || t.startedAt === null || t.frozenElapsedMs === undefined) && (d.rounds !== null || d.partial))) return false;
     // The result is a portable copy of the final draft and lineup. Object key order is immaterial.
     return !r || (r.rounds === d.rounds && snapshotValue([r.partial, r.stations, r.stationChanges]) === snapshotValue([d.partial, effective, d.stationChanges]));

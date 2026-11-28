@@ -244,7 +244,8 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   const finishTimed = async (next: string) => {
     await button(page, 'Start block').click();
     await button(page, 'Finish block').click();
-    await button(page, next).click();
+    // Guided circuits and rotations end on a review whose Continue names the next block.
+    await page.getByRole('button', { name: next === 'Continue' ? /^Continue( to |$)/ : next }).click();
   };
   await finishTimed('Continue');
   await expect(page.getByRole('heading', { name: 'Leg press' })).toBeVisible();
@@ -267,13 +268,13 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   const swapped = page.getByTestId('pose-step-up');
   await expect(swapped).toBeVisible();
   const beforePlayback = await readSession(page, sid);
-  const clockBefore = await page.getByRole('timer').textContent();
+  const clockBefore = await page.getByRole('timer', { name: 'Block time left' }).textContent();
   // The swapped card autoplays, and playback never touches the clock or the log.
   await expect(swapped).toHaveAttribute('data-running', 'true');
   const frame = await swapped.innerHTML();
   await expect.poll(() => swapped.innerHTML()).not.toBe(frame);
   await expect(page.locator('.gym-card [data-running="true"]')).toHaveCount(1);
-  await expect(page.getByRole('timer')).toHaveText(clockBefore!);
+  await expect(page.getByRole('timer', { name: 'Block time left' })).toHaveText(clockBefore!);
   await capture(page, info, 'workout-active-swapped');
   await button(page, 'Pause Step-up to box').press('Enter');
   expect(await readSession(page, sid)).toEqual(beforePlayback);
@@ -282,7 +283,7 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   await expect(page.getByTestId('cues-step-up')).toBeVisible();
   await capture(page, info, 'workout-reduced-motion');
   await button(page, 'Finish block').click();
-  await button(page, 'Continue').click();
+  await page.getByRole('button', { name: /^Continue to Four-station rotation/ }).click();
   await expect(page.getByRole('heading', { name: 'Four-station rotation' })).toBeVisible();
   await button(page, 'Start block').click();
   await button(page, 'Finish block').click();
@@ -306,7 +307,8 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   const finished = (original.export.stores.sessions as Session[]).find((session) => session.id === sid)!;
   expect(finished.mixed?.prescription).toEqual(authored.ordered);
   expect(finished.rpe).toBe(9);
-  expect(finished.mixed?.results[authored.ordered!.blocks[3]!.id]).toMatchObject({ rounds: null, stations: [{ exerciseId: 'step-up' }] });
+  // A guided circuit counts its own rounds; finished at once, it logs 0.
+  expect(finished.mixed?.results[authored.ordered!.blocks[3]!.id]).toMatchObject({ rounds: 0, stations: [{ exerciseId: 'step-up' }] });
   expect(original.export.stores.sets).toHaveLength(1);
   expect(original.export.stores.libraryBlocks).toMatchObject([{ durationSec: 180, recommend: true }]);
 

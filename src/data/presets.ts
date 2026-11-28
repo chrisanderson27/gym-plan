@@ -139,9 +139,10 @@ export const WORKOUT_PRESETS: WorkoutPreset[] = [
   {
     id: 'bike-lower-strength', name: 'Bike + Lower Strength', activity: 'hybrid', category: 'Bike and strength',
     description: 'Leg press and hip thrusts with a bike segment (the leg-day machine option).',
-    blocks: blocks(prep(420), run('bike', 'Bike', 'easy', 'bike', 1200), strength('leg-press', 5), strength('hip-thrust', 4),
-      circuit('bike-circuit', 'Legs & core circuit', [reps('reverse-lunge', 8), reps('push-up', 8), reps('dead-bug', 8), reps('step-up', 10),
-        reps('one-arm-db-row', 10), secs('plank', 30)]), recover(360)),
+    blocks: blocks(prep(420), run('bike', 'Bike', 'easy', 'bike', 1080), strength('leg-press', 5), strength('hip-thrust', 4),
+      // Three of these are per-side moves, so lighter targets keep three rounds inside a one-hour workout.
+      circuit('bike-circuit', 'Legs & core circuit', [reps('reverse-lunge', 6), reps('push-up', 8), reps('dead-bug', 6), reps('step-up', 8),
+        reps('one-arm-db-row', 10)]), recover(360)),
   },
 ];
 

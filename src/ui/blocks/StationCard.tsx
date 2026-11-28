@@ -1,14 +1,12 @@
-import { exerciseById } from '../../content';
+import { exerciseById, PER_SIDE_IDS } from '../../content';
 import { POSES } from '../../content/poses';
 import { exerciseName } from '../labels';
 import { SwapIcon } from '../icons';
 import { PosePlaybackButton, PoseView } from '../slots/PoseView';
 import { stationGearLabel } from './gearLabel';
 
-const PER_SIDE = new Set(['reverse-lunge', 'step-up', 'bulgarian-split-squat', 'dead-bug']);
-
 export function stationTargetLine(exerciseId: string, amount: string | number, unit: string, load?: string | number) {
-  const side = unit === 'reps' && PER_SIDE.has(exerciseId) ? ' / side' : '';
+  const side = unit === 'reps' && PER_SIDE_IDS.has(exerciseId) ? ' / side' : '';
   return `${amount} ${unit}${side}${Number(load) ? ` · ${load} lb` : ''}`;
 }
 

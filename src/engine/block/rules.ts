@@ -7,6 +7,8 @@ export interface BlockExerciseShape extends LiftExercise {
   unitMin?: number;
   unitMax?: number;
   targets?: StationUnit[];
+  /** Reps are counted per side, so a round does the target twice. */
+  perSide?: boolean;
 }
 
 type BlockGroup = 'lower' | 'push' | 'pull' | 'core' | 'cardio';

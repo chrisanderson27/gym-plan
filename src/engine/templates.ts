@@ -1,5 +1,5 @@
 import type { Block, IntervalBlock, LiftBlock, OrderedBlock, StationTarget } from '../data/types';
-import { stationWorkSec } from './block/coached';
+import { stationPhasePlan, stationWorkSec } from './block/coached';
 import { secondsFor } from './block/progression';
 import { groupOf, PROFILES, type BlockExerciseShape } from './block/rules';
 import { MIN_PER_SET, REST_DEFAULT_SEC, SEC_PER_UNIT, TRANSITION_SEC } from './config';
@@ -150,10 +150,19 @@ export function blockRoundSeconds(block: RoundBlock, exerciseOf: ExerciseLookup)
     const after = (block.restSec ?? 0) + (block.transitionSec ?? 0);
     return stations.reduce((sec, { target }) => sec + stationWorkSec(target, block.workSec!) + after, 0);
   }
-  return stations.reduce((sec, { exerciseId, target }) => {
-    const ex = exerciseOf(exerciseId);
-    return sec + (ex ? secondsFor(target, ex) : target.amount * SEC_PER_UNIT[target.unit] + TRANSITION_SEC);
-  }, 0);
+  return stations.reduce((sec, station) => sec + stationPaceSec(station, exerciseOf) + TRANSITION_SEC, 0);
+}
+
+/** Estimated work for one self-paced station: per-side reps count twice. The switch to the next station is extra. */
+export function stationPaceSec({ exerciseId, target }: { exerciseId: string; target: StationTarget }, exerciseOf: ExerciseLookup): number {
+  const ex = exerciseOf(exerciseId);
+  const work = (ex ? secondsFor(target, ex) : target.amount * SEC_PER_UNIT[target.unit] + TRANSITION_SEC) - TRANSITION_SEC;
+  return target.unit === 'reps' && ex?.perSide ? work * 2 : work;
+}
+
+/** A self-paced circuit run as a guided rotation: each station's estimated work, then a switch, then the next station. */
+export function selfPacedSchedule(stations: readonly { exerciseId: string; target: StationTarget }[], exerciseOf: ExerciseLookup) {
+  return stations.map((station) => stationPhasePlan(Math.max(1, Math.round(stationPaceSec(station, exerciseOf))), 0, TRANSITION_SEC));
 }
 
 export function blockRounds(block: RoundBlock, exerciseOf: ExerciseLookup): number | undefined {
