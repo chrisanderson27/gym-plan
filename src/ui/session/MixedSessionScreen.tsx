@@ -84,8 +84,9 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
   const [retry, setRetry] = useState<Retry | null>(null);
   const [editing, setEditing] = useState(false);
   const [swap, setSwap] = useState<{ slotId: string } | 'strength' | null>(null);
-  // Wait stops this screen's countdown; the usual buttons stay.
+  // Wait stops this screen's countdown; the usual buttons stay. A Wait before the start never holds the block's end.
   const [held, setHeld] = useState(false);
+  useEffect(() => setHeld(false), [stage]);
   const writing = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const reviewHeading = useRef<HTMLHeadingElement>(null);
@@ -315,7 +316,7 @@ function MixedBlock({ session, mixed, block, index }: { session: Session; mixed:
               <strong class="num" role="timer" aria-label="Phase time left">{formatClock(remaining ? rotation.remainingSec : 0)}</strong></div>}
             <div class={rotation ? 'mixed-rounds' : undefined}><span class="mixed-eyebrow num">{paused ? 'Paused · time left' : 'Block time left'}</span>
               <strong class="num" role="timer" aria-label={coached || circuit ? 'Block time left' : undefined}>{formatClock(remaining)}</strong></div>
-            {circuit && draft && <div class="mixed-rounds"><span class="mixed-eyebrow num">Rounds logged</span>
+            {circuit && !guidedCircuit && draft && <div class="mixed-rounds"><span class="mixed-eyebrow num">Rounds logged</span>
               <strong class="num" aria-label={draft.rounds === null ? 'Rounds unreported' : undefined}>{String(draft.rounds ?? 0).padStart(2, '0')}</strong></div>}
             <progress aria-label="Block time left" max={block.kind === 'strength' ? 1 : clock ? clock.durationMs / 1000 : block.durationSec} value={remaining} />
           </div>

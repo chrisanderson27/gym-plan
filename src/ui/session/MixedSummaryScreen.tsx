@@ -86,9 +86,10 @@ export function MixedSummaryScreen({ id }: { id: string }) {
       </section>}
       {mixed.prescription.blocks.map((block) => {
         const result = Object.hasOwn(mixed.results, block.id) ? mixed.results[block.id] : undefined;
-        return block.kind === 'coached' && result && <section class="mixed-summary-card" key={block.id} data-testid={`mixed-result-${block.id}`}>
+        // Rotations and circuits both count rounds now, so both report them here.
+        return (block.kind === 'coached' || block.kind === 'self-paced') && result && <section class="mixed-summary-card" key={block.id} data-testid={`mixed-result-${block.id}`}>
           <h2>{mixedBlockName(block)}</h2>
-          {result.status === 'skipped' ? <p>Skipped</p> : <MixedResultActuals result={result} coached />}
+          {result.status === 'skipped' ? <p>Skipped</p> : <MixedResultActuals result={result} coached={block.kind === 'coached'} />}
         </section>;
       })}
       <section class="mixed-summary-card">

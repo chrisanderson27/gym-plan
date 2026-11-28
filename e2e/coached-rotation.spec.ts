@@ -107,7 +107,7 @@ test('one Start, sixteen scheduled edges, one editable result, and Wait holds th
   await button(page, 'Save edits').click();
   await continueRotation(page).click();
   await expect(page.getByRole('heading', { name: 'Legs & core circuit' })).toBeVisible();
-  await expect(page.getByRole('timer')).toHaveText('08:00');
+  await expect(page.getByRole('timer', { name: 'Block time left' })).toHaveText('08:00');
   await finishTimed(page);
   await finishTimed(page, true);
   await expect(page).toHaveURL(new RegExp(`/workout/summary/${id}$`));

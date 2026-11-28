@@ -46,6 +46,8 @@ test('timed blocks continue and start on their own, and a guided circuit walks i
   await expect(current(page)).toHaveAttribute('data-exercise-id', 'step-up');
   await expect(page.getByRole('timer', { name: 'Phase time left' })).toHaveText('01:00');
   await expect(button(page, '+1 round')).toHaveCount(0);
+  // Rounds come from the clock, so the tap counter is not shown.
+  await expect(page.getByText('Rounds logged')).toHaveCount(0);
   await page.clock.runFor(60_000);
   await expect(page.locator('.mixed-phase')).toHaveText('transition');
   await page.clock.runFor(10_000);
@@ -55,6 +57,17 @@ test('timed blocks continue and start on their own, and a guided circuit walks i
 
   await button(page, 'Finish block').click();
   await expect(page.getByText('0 full rounds completed')).toBeVisible();
+  await button(page, 'Wait').click();
+  for (const block of ['Row and step rotation', 'Recovery']) {
+    await page.getByRole('button', { name: new RegExp(`^Continue to ${block}`) }).or(button(page, 'Continue')).first().click();
+    await expect(page.getByRole('heading', { name: block })).toBeVisible();
+    await button(page, 'Skip block').click();
+  }
+  await button(page, 'Finish workout').click();
+  // The summary reports the guided circuit's counted rounds beside the rotations.
+  const summary = page.getByTestId('mixed-summary');
+  await expect(summary.locator('[data-testid^="mixed-result-"]')).toHaveCount(3);
+  await expect(summary.locator('[data-testid="mixed-result-step-circuit"]')).toContainText('0 rounds');
 });
 
 test('a strength block waits for its sets, then the next timed block starts itself', async ({ page }) => {
