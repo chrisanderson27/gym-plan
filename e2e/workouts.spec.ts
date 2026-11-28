@@ -455,3 +455,34 @@ test('refreshes stale previews and offers repair or Skip for unsupported prescri
   await page.goto('./#/builder/old-rotation');
   await expect(page).toHaveURL(/#\/mine\/old-rotation$/);
 });
+
+test('a copy of the old Step & Row points out its 13-round block and updates to the current preset', async ({ page }) => {
+  await onboard(page);
+  const station = (slotId: string, exerciseId: string, equipmentId: string, unit: 'sec' | 'reps', amount: number) =>
+    ({ slotId, exerciseId, equipmentId, target: { unit, amount } });
+  const templates: Template[] = [{
+    id: 'old-step-row', name: 'Step & Row', source: 'saved', type: 'custom', createdAt: at.toISOString(), blocks: [],
+    ordered: { name: 'Step & Row', blocks: [
+      { id: 'w', kind: 'preparation', durationSec: 420, instructions: 'Move at an easy pace, then rehearse the movements you plan to train.' },
+      { id: 'r', kind: 'coached', name: 'Step and row rotation', durationSec: 1380, workSec: 30, restSec: 0, transitionSec: 10, stations: [
+        station('1', 'box-step-up', 'bodyweight', 'sec', 45), station('2', 'rower', 'rower', 'sec', 45)] },
+      { id: 'c', kind: 'self-paced', name: 'Bodyweight circuit', durationSec: 960, stations: [
+        station('1', 'push-up', 'bodyweight', 'reps', 8), station('2', 'dead-bug', 'bodyweight', 'reps', 8), station('3', 'plank', 'bodyweight', 'sec', 30)] },
+      { id: 'd', kind: 'recovery', durationSec: 360, instructions: 'Slow your pace and breathe comfortably. Use gentle stretches as needed.' },
+    ] },
+  }];
+  await seedBackup(page, { templates });
+  await openWorkouts(page);
+  const card = saved(page).getByRole('article', { name: 'Step & Row' });
+  await expect(card.getByText('Step and row rotation repeats about 13 times. Open Preview to update it.')).toBeVisible();
+  await button(card, 'Preview').click();
+  const dialog = page.getByRole('dialog', { name: 'Preview Step & Row' });
+  await expect(dialog.getByTestId('refused-block'))
+    .toHaveText('Step and row rotation repeats about 13 times. The current Step & Row sizes every block for about 3 rounds.');
+  await button(dialog, 'Update to the current Step & Row').click();
+  await expect(dialog.getByTestId('refused-block')).toHaveCount(0);
+  await expect(dialog.getByText('Coached rotation · 13 min 30 s')).toHaveCount(2);
+  await button(dialog, 'Close preview').click();
+  await expect(card.getByText(/repeats about/)).toHaveCount(0);
+  await expect(card.getByText('Step and row', { exact: true })).toBeVisible();
+});

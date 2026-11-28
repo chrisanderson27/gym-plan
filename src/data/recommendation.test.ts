@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { FULL_WORKOUT_MIN_SEC, orderedDurationSec } from '../engine/templates';
+import { blockBalanceIssues, FULL_WORKOUT_MIN_SEC, isHardBlockIssue, orderedDurationSec } from '../engine/templates';
+import { blockExerciseOf } from './liftday';
 import { buildExport, importExport, parseExport } from './backup';
 import type { GymDb } from './db';
 import { setNotAtMyGym } from './lift';
@@ -26,8 +27,9 @@ async function review(now = at) {
 const checked: LibraryBlock = {
   id: 'checked', name: 'Checked easy circuit', kind: 'self-paced', recommend: true, durationSec: 480,
   createdAt: at.toISOString(), updatedAt: at.toISOString(), stations: [
-    { exerciseId: 'plank', target: { amount: 20, unit: 'sec' } },
-    { exerciseId: 'dead-bug', target: { amount: 6, unit: 'reps' } },
+    // About 5.6 rounds in 8 minutes: under the 6-round limit past which Today refuses a checked block.
+    { exerciseId: 'plank', target: { amount: 30, unit: 'sec' } },
+    { exerciseId: 'dead-bug', target: { amount: 12, unit: 'reps' } },
   ],
 };
 
@@ -108,8 +110,8 @@ test('an upper recommendation avoids recovering lower-body muscles in its access
   await db.sessions.put(session('recent-lower', 1, { date, endedAt: date, variant: 'lower-a' }));
   await db.sets.put({ ...topSets('recent-lower', 1)[0]!, ts: date, exerciseId: 'leg-press', equipmentId: 'plate-loaded' });
   await db.libraryBlocks.put({ ...checked, stations: [
-    { exerciseId: 'push-up', target: { amount: 6, unit: 'reps' } },
-    { exerciseId: 'reverse-lunge', target: { amount: 6, unit: 'reps' }, load: 10 },
+    { exerciseId: 'push-up', target: { amount: 12, unit: 'reps' } },
+    { exerciseId: 'reverse-lunge', target: { amount: 12, unit: 'reps' }, load: 10 },
   ] });
   const offered = await review();
   expect(offered.workout.variant).toBe('upper-a');
@@ -303,3 +305,40 @@ test('established Run and configured Swim stay outside new Today recommendations
   expect(await loadTodayRecommendation(db, at)).toMatchObject({ kind: 'unavailable' });
   expect(await stores()).toEqual(swim);
 });
+
+test('over 200 seeds, generated circuits never break a hard block rule, and with full gear none breaks any', async () => {
+  const gear = ['box-step-up', 'reverse-lunge', 'step-up', 'seated-cable-row', 'one-arm-db-row', 'push-up',
+    'seated-db-press', 'chest-press-machine', 'plank', 'dead-bug', 'air-bike', 'rower'];
+  let workouts = 0;
+  let full = 0;
+  for (let seed = 0; seed < 200; seed++) {
+    // A small LCG keeps each seed's gym reproducible.
+    let state = seed * 2654435761 % 4294967296;
+    const next = () => (state = (state * 1664525 + 1013904223) % 4294967296) / 4294967296;
+    await db.delete();
+    db = openTestDb();
+    await db.settings.put(settings({ programStart: next() < 0.5 ? '2026-11-19' : '2026-10-01', activities: ['lift'] }));
+    const recent = next();
+    if (recent < 0.6) {
+      const date = new Date(at.getTime() - 24 * 3_600_000).toISOString();
+      const lower = recent < 0.3;
+      await db.sessions.put(session('recent', 1, { date, endedAt: date, variant: lower ? 'lower-a' : 'upper-a' }));
+      await db.sets.put({ ...topSets('recent', 1)[0]!, ts: date, ...(lower ? { exerciseId: 'leg-press', equipmentId: 'plate-loaded' } : {}) });
+    }
+    const missing = seed % 4 === 0 ? [] : gear.filter(() => next() < 0.25);
+    for (const id of missing) await setNotAtMyGym(db, id, true);
+    const decision = await loadTodayRecommendation(db, at);
+    if (decision.kind !== 'workout') continue;
+    workouts++;
+    if (!missing.length) full++;
+    for (const block of decision.workout.prepared.mixed.prescription.blocks) {
+      if (block.kind !== 'coached' && block.kind !== 'self-paced') continue;
+      const issues = blockBalanceIssues(block, blockExerciseOf);
+      const where = `seed ${seed}, ${block.name}, missing ${missing.join(',') || 'nothing'}`;
+      expect(issues.filter(isHardBlockIssue), where).toEqual([]);
+      if (!missing.length) expect(issues, where).toEqual([]);
+    }
+  }
+  expect(workouts).toBeGreaterThan(150);
+  expect(full).toBeGreaterThanOrEqual(50);
+}, 60_000);

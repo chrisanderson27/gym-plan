@@ -6,13 +6,14 @@ import { muscleReadiness } from '../engine/lift/readiness';
 import { enabled } from '../engine/plan/activities';
 import { rankToday } from '../engine/plan/pick';
 import type { BudgetLine, Candidate, PlanInput } from '../engine/plan/types';
-import { FULL_WORKOUT_MIN_SEC, orderedDurationSec } from '../engine/templates';
+import { BLOCK_HARD_MAX_ROUNDS, BLOCK_ROUNDS, blockBalanceIssues, ROUND_SLACK_SEC, blockRoundSeconds, FULL_WORKOUT_MIN_SEC, isHardBlockIssue, orderedDurationSec } from '../engine/templates';
+import { groupOf } from '../engine/block/rules';
 import type { GymDb } from './db';
 import { findOpenLiftSession, LIFT_EXERCISES } from './lift';
-import { liftDayInputFrom, liftDaySeed } from './liftday';
+import { blockExerciseOf, liftDayInputFrom, liftDaySeed } from './liftday';
 import { availableDemo, findOpenMixedSession, loadMixedGym, prepareOrderedStart, resolveStation, workoutPreview, writePreparedOrdered } from './mixedSession';
 import { loadPlanInput } from './plan';
-import type { LibraryBlock, LiftVariant, OrderedBlock, OrderedStation, Session } from './types';
+import type { ExecutableCoachedBlock, LibraryBlock, LiftVariant, OrderedBlock, OrderedSelfPacedBlock, OrderedStation, Session } from './types';
 import { snapshotValue, validAuthoredWorkout } from './validate';
 import { copyWorkoutBlock, libraryWorkoutBlock, todayAccessorySlots, todayPreparation, todayRecovery } from './workoutChoices';
 
@@ -50,33 +51,54 @@ function generatedAccessory(g: Gym, variant: LiftVariant, main: string, source: 
   const upper = variant.startsWith('upper');
   const lanes = todayAccessorySlots[upper ? 'upper' : 'lower'];
   const coached = source.kind === 'coached';
-  const order = slot === 0 ? [0, 1, 2, 3] : slot === 1 ? [0, 2, 1] : slot === 2 ? [1, 2, 3] : [3, 2, 0];
   const stations: OrderedStation[] = [];
-  for (const lane of order) {
+  const groups: (ReturnType<typeof groupOf> | undefined)[] = [];
+  // One move per role, and each block starts on a different role, so a short list never loops two moves for minutes.
+  const order = lanes.map((_, i) => (i + slot) % lanes.length);
+  for (const [k, lane] of order.entries()) {
     for (const exerciseId of lanes[lane]!) {
       if (exerciseId === main || stations.some((s) => s.exerciseId === exerciseId) || !safeAccessory(exerciseId)) continue;
+      const exercise = blockExerciseOf(exerciseId);
+      const group = exercise && groupOf(exercise);
+      // The same rules the presets meet: no same-group neighbours, the loop back to the first included, and one core move.
+      if (group === groups.at(-1) || (k === order.length - 1 && group === groups[0])
+        || (group === 'core' && groups.includes('core'))) continue;
       const ex = exerciseById.get(exerciseId)!;
       const unit = ex.prescription.unit === 'reps' || ex.prescription.unit === 'amrap' ? 'reps' : 'sec';
       const repCap = coached ? Math.floor(COACHED_WORK_SEC / SEC_PER_UNIT.reps / (perSide.has(exerciseId) ? 2 : 1)) : 8;
-      const amount = unit === 'reps' ? Math.min(ex.prescription.min || 6, repCap) : 20;
+      // Self-paced holds run 30 s, so four stations make a round long enough for an 8-minute block to loop at most 4 times.
+      const amount = unit === 'reps' ? Math.min(ex.prescription.min || 6, repCap) : coached ? 20 : 30;
       const station = { slotId: `${source.id}-${stations.length + 1}`, exerciseId, target: { unit, amount } } as const;
       if (resolveStation(g, station, exerciseId, coached)) {
         stations.push(station);
+        groups.push(group);
         break;
       }
     }
   }
+  // A skipped last role can leave the loop closing on two moves of one group.
+  while (stations.length > 2 && groups.at(-1) === groups[0]) {
+    stations.pop();
+    groups.pop();
+  }
   if (stations.length < 2) return null;
   const name = [upper ? 'Upper-body technique rotation' : 'Legs & core technique rotation', 'Controlled movement circuit', 'Core & posture circuit', 'Easy movement circuit'][slot]!;
   const base = { ...source, name, stations };
-  return coached
+  const block: ExecutableCoachedBlock | OrderedSelfPacedBlock = coached
     ? { ...base, kind: 'coached', workSec: COACHED_WORK_SEC, restSec: reduced ? 30 : 20, transitionSec: COACHED_TRANSITION_SEC }
     : { ...base, kind: 'self-paced' };
+  // The slot keeps its minutes, so Today keeps its length. With full gear four stations fit 2-4 rounds; when missing gear
+  // thins the lineup, the block shrinks rather than loop past the builder's hard limit.
+  const round = blockRoundSeconds(block, blockExerciseOf)!;
+  const longest = Math.floor((BLOCK_HARD_MAX_ROUNDS * round) / 30) * 30;
+  const shortest = Math.ceil((BLOCK_ROUNDS.min * round - ROUND_SLACK_SEC) / 30) * 30;
+  return { ...block, durationSec: Math.min(longest, Math.max(shortest, source.durationSec)) };
 }
 
 function checkedReplacement(row: LibraryBlock, source: AccessorySlot, main: string, variant: LiftVariant, reduced: boolean,
   safeAccessory: (exerciseId: string) => boolean) {
   if (source.kind !== row.kind || row.stations.length < 2 || row.durationSec > source.durationSec) return;
+  if (blockBalanceIssues(row, blockExerciseOf).some(isHardBlockIssue)) return;
   const focus = variant.startsWith('lower') ? ['squat', 'hinge', 'lunge', 'carry-core'] : ['horizontal-push', 'horizontal-pull', 'vertical-push', 'vertical-pull', 'carry-core'];
   const occupied = new Set(row.stations.map((s) => s.exerciseId));
   if (occupied.size !== row.stations.length || occupied.has(main)) return;

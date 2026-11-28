@@ -4,13 +4,13 @@ import { useLiveQuery } from '../../data/live';
 import { missingCoachedSchedule } from '../../data/mixedSession';
 import { listMine, saveOrderedWorkout } from '../../data/templates';
 import type { OrderedPrescription, Settings, Template } from '../../data/types';
-import { PRESET_ACTIVITY_LABEL, WORKOUT_PRESETS, matchingSuggestion, type WorkoutPreset } from '../../data/presets';
-import { copyWorkoutBlock } from '../../data/workoutChoices';
+import { PRESET_ACTIVITY_LABEL, WORKOUT_PRESETS, currentPresetFor, matchingSuggestion, type WorkoutPreset } from '../../data/presets';
+import { copyWorkoutBlock, refusedBlock } from '../../data/workoutChoices';
 import { localDate } from '../../engine/dates';
 import { templateDurationMin, workoutShortfallSec } from '../../engine/templates';
 import { weekIndex } from '../../engine/week';
 import { BookmarkIcon, CalendarIcon, HistoryIcon, PlayIcon, PlusIcon } from '../icons';
-import { orderedDurationLabel, workoutBlockName } from '../labels';
+import { orderedDurationLabel, refusedBlockLabel, workoutBlockName } from '../labels';
 import { ALL_TEMPLATE_TYPES } from '../mine/MineRow';
 import { MoreMenu } from '../MoreMenu';
 import { OrderedStart } from './OrderedStart';
@@ -62,6 +62,24 @@ export function WorkoutsScreen({ settings }: { settings: Settings }) {
     }
   };
 
+  // A copy saved from a preset before blocks were sized by rounds takes the current preset's blocks and keeps its name.
+  const updateToCurrent = async (id: string, baseline: OrderedPrescription, preset: Suggestion) => {
+    if (pending.current) return;
+    pending.current = true;
+    setSaving(preset.name);
+    setSaveError(null);
+    try {
+      await saveOrderedWorkout(db, { name: baseline.name, blocks: preset.blocks.map((block) => copyWorkoutBlock(block)) }, { id, baseline });
+      const row = await db.templates.get(id);
+      setOverlay(row?.ordered ? { preview: { id, ordered: row.ordered } } : null);
+    } catch {
+      setSaveError(`update:${id}`);
+    } finally {
+      pending.current = false;
+      setSaving(null);
+    }
+  };
+
   function card(row: { ordered?: OrderedPrescription; template?: Template; suggestion?: Suggestion }) {
     const { template, suggestion } = row;
     const ordered = row.ordered ?? suggestion;
@@ -76,6 +94,7 @@ export function WorkoutsScreen({ settings }: { settings: Settings }) {
     };
     const needsRepair = ordered?.blocks.some(missingCoachedSchedule);
     const short = !!ordered && !suggestion && workoutShortfallSec(ordered.blocks) > 0;
+    const refused = template && ordered ? refusedBlock(ordered.blocks) : undefined;
     const eyebrow = suggestion ? PRESET_ACTIVITY_LABEL[suggestion.activity]
       : match?.category ?? (template && !ordered ? legacyCategory[template.type] : 'Custom workout');
     return (
@@ -87,6 +106,7 @@ export function WorkoutsScreen({ settings }: { settings: Settings }) {
         {suggestion && <p class="workout-lineup">{suggestion.blocks.map(workoutBlockName).join(' · ')}</p>}
         {needsRepair && <p class="workout-warning">Needs a station schedule. Open Preview to edit.</p>}
         {short && <p class="workout-warning">Shorter than 45 minutes. Extend it to start.</p>}
+        {refused && <p class="workout-warning">{refusedBlockLabel(refused)} Open Preview to update it.</p>}
         <div class="workout-actions">
           {suggestion ? <OrderedStart source={{ presetId: suggestion.id }}><PlayIcon />Start workout</OrderedStart>
             : short && template ? <button type="button" class="primary" onClick={() => setOverlay({ edit: { id: template.id, baseline: ordered! } })}><PlusIcon />Extend to 45 min</button>
@@ -101,6 +121,8 @@ export function WorkoutsScreen({ settings }: { settings: Settings }) {
 
   const preview = overlay && 'preview' in overlay ? overlay.preview : null;
   const repair = preview?.ordered.blocks.some(missingCoachedSchedule);
+  const refusedInPreview = preview?.id ? refusedBlock(preview.ordered.blocks) : undefined;
+  const current = refusedInPreview ? currentPresetFor(preview!.ordered) : undefined;
   const refreshPreview = async (id: string, shown: OrderedPrescription) => {
     const row = await db.templates.get(id);
     setOverlay((current) => current && 'preview' in current && current.preview.ordered === shown
@@ -133,6 +155,11 @@ export function WorkoutsScreen({ settings }: { settings: Settings }) {
       {preview && <WorkoutPreview ordered={preview.ordered} onClose={close} fallbackFocus={fallbackFocus}>
         {preview.removed ? <p class="workout-error" role="alert">This workout was removed.</p> : preview.id ? (
           <>
+            {refusedInPreview && <p class="workout-warning" data-testid="refused-block">{refusedBlockLabel(refusedInPreview)}{' '}
+              {current ? `The current ${current.name} sizes every block for about 3 rounds.` : 'Edit the workout to shorten it or add exercises.'}</p>}
+            {current && <button type="button" disabled={!!saving} onClick={() => updateToCurrent(preview.id!, preview.ordered, current)}>
+              Update to the current {current.name}</button>}
+            {saveError === `update:${preview.id}` && <p class="workout-error" role="alert">Could not update the workout. Try again.</p>}
             {workoutShortfallSec(preview.ordered.blocks) > 0
               ? <button type="button" class="primary" onClick={() => setOverlay({ edit: { id: preview.id!, baseline: preview.ordered } })}>Extend to 45 min</button>
               : <OrderedStart source={{ templateId: preview.id }} ordered={preview.ordered} disabled={repair}

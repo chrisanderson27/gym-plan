@@ -114,7 +114,7 @@ export const BLOCK_MAX_STATIONS = 9;
 export const BLOCK_HARD_MAX_ROUNDS = 6;
 export const BLOCK_HARD_SAME_GROUP_RUN = 3;
 // A block's clock is rounded to 30 s, so its rounds can sit that far either side of the range.
-const ROUND_SLACK_SEC = 30;
+export const ROUND_SLACK_SEC = 30;
 const MIN_STATIONS = [{ overSec: 720, min: 5 }, { overSec: 480, min: 4 }] as const;
 
 export interface RoundBlock {

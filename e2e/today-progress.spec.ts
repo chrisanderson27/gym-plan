@@ -53,7 +53,8 @@ async function warmOffline(page: Page) {
 
 const checked: LibraryBlock = {
   id: 'checked-easy', name: 'Steady core circuit', kind: 'self-paced', durationSec: 480, recommend: true,
-  stations: [{ exerciseId: 'plank', target: { unit: 'sec', amount: 20 } }, { exerciseId: 'dead-bug', target: { unit: 'reps', amount: 6 } }],
+  // About 5.6 rounds in 8 minutes: under the 6-round limit past which Today refuses a checked block.
+  stations: [{ exerciseId: 'plank', target: { unit: 'sec', amount: 30 } }, { exerciseId: 'dead-bug', target: { unit: 'reps', amount: 12 } }],
   createdAt: now.toISOString(), updatedAt: now.toISOString(),
 };
 
@@ -261,11 +262,12 @@ test('saved work agrees in Today, Progress and History after an offline reload a
   await sheet.getByRole('button', { name: 'Step-up to box' }).click();
   await expect(sheet).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Step-up to box' })).toBeVisible();
-  await page.getByRole('button', { name: 'Swap Push-up' }).click();
-  await page.getByRole('dialog', { name: 'Swap Push-up' }).getByRole('button', { name: 'Skip station' }).click();
+  await page.getByRole('button', { name: 'Swap Rower' }).click();
+  await page.getByRole('dialog', { name: 'Swap Rower' }).getByRole('button', { name: 'Skip station' }).click();
   await finish.click();
   await page.getByLabel('Completed rounds').fill('0');
-  await page.getByLabel('Partial station').selectOption({ label: '1. Step-up to box' });
+  // Every Today circuit now takes one move per role. With the rower skipped, the step-up is the third station left.
+  await page.getByLabel('Partial station').selectOption({ label: '3. Step-up to box' });
   await page.getByLabel('Partial work (reps)').fill('3');
   await proceed.click();
 

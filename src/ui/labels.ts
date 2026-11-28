@@ -5,7 +5,7 @@ import { round1 } from '../engine/body';
 import { CARDIO_MODALITY_LABELS } from '../engine/config';
 import { zoneOf } from '../engine/gym/availability';
 import type { PR } from '../engine/pr';
-import { orderedDurationSec } from '../engine/templates';
+import { orderedDurationSec, type BlockIssue } from '../engine/templates';
 
 /** Display helpers: ids stay in storage, they are mapped to names only when rendered. */
 
@@ -187,6 +187,19 @@ export function workoutBlockName(block: OrderedBlock) {
   if (block.kind === 'preparation') return 'Warm-up';
   if (block.kind === 'recovery') return 'Cool-down';
   return mixedBlockName(block);
+}
+
+const GROUP_WORD = { lower: 'leg', push: 'push', pull: 'pull', core: 'core', cardio: 'cardio' } as const;
+
+/** Why a saved block would not pass the Block Builder today, in one sentence. */
+export function refusedBlockLabel({ name, issue }: { name: string; issue: BlockIssue }): string {
+  switch (issue.kind) {
+    case 'too-many-rounds': return `${name} repeats about ${Math.ceil(issue.rounds)} times.`;
+    case 'adjacent-group': return `${name} has ${issue.length} ${GROUP_WORD[issue.group]} moves in a row.`;
+    case 'duplicate': return `${name} lists ${exerciseName(issue.exerciseId)} twice.`;
+    case 'too-many-exercises': return `${name} has more than ${issue.max} exercises.`;
+    default: return `${name} needs rebalancing.`;
+  }
 }
 
 /** Longest workout or block name the builders accept. */

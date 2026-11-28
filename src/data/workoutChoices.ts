@@ -1,6 +1,6 @@
 import { coachedEquipmentId, PHASE3_EXERCISE_IDS, phase3EquipmentId } from '../content/stationDemos';
 import { COACHED_REST_SEC, COACHED_TRANSITION_SEC, COACHED_WORK_SEC } from '../engine/block/coached';
-import { BLOCK_MAX_STATIONS, blockSecondsForRounds, newLiftBlock } from '../engine/templates';
+import { BLOCK_MAX_STATIONS, blockBalanceIssues, blockSecondsForRounds, isHardBlockIssue, newLiftBlock, type BlockIssue } from '../engine/templates';
 import { newId } from './ids';
 import { blockExerciseOf } from './liftday';
 import { LIFT_EXERCISES } from './lift';
@@ -172,6 +172,19 @@ export function workoutBlockContent(block: OrderedBlock) {
   return oversized ? undefined : content;
 }
 
+/**
+ * The first station block in a saved workout that the Block Builder would now refuse, such as 2 exercises looping for 23
+ * minutes. Workouts saved before the limits keep running; this lets the Workouts screen point the problem out.
+ */
+export function refusedBlock(blocks: readonly OrderedBlock[]): { name: string; issue: BlockIssue } | undefined {
+  for (const block of blocks) {
+    if ((block.kind !== 'coached' && block.kind !== 'self-paced') || !block.stations) continue;
+    const issue = blockBalanceIssues(block, blockExerciseOf).find(isHardBlockIssue);
+    if (issue) return { name: block.name, issue };
+  }
+  return undefined;
+}
+
 /** Finds the starter (preset or legacy suggestion) whose block content a saved workout still matches exactly. */
 export function matchingStarter<T extends { blocks: OrderedBlock[] }>(starters: readonly T[], ordered: OrderedPrescription): T | undefined {
   const content = ordered.blocks.map(workoutBlockContent);
@@ -216,15 +229,17 @@ export function legacyWorkoutDraft(runnable: { name: string; blocks: Block[] }, 
 
 /** Accessory stations for a lift day, with compatible alternatives within each training role. */
 export const todayAccessorySlots = {
+  // Box step-up counts as cardio, so it comes last in the leg role, behind the moves that can sit next to the bike.
   lower: [
-    ['box-step-up', 'reverse-lunge', 'step-up'],
-    ['seated-cable-row', 'push-up'],
+    ['reverse-lunge', 'step-up', 'box-step-up'],
+    ['seated-cable-row', 'one-arm-db-row', 'push-up'],
     ['dead-bug', 'plank'],
     ['air-bike', 'rower', 'plank'],
   ],
+  // A self-paced circuit cannot use the cable row or chest press, so each role has a dumbbell move it can.
   upper: [
-    ['seated-cable-row', 'push-up'],
-    ['push-up', 'chest-press-machine'],
+    ['seated-cable-row', 'one-arm-db-row', 'push-up'],
+    ['push-up', 'seated-db-press', 'chest-press-machine'],
     ['plank', 'dead-bug'],
     ['air-bike', 'rower', 'dead-bug'],
   ],

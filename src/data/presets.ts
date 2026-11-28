@@ -227,6 +227,12 @@ const LEGACY_PRESETS: { category: string; description: string; blocks: OrderedBl
 
 export const presetById = (id: string) => WORKOUT_PRESETS.find((preset) => preset.id === id);
 
+/** The current version of a preset a workout was copied from before blocks were sized by rounds, so the copy can catch up. */
+export function currentPresetFor(ordered: OrderedPrescription): WorkoutPreset | undefined {
+  const legacy = matchingStarter(LEGACY_PRESETS, ordered);
+  return legacy && WORKOUT_PRESETS.find((preset) => preset.category === legacy.category);
+}
+
 /** Presets, their pre-rounds versions and the three original suggestions, so copies users saved earlier keep their category and description. */
 export const matchingSuggestion = (ordered: OrderedPrescription): { category: string; description: string } | undefined =>
   matchingStarter<{ category: string; description: string; blocks: OrderedBlock[] }>([...WORKOUT_PRESETS, ...LEGACY_PRESETS, ...LEGACY_SUGGESTIONS], ordered);

@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { BLOCK_ROUNDS, blockBalanceIssues, blockRoundSeconds, orderedDurationSec, FULL_WORKOUT_MIN_SEC } from '../engine/templates';
 import { blockExerciseOf } from './liftday';
-import { PRESET_ACTIVITY_LABEL, WORKOUT_PRESETS, matchingSuggestion, presetById } from './presets';
+import { PRESET_ACTIVITY_LABEL, WORKOUT_PRESETS, currentPresetFor, matchingSuggestion, presetById } from './presets';
 import { mixedOptions, planOrderedRun, prepareOrderedStart, loadMixedGym, startMixedSession, workoutPreview } from './mixedSession';
 import { loadCardioSnapshot } from './cardio';
 import { settings } from './p4-test-utils';
 import { openTestDb } from './test-utils';
 import { validAuthoredWorkout } from './validate';
-import { coolDown, copyWorkoutBlock, rotation, starterStations, strength, warmUp, workoutBlockContent } from './workoutChoices';
+import { coolDown, copyWorkoutBlock, refusedBlock, rotation, starterStations, strength, warmUp, workoutBlockContent } from './workoutChoices';
 import type { OrderedRunBlock } from './types';
 
 let db: ReturnType<typeof openTestDb>;
@@ -99,4 +99,28 @@ test('a copy of a preset saved before blocks were sized by rounds keeps its cate
   const saved = [{ ...warmUp, durationSec: 420 }, strength('chest-press-machine', 6), pullRow, { ...coolDown, durationSec: 360 }];
   expect(matchingSuggestion({ name: 'Mine', blocks: saved.map((block) => copyWorkoutBlock(block)) }))
     .toMatchObject({ category: 'Upper-body strength', description: 'Machine pressing and push-ups, then a seated cable row rotation.' });
+});
+
+test('a saved copy of the old Step & Row names its 13-round block and maps to the current preset', () => {
+  const coachedRows = (rows: Parameters<typeof starterStations>[0]) => starterStations(rows, true);
+  const old = [
+    { ...warmUp, durationSec: 420 },
+    { ...rotation, id: 'step-row', name: 'Step and row rotation', durationSec: 1380, stations: coachedRows([
+      { exerciseId: 'box-step-up', target: { unit: 'sec', amount: 45 } }, { exerciseId: 'rower', target: { unit: 'sec', amount: 45 } },
+    ]) },
+    { kind: 'self-paced' as const, id: 'step-circuit', name: 'Bodyweight circuit', durationSec: 960, stations: starterStations([
+      { exerciseId: 'push-up', target: { unit: 'reps', amount: 8 } }, { exerciseId: 'dead-bug', target: { unit: 'reps', amount: 8 } },
+      { exerciseId: 'plank', target: { unit: 'sec', amount: 30 } },
+    ], false) },
+    { ...coolDown, durationSec: 360 },
+  ];
+  const saved = { name: 'Step & Row', blocks: old.map((block) => copyWorkoutBlock(block)) };
+  expect(refusedBlock(saved.blocks)).toMatchObject({ name: 'Step and row rotation', issue: { kind: 'too-many-rounds' } });
+  expect(Math.ceil((refusedBlock(saved.blocks)!.issue as { rounds: number }).rounds)).toBe(13);
+  expect(currentPresetFor(saved)).toBe(presetById('step-and-row'));
+  for (const preset of WORKOUT_PRESETS) {
+    const copy = { name: preset.name, blocks: preset.blocks.map((block) => copyWorkoutBlock(block)) };
+    expect(refusedBlock(copy.blocks), preset.id).toBeUndefined();
+    expect(currentPresetFor(copy), preset.id).toBeUndefined();
+  }
 });
