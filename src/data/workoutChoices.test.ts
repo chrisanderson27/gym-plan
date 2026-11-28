@@ -2,9 +2,9 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { exerciseById, SEED_EQUIPMENT } from '../content';
 import { COACHED_EXERCISE_IDS, coachedEquipmentId, coachedPose, PHASE3_EXERCISE_IDS, phase3EquipmentId, phase3Pose } from '../content/stationDemos';
 import { stationUnits } from '../engine/block/progression';
-import { orderedDurationSec, workoutShortfallSec } from '../engine/templates';
+import { BLOCK_ROUNDS, blockBalanceIssues, blockRoundSeconds, orderedDurationSec, workoutShortfallSec } from '../engine/templates';
 import { setPreferredEquipment } from './lift';
-import { toBlockExercise } from './liftday';
+import { blockExerciseOf, toBlockExercise } from './liftday';
 import { mixedOptions, startMixedSession, updateMixedSession, workoutPreview } from './mixedSession';
 import { settings } from './p4-test-utils';
 import { saveOrderedWorkout } from './templates';
@@ -55,6 +55,14 @@ test('starter workouts match their durations and all offered movements resolve a
     expect(demo.poseId, demo.exerciseId).toBeTruthy();
     expect(demo.status).toBeUndefined();
     expect(exerciseById.get(demo.exerciseId)?.cues.length).toBeGreaterThan(0);
+  }
+});
+
+test('the editor built-ins meet the block realism rules', () => {
+  for (const block of starterWorkoutBlocks) {
+    if (block.kind !== 'coached' && block.kind !== 'self-paced') continue;
+    expect(blockBalanceIssues(block, blockExerciseOf), block.name).toEqual([]);
+    expect(block.durationSec / blockRoundSeconds(block, blockExerciseOf)!, block.name).toBeCloseTo(BLOCK_ROUNDS.target, 0);
   }
 });
 

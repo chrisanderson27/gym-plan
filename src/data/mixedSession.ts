@@ -52,6 +52,7 @@ const PHASE_LIFTS = new Map([...LIFT_EXERCISES].filter(([id, lift]) => lift.repM
 const required = new Map([
   ['step-up', ['dumbbells', 'plyo-box']], ['bulgarian-split-squat', ['dumbbells', 'flat-bench']],
   ['hip-thrust', ['flat-bench']], ['box-step-up', ['plyo-box']],
+  ['seated-db-press', ['dumbbells', 'flat-bench']], ['one-arm-db-row', ['dumbbells', 'flat-bench']],
 ]);
 const get = <T,>(map: Record<string, T>, key: string): T | undefined => Object.hasOwn(map, key) ? map[key] : undefined;
 const nonnegative = (v: number) => Number.isFinite(v) && v >= 0;

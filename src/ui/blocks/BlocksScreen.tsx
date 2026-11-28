@@ -7,6 +7,7 @@ import { localDate } from '../../engine/dates';
 import { weekIndex } from '../../engine/week';
 import { CalendarIcon, LayersIcon, PlusIcon, SwapIcon } from '../icons';
 import { navigate } from '../router';
+import { roundsLine } from './draftCheck';
 
 const kindLabel = (kind: LibraryBlock['kind']) => (kind === 'coached' ? 'Coached rotation' : 'Self-paced circuit');
 
@@ -46,7 +47,7 @@ export function BlocksScreen({ settings }: { settings: Settings }) {
       {(rows ?? []).map((row) => (
         <section key={row.id} class="card">
           <a class="block-name" href={`#/blocks/${row.id}`}>{row.name}</a>
-          <p>{row.stations.length} stations · {row.durationSec / 60} min · {kindLabel(row.kind)}</p>
+          <p>{roundsLine(row) ?? `${row.stations.length} stations`} · {row.durationSec / 60} min · {kindLabel(row.kind)}</p>
           {confirmId === row.id ? (
             <div role="group" aria-label={`Remove ${row.name}?`}>
               <p>Remove {row.name}? This can't be undone.</p>

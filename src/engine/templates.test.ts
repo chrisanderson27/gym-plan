@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Block, IntervalBlock, LiftBlock, OrderedBlock } from '../data/types';
-import { FULL_WORKOUT_MIN_SEC, moveBlock, orderedBlockMinutes, orderedBlockSeconds, orderedDurationMin, orderedDurationSec, newLiftBlock, shortfallLabel, workoutShortfallSec, pairWithNext, removeBlock, templateDurationMin, toTemplateBlocks, unpair } from './templates';
+import type { Block, IntervalBlock, LiftBlock, OrderedBlock, StationTarget } from '../data/types';
+import type { BlockExerciseShape } from './block/rules';
+import { blockBalanceIssues, blockRoundSeconds, blockRounds, blockSecondsForRounds, isHardBlockIssue, type RoundBlock, FULL_WORKOUT_MIN_SEC, moveBlock, orderedBlockMinutes, orderedBlockSeconds, orderedDurationMin, orderedDurationSec, newLiftBlock, shortfallLabel, workoutShortfallSec, pairWithNext, removeBlock, templateDurationMin, toTemplateBlocks, unpair } from './templates';
 
 let n = 0;
 const mk = () => 'id' + n++;
@@ -106,5 +107,78 @@ describe('shortfallLabel', () => {
     expect(shortfallLabel(0.5)).toBe('1 min');
     expect(shortfallLabel(2700)).toBe('45 min');
     expect(shortfallLabel(2160)).toBe('36 min');
+  });
+});
+
+describe('block rounds and balance', () => {
+  const shape = (id: string, group: BlockExerciseShape['group']) => ({
+    id, name: id, group, unit: 'reps', equipment: ['bodyweight'], primary: [], secondary: [], repMin: 8, repMax: 12,
+  } as unknown as BlockExerciseShape);
+  const catalog = new Map([
+    shape('squat', 'squat'), shape('lunge', 'lunge'), shape('press', 'horizontal-push'), shape('row', 'horizontal-pull'),
+    shape('plank', 'carry-core'), shape('bug', 'carry-core'), shape('carry', 'carry-core'), shape('bike', 'conditioning'), shape('erg', 'conditioning'),
+  ].map((ex) => [ex.id, ex]));
+  const of = (id: string) => catalog.get(id);
+  const reps = (amount: number): StationTarget => ({ unit: 'reps', amount });
+  const block = (ids: string[], durationSec: number): RoundBlock => ({
+    kind: 'self-paced', durationSec, stations: ids.map((exerciseId) => ({ exerciseId, target: reps(8) })),
+  });
+  const kinds = (b: RoundBlock) => blockBalanceIssues(b, of).map((issue) => issue.kind);
+
+  it('times a self-paced round from reps, seconds and carried metres, plus a transition per station', () => {
+    const b: RoundBlock = { kind: 'self-paced', durationSec: 600, stations: [
+      { exerciseId: 'squat', target: reps(10) }, { exerciseId: 'plank', target: { unit: 'sec', amount: 30 } },
+      { exerciseId: 'carry', target: { unit: 'm', amount: 20 } }, { exerciseId: 'bike', target: { unit: 'm', amount: 200 } },
+    ] };
+    expect(blockRoundSeconds(b, of)).toBe((30 + 10) + (30 + 10) + (30 + 10) + (50 + 10));
+  });
+
+  it('times a coached round from the work window, a sec station\'s own length, rest and transition', () => {
+    const b: RoundBlock = { kind: 'coached', durationSec: 600, workSec: 30, restSec: 5, transitionSec: 10, stations: [
+      { exerciseId: 'row', target: reps(10) }, { exerciseId: 'bike', target: { unit: 'sec', amount: 45 } },
+    ] };
+    expect(blockRoundSeconds(b, of)).toBe(45 + 60);
+    expect(blockRounds(b, of)).toBeCloseTo(600 / 105);
+    expect(blockSecondsForRounds(b, of)).toBe(330);
+    expect(blockRoundSeconds({ kind: 'coached', durationSec: 600 }, of)).toBeUndefined();
+  });
+
+  it('passes a balanced six-station block at three rounds', () => {
+    expect(kinds(block(['squat', 'press', 'plank', 'lunge', 'row', 'bug'], 3 * 6 * 34))).toEqual([]);
+  });
+
+  it('flags two exercises stretched across 21 minutes', () => {
+    const issues = blockBalanceIssues(block(['row', 'press'], 1260), of);
+    expect(issues.map((issue) => issue.kind)).toEqual(['too-few-exercises', 'too-many-rounds']);
+    expect(issues.find((issue) => issue.kind === 'too-many-rounds')).toMatchObject({ rounds: 1260 / 68 });
+    expect(issues.some(isHardBlockIssue)).toBe(true);
+  });
+
+  it('flags too few rounds, too many exercises and a repeated exercise', () => {
+    expect(kinds(block(['squat', 'press', 'row'], 120))).toEqual(['too-few-rounds']);
+    const ten = ['squat', 'press', 'plank', 'lunge', 'row', 'bug', 'squat', 'press', 'row', 'bike'];
+    expect(kinds(block(ten, 10 * 34 * 3))).toEqual(expect.arrayContaining(['duplicate', 'too-many-exercises']));
+  });
+
+  it('finds same-group neighbours across the last-to-first wrap', () => {
+    const issues = blockBalanceIssues(block(['bike', 'row', 'squat', 'erg'], 4 * 34 * 3), of);
+    expect(issues).toEqual([{ kind: 'adjacent-group', group: 'cardio', from: 3, length: 2 }]);
+    expect(issues.some(isHardBlockIssue)).toBe(false);
+  });
+
+  it('flags the one-leg, two-ab circuit and an all-core block', () => {
+    expect(kinds(block(['lunge', 'bug', 'plank'], 3 * 34 * 3))).toEqual(['adjacent-group', 'too-much-core', 'too-few-groups']);
+    const allCore = blockBalanceIssues(block(['carry', 'plank', 'bug'], 3 * 34 * 3), of);
+    expect(allCore[0]).toEqual({ kind: 'adjacent-group', group: 'core', from: 0, length: 3 });
+    expect(allCore.some(isHardBlockIssue)).toBe(true);
+  });
+
+  it('allows two core stations in six but not three', () => {
+    expect(kinds(block(['bug', 'squat', 'press', 'plank', 'lunge', 'row'], 6 * 34 * 3))).toEqual([]);
+    expect(kinds(block(['bug', 'squat', 'plank', 'press', 'carry', 'row'], 6 * 34 * 3))).toEqual(['too-much-core']);
+  });
+
+  it('ignores exercises it cannot place in a group', () => {
+    expect(kinds(block(['unknown', 'squat', 'press'], 3 * 34 * 3))).toEqual(['too-few-groups']);
   });
 });

@@ -626,6 +626,9 @@ button.block-station { border-radius: var(--radius); }
 .block-eligibility { justify-content: space-between; width: 100%; }
 .block-search { border-color: var(--shell-line); background: var(--shell-canvas); }
 .block-ready > p { color: var(--shell-secondary); }
+.block-warnings { margin: 8px 0 0; padding-left: 18px; color: var(--shell-ink); font-size: 0.875rem; }
+.block-warnings li + li { margin-top: 4px; }
+.block-meta { margin: 4px 0 0; color: var(--shell-secondary); font-size: 0.875rem; }
 .block-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .block-sheet-head h2 { margin: 0; font-weight: 800; font-size: 24px; color: var(--shell-ink); }
 .block-close { background: var(--shell-canvas); }

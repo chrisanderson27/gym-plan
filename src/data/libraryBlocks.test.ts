@@ -69,6 +69,17 @@ it('migrates a v1 export onto an empty library and round-trips both kinds', asyn
   expect(await dst.libraryBlocks.get('lb1')).not.toHaveProperty('workSec');
 });
 
+it('round-trips an eight-station block through a backup', async () => {
+  const ids = ['goblet-squat', 'seated-cable-row', 'push-up', 'plank', 'reverse-lunge', 'one-arm-db-row', 'seated-db-press', 'dead-bug'];
+  const eight = { ...coached(), id: 'lb8', durationSec: 960, stations: ids.map((exerciseId) => ({ exerciseId, target: exerciseId === 'plank' ? { unit: 'sec' as const, amount: 30 } : { unit: 'reps' as const, amount: 8 } })) };
+  const src = open();
+  await saveLibraryBlock(src, eight);
+  const text = JSON.stringify(await buildExport(src, new Date('2026-11-21T00:00:00.000Z'), 'test'));
+  const dst = open();
+  await importExport(dst, parseExport(text).file);
+  expect(await dst.libraryBlocks.get('lb8')).toEqual(eight);
+});
+
 it('keeps a local library id the file does not mention and replaces one it does', async () => {
   const db = open();
   await saveLibraryBlock(db, selfPaced({ id: 'local', name: 'Kept' }));
@@ -83,7 +94,7 @@ it('rejects a bad library row and leaves the database unchanged', async () => {
   await saveLibraryBlock(db, selfPaced());
   const before = await db.libraryBlocks.toArray();
   const bad: unknown[] = [
-    selfPaced({ stations: Array.from({ length: 7 }, () => ({ exerciseId: 'leg-press', target: { unit: 'reps' as const, amount: 10 } })) }),
+    selfPaced({ stations: Array.from({ length: 10 }, () => ({ exerciseId: 'leg-press', target: { unit: 'reps' as const, amount: 10 } })) }),
     selfPaced({ stations: [{ exerciseId: 'leg-press', target: { unit: 'reps', amount: 0 } }] }),
     selfPaced({ stations: [] }),
     { ...selfPaced(), restSec: 15 },

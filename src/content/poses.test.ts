@@ -48,6 +48,32 @@ describe('poses', () => {
     expect(box!.y + box!.h).toBeCloseTo(ankleF.y + 4);
   });
 
+  it('keeps the seated dumbbell press and one-arm row stations moving inside the compact drawing', () => {
+    for (const exerciseId of ['seated-db-press', 'one-arm-db-row']) {
+      const id = EXERCISES.find((e) => e.id === exerciseId)!.poseId!;
+      const def = POSES[id]!;
+      const { anchorAt, viewBox } = layout(def);
+      const key = resolveFrames(def).map((angles) => skeleton(angles, def.anchor, anchorAt));
+      expect(key[0], id).not.toEqual(key[1]);
+      expect(anglesAt(def, cycleMs(def))).toEqual(anglesAt(def, 0));
+      for (let t = 0; t < cycleMs(def); t += 10) {
+        for (const point of Object.values(skeleton(anglesAt(def, t), def.anchor, anchorAt))) {
+          expect(point.x, id).toBeGreaterThan(viewBox.x);
+          expect(point.x, id).toBeLessThan(viewBox.x + viewBox.w);
+          expect(point.y, id).toBeGreaterThan(viewBox.y);
+          expect(point.y, id).toBeLessThan(viewBox.y + viewBox.h);
+        }
+      }
+    }
+    // The press ends overhead and the row ends at the hip, so each figure reads as its own movement.
+    const press = POSES['overhead-press']!;
+    const pressed = skeleton(resolveFrames(press)[1]!, press.anchor, layout(press).anchorAt);
+    expect(pressed.wristN.y).toBeLessThan(pressed.neck.y);
+    const row = POSES['db-row']!;
+    const [hang, pulled] = resolveFrames(row).map((angles) => skeleton(angles, row.anchor, layout(row).anchorAt));
+    expect(pulled!.wristN.y).toBeLessThan(hang!.wristN.y);
+  });
+
   it('keeps coached setup, action, return and equipment contact inside the compact drawing', () => {
     for (const id of ['box-step-up', 'seated-cable-row', 'goblet-squat', 'air-bike']) {
       const def = POSES[id]!;

@@ -73,7 +73,7 @@ function freshStation(draft: StationDraft, input: BlockPrescriptionInput): Omit<
   return station;
 }
 
-function secondsFor(target: StationTarget, ex: BlockExerciseShape): number {
+export function secondsFor(target: StationTarget, ex: BlockExerciseShape): number {
   const perUnit = target.unit === 'm' && ex.group === 'carry-core' ? SEC_PER_M_CARRY : SEC_PER_UNIT[target.unit];
   return target.amount * perUnit + TRANSITION_SEC;
 }

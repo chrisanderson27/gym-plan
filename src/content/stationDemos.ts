@@ -7,6 +7,7 @@ import type { CardioModality, OrderedRunModality } from '../data/types';
  * Movements this phase can put on a live card or offer as a swap.
  * Leg press and dead bug keep their reviewed cycles. Hip thrust stays the barbell bench setup.
  * Reverse lunge is its own backward step, not the split-squat cycle.
+ * Seated dumbbell press and one-arm dumbbell row give balanced blocks a second push and pull station.
  */
 export const PHASE3_EXERCISE_IDS = [
   'calf-raise',
@@ -21,6 +22,8 @@ export const PHASE3_EXERCISE_IDS = [
   'dead-bug',
   'farmer-carry',
   'plank',
+  'seated-db-press',
+  'one-arm-db-row',
 ] as const;
 
 const VERIFIED_EQUIPMENT = new Map<string, string>([
@@ -28,6 +31,7 @@ const VERIFIED_EQUIPMENT = new Map<string, string>([
   ['reverse-lunge', 'dumbbells'], ['step-up', 'dumbbells'], ['bulgarian-split-squat', 'dumbbells'],
   ['push-up', 'bodyweight'], ['chest-press-machine', 'pin-stack'], ['rower', 'rower'],
   ['dead-bug', 'bodyweight'], ['farmer-carry', 'dumbbells'], ['plank', 'bodyweight'],
+  ['seated-db-press', 'dumbbells'], ['one-arm-db-row', 'dumbbells'],
 ]);
 
 export const phase3EquipmentId = (exerciseId: string) => VERIFIED_EQUIPMENT.get(exerciseId);

@@ -20,6 +20,8 @@ export function toBlockExercise(e: Exercise): BlockExerciseShape {
 export const BLOCK_EXERCISES = new Map(
   EXERCISES.filter((e) => !e.retired && e.id !== 'swim').map((e) => [e.id, toBlockExercise(e)]),
 );
+/** The lookup the block realism rules take, so presets, the builder and Today judge blocks from one catalog. */
+export const blockExerciseOf = (id: string) => BLOCK_EXERCISES.get(id);
 // The catalog must provide the attachment for these bodyweight movements.
 const KIT_REQUIRED = new Set(['pull-up', 'hanging-knee-raise', 'ab-wheel']);
 export const BODYWEIGHT_IDS = [...BLOCK_EXERCISES.values()]

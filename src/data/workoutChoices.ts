@@ -1,7 +1,8 @@
 import { coachedEquipmentId, PHASE3_EXERCISE_IDS, phase3EquipmentId } from '../content/stationDemos';
 import { COACHED_REST_SEC, COACHED_TRANSITION_SEC, COACHED_WORK_SEC } from '../engine/block/coached';
-import { newLiftBlock } from '../engine/templates';
+import { BLOCK_MAX_STATIONS, blockSecondsForRounds, newLiftBlock } from '../engine/templates';
 import { newId } from './ids';
+import { blockExerciseOf } from './liftday';
 import { LIFT_EXERCISES } from './lift';
 import type { Block, ExecutableCoachedBlock, LibraryBlock, LibraryStation, OrderedBlock, OrderedPrescription, OrderedRunBlock, OrderedSelfPacedBlock, OrderedStation, OrderedStrengthBlock, OrderedTimedBlock } from './types';
 
@@ -55,7 +56,9 @@ export const coolDown: OrderedTimedBlock = {
   id: 'cool-down', kind: 'recovery', durationSec: 300,
   instructions: 'Slow your pace and breathe comfortably. Use gentle stretches as needed.',
 };
-export const rotation: ExecutableCoachedBlock = {
+// The original built-ins: 2 core moves of 3, and a rotation that loops from air bike straight back to box step-up.
+// Kept only so copies saved from the original suggestions still match them.
+const legacyRotation: ExecutableCoachedBlock = {
   id: 'four-station-rotation', kind: 'coached', name: 'Four-station rotation', durationSec: 720,
   workSec: COACHED_WORK_SEC, restSec: COACHED_REST_SEC, transitionSec: COACHED_TRANSITION_SEC,
   stations: starterStations([
@@ -65,7 +68,7 @@ export const rotation: ExecutableCoachedBlock = {
     { exerciseId: 'air-bike', target: { unit: 'sec', amount: 45 } },
   ], true),
 };
-export const legsCircuit: OrderedSelfPacedBlock = {
+const legacyLegsCircuit: OrderedSelfPacedBlock = {
   id: 'legs-core-circuit', kind: 'self-paced', name: 'Legs & core circuit', durationSec: 480,
   stations: starterStations([
     { exerciseId: 'reverse-lunge', target: { unit: 'reps', amount: 8 } },
@@ -73,6 +76,29 @@ export const legsCircuit: OrderedSelfPacedBlock = {
     { exerciseId: 'plank', target: { unit: 'sec', amount: 30 } },
   ], false),
 };
+
+/** Sized for three rounds, the same rule the presets and the Block Builder use. */
+const threeRounds = <T extends ExecutableCoachedBlock | OrderedSelfPacedBlock>(block: T): T =>
+  ({ ...block, durationSec: blockSecondsForRounds(block, blockExerciseOf) ?? block.durationSec });
+
+export const rotation: ExecutableCoachedBlock = threeRounds({
+  ...legacyRotation,
+  stations: starterStations([
+    { exerciseId: 'box-step-up', target: { unit: 'sec', amount: 45 } },
+    { exerciseId: 'seated-cable-row', target: { unit: 'reps', amount: 10 } },
+    { exerciseId: 'air-bike', target: { unit: 'sec', amount: 45 } },
+    { exerciseId: 'goblet-squat', target: { unit: 'reps', amount: 12 } },
+  ], true),
+});
+export const legsCircuit: OrderedSelfPacedBlock = threeRounds({
+  ...legacyLegsCircuit,
+  stations: starterStations([
+    { exerciseId: 'reverse-lunge', target: { unit: 'reps', amount: 8 } },
+    { exerciseId: 'push-up', target: { unit: 'reps', amount: 8 } },
+    { exerciseId: 'step-up', target: { unit: 'reps', amount: 8 } },
+    { exerciseId: 'plank', target: { unit: 'sec', amount: 30 } },
+  ], false),
+});
 
 const legPress = strength('leg-press', 5);
 export const starterWorkoutBlocks: OrderedBlock[] = [warmUp, legPress, rotation, legsCircuit, coolDown];
@@ -87,13 +113,13 @@ export const LEGACY_SUGGESTIONS: StarterWorkout[] = [
   {
     name: 'Legs & Core', category: 'Strength & conditioning',
     description: 'Build lower-body strength, then put it to work with coached intervals and a core-focused finish.',
-    blocks: [warmUp, legPress, rotation, legsCircuit, coolDown],
+    blocks: [warmUp, legPress, legacyRotation, legacyLegsCircuit, coolDown],
   },
   {
     name: 'Shoulders & Back', category: 'Upper-body strength',
     description: 'Controlled pulling and pressing with a short alternating finisher.',
     blocks: [warmUp, strength('chest-press-machine'), {
-      ...rotation, id: 'pull-and-press', name: 'Pull and press rotation', durationSec: 660,
+      ...legacyRotation, id: 'pull-and-press', name: 'Pull and press rotation', durationSec: 660,
       stations: starterStations([
         { exerciseId: 'seated-cable-row', target: { unit: 'reps', amount: 10 } },
         { exerciseId: 'push-up', target: { unit: 'reps', amount: 8 } },
@@ -104,7 +130,7 @@ export const LEGACY_SUGGESTIONS: StarterWorkout[] = [
     name: 'Full-Body Strength & Conditioning', category: 'Full-body conditioning',
     description: 'A balanced circuit that keeps you moving without rushing your reps.',
     blocks: [warmUp, strength('hip-thrust'), {
-      ...legsCircuit, id: 'full-body-circuit', name: 'Full-body circuit', durationSec: 840,
+      ...legacyLegsCircuit, id: 'full-body-circuit', name: 'Full-body circuit', durationSec: 840,
       stations: starterStations([
         { exerciseId: 'push-up', target: { unit: 'reps', amount: 8 } },
         { exerciseId: 'reverse-lunge', target: { unit: 'reps', amount: 8 } },
@@ -179,7 +205,7 @@ export function legacyWorkoutDraft(runnable: { name: string; blocks: Block[] }, 
       blocks.push({ id: makeId(), kind: 'run', name: b.runKind === 'intervals' ? 'Run intervals' : 'Easy run', runKind: b.runKind === 'intervals' ? 'intervals' : 'easy',
         modality: b.modality === 'bike' || b.modality === 'row' ? b.modality : 'run', durationSec: Math.min(3600, Math.max(300, Math.round(sec))) });
     } else if (b.kind === 'circuit' && b.stations.length) {
-      const stations = b.stations.slice(0, 6).map(({ exerciseId, equipmentId, load, target }): OrderedStation => ({
+      const stations = b.stations.slice(0, BLOCK_MAX_STATIONS).map(({ exerciseId, equipmentId, load, target }): OrderedStation => ({
         slotId: makeId(), exerciseId, target: { unit: target.unit, amount: target.amount },
         ...(load === undefined ? {} : { load }), ...(equipmentId === undefined ? {} : { equipmentId }) }));
       blocks.push({ id: makeId(), kind: 'self-paced', name: b.label ?? 'Circuit', durationSec: Math.min(3600, Math.max(60, Math.round(b.durationSec))), stations });

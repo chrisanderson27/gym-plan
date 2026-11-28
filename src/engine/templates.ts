@@ -1,5 +1,8 @@
-import type { Block, IntervalBlock, LiftBlock, OrderedBlock } from '../data/types';
-import { MIN_PER_SET, REST_DEFAULT_SEC, SEC_PER_UNIT } from './config';
+import type { Block, IntervalBlock, LiftBlock, OrderedBlock, StationTarget } from '../data/types';
+import { stationWorkSec } from './block/coached';
+import { secondsFor } from './block/progression';
+import { groupOf, PROFILES, type BlockExerciseShape } from './block/rules';
+import { MIN_PER_SET, REST_DEFAULT_SEC, SEC_PER_UNIT, TRANSITION_SEC } from './config';
 
 /** Fresh ids; no `result`; lift blocks drop the old target weight and the calibration label; superset groups are remapped. */
 export function toTemplateBlocks(blocks: Block[], makeId: () => string): Block[] {
@@ -102,4 +105,123 @@ export function templateDurationMin(blocks: Block[]): number {
     else if (b.kind === 'run') min += (b.repeats * b.segments.reduce((n, s) => n + (s.sec ?? 0), 0)) / 60;
   }
   return Math.round(min);
+}
+
+/** Station blocks loop for their whole clock, so length only reads as realistic against how many rounds it holds. */
+export const BLOCK_ROUNDS = { min: 2, target: 3, max: 4 } as const;
+export const BLOCK_MAX_STATIONS = 9;
+/** The builder still saves anything short of these; past them the block is not a workout anyone would run. */
+export const BLOCK_HARD_MAX_ROUNDS = 6;
+export const BLOCK_HARD_SAME_GROUP_RUN = 3;
+// A block's clock is rounded to 30 s, so its rounds can sit that far either side of the range.
+const ROUND_SLACK_SEC = 30;
+const MIN_STATIONS = [{ overSec: 720, min: 5 }, { overSec: 480, min: 4 }] as const;
+
+export interface RoundBlock {
+  kind: 'coached' | 'self-paced';
+  durationSec: number;
+  stations?: readonly { exerciseId: string; target: StationTarget }[];
+  workSec?: number;
+  restSec?: number;
+  transitionSec?: number;
+}
+export type ExerciseLookup = (id: string) => BlockExerciseShape | undefined;
+type Group = ReturnType<typeof groupOf>;
+
+export type BlockIssue =
+  | { kind: 'duplicate'; exerciseId: string }
+  | { kind: 'too-few-exercises'; count: number; min: number }
+  | { kind: 'too-many-exercises'; count: number; max: number }
+  | { kind: 'too-many-rounds'; rounds: number }
+  | { kind: 'too-few-rounds'; rounds: number }
+  | { kind: 'adjacent-group'; group: Group; from: number; length: number }
+  | { kind: 'too-much-core'; count: number; max: number }
+  | { kind: 'too-few-groups'; count: number; min: number };
+
+/**
+ * One pass through every station. A coached station runs its own `sec` or the block's work window, then rest and
+ * transition; a self-paced one uses the same per-unit pace the Today generator plans rounds with.
+ */
+export function blockRoundSeconds(block: RoundBlock, exerciseOf: ExerciseLookup): number | undefined {
+  const stations = block.stations ?? [];
+  if (stations.length === 0) return undefined;
+  if (block.kind === 'coached') {
+    if (block.workSec === undefined) return undefined;
+    const after = (block.restSec ?? 0) + (block.transitionSec ?? 0);
+    return stations.reduce((sec, { target }) => sec + stationWorkSec(target, block.workSec!) + after, 0);
+  }
+  return stations.reduce((sec, { exerciseId, target }) => {
+    const ex = exerciseOf(exerciseId);
+    return sec + (ex ? secondsFor(target, ex) : target.amount * SEC_PER_UNIT[target.unit] + TRANSITION_SEC);
+  }, 0);
+}
+
+export function blockRounds(block: RoundBlock, exerciseOf: ExerciseLookup): number | undefined {
+  const round = blockRoundSeconds(block, exerciseOf);
+  return round && block.durationSec / round;
+}
+
+/** The clock for `rounds` passes, rounded to 30 s and kept inside the 1–60 minute block range. */
+export function blockSecondsForRounds(block: Omit<RoundBlock, 'durationSec'>, exerciseOf: ExerciseLookup, rounds: number = BLOCK_ROUNDS.target) {
+  const round = blockRoundSeconds({ ...block, durationSec: 0 }, exerciseOf);
+  if (!round) return undefined;
+  return Math.min(3600, Math.max(60, Math.round((round * rounds) / 30) * 30));
+}
+
+/** Cyclic: a rotation walks from its last station straight back to the first. */
+function sameGroupRuns(groups: (Group | undefined)[]) {
+  const n = groups.length;
+  if (n < 2) return [];
+  if (groups[0] !== undefined && groups.every((g) => g === groups[0])) return [{ group: groups[0], from: 0, length: n }];
+  const start = groups.findIndex((g, i) => g === undefined || g !== groups[(i - 1 + n) % n]);
+  const runs: { group: Group; from: number; length: number }[] = [];
+  for (let k = 0; k < n;) {
+    const from = (start + k) % n;
+    const group = groups[from];
+    let length = 1;
+    while (length < n - k && group !== undefined && groups[(from + length) % n] === group) length++;
+    if (group !== undefined && length > 1) runs.push({ group, from, length });
+    k += length;
+  }
+  return runs;
+}
+
+/** Realism rules for one station block. Hand-authored presets, the builder and tests share these with the generator's group rules. */
+export function blockBalanceIssues(block: RoundBlock, exerciseOf: ExerciseLookup): BlockIssue[] {
+  const stations = block.stations ?? [];
+  const n = stations.length;
+  if (n === 0) return [];
+  const issues: BlockIssue[] = [];
+  const seen = new Set<string>();
+  for (const { exerciseId } of stations) {
+    if (seen.has(exerciseId)) issues.push({ kind: 'duplicate', exerciseId });
+    seen.add(exerciseId);
+  }
+  const min = MIN_STATIONS.find(({ overSec }) => block.durationSec > overSec)?.min;
+  if (min !== undefined && n < min) issues.push({ kind: 'too-few-exercises', count: n, min });
+  if (n > BLOCK_MAX_STATIONS) issues.push({ kind: 'too-many-exercises', count: n, max: BLOCK_MAX_STATIONS });
+  const round = blockRoundSeconds(block, exerciseOf);
+  if (round) {
+    const rounds = block.durationSec / round;
+    if (block.durationSec > BLOCK_ROUNDS.max * round + ROUND_SLACK_SEC) issues.push({ kind: 'too-many-rounds', rounds });
+    else if (block.durationSec < BLOCK_ROUNDS.min * round - ROUND_SLACK_SEC) issues.push({ kind: 'too-few-rounds', rounds });
+  }
+  const groups = stations.map(({ exerciseId }) => {
+    const ex = exerciseOf(exerciseId);
+    return ex && groupOf(ex);
+  });
+  for (const run of sameGroupRuns(groups)) issues.push({ kind: 'adjacent-group', ...run });
+  const core = groups.filter((g) => g === 'core').length;
+  const coreMax = Math.max(1, Math.floor(n / 3));
+  if (core > coreMax) issues.push({ kind: 'too-much-core', count: core, max: coreMax });
+  const distinct = new Set(groups.filter((g) => g !== undefined)).size;
+  if (n >= 3 && distinct < PROFILES.lift.minGroups) issues.push({ kind: 'too-few-groups', count: distinct, min: PROFILES.lift.minGroups });
+  return issues;
+}
+
+/** Issues the builder refuses to save. Every other issue is a warning the user may keep. */
+export function isHardBlockIssue(issue: BlockIssue): boolean {
+  if (issue.kind === 'too-many-rounds') return issue.rounds > BLOCK_HARD_MAX_ROUNDS;
+  if (issue.kind === 'adjacent-group') return issue.length >= BLOCK_HARD_SAME_GROUP_RUN;
+  return issue.kind === 'duplicate' || issue.kind === 'too-many-exercises';
 }

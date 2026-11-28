@@ -39,31 +39,37 @@ test('saves a named block and reopens the same targets', async ({ page }) => {
   await addExercise(page, 'Romanian deadlift');
   await page.getByLabel('Leg press load (lb)').fill('140');
   await page.getByRole('button', { name: 'Move Step-up to box up' }).click();
+  await page.getByLabel('Block name').fill('Bench & Core');
+  // Three leg moves in a row is the one lineup Save refuses outright.
+  await expect(page.getByTestId('block-problem')).toHaveText('Step-up to box, leg press and Romanian deadlift are 3 leg moves in a row. Put a different move between them.');
+  await expect(page.getByRole('button', { name: 'Save to My Blocks' })).toBeDisabled();
   await page.getByRole('button', { name: 'Remove Romanian deadlift' }).click();
-  await addExercise(page, 'Romanian deadlift');
-  await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Step-up to box', 'Leg press', 'Romanian deadlift']);
+  await page.getByLabel('Block name').fill('');
+  await addExercise(page, 'Seated cable row');
+  await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Step-up to box', 'Leg press', 'Seated cable row']);
   await expect(page.getByRole('button', { name: 'Move Step-up to box up' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Move Romanian deadlift down' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Move Seated cable row down' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Save to My Blocks' })).toBeDisabled();
   await expect(page.getByLabel('Block name')).toHaveAttribute('maxlength', '60');
   await page.getByLabel('Block name').fill('Bench & Core');
   await expect(page.getByRole('button', { name: 'Save to My Blocks' })).toBeEnabled();
+  await expect(page.getByTestId('block-warnings')).toContainText('Step-up to box and leg press are back to back.');
   await page.getByRole('button', { name: 'Save to My Blocks' }).click();
   await expect(page.getByRole('heading', { name: 'My Blocks' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Bench & Core' })).toBeVisible();
-  await expect(page.getByText('3 stations · 8 min · Self-paced circuit')).toBeVisible();
+  await expect(page.getByText('3 exercises × about 4 rounds · 8 min · Self-paced circuit')).toBeVisible();
   await page.getByRole('link', { name: 'Bench & Core' }).click();
   await expect(page.getByLabel('Block name')).toHaveValue('Bench & Core');
   await expect(page.getByLabel('Minutes')).toHaveValue('8');
   await expect(page.getByRole('checkbox', { name: 'Include in my plan' })).not.toBeChecked();
-  await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Step-up to box', 'Leg press', 'Romanian deadlift']);
+  await expect(page.getByRole('heading', { level: 3 })).toHaveText(['Step-up to box', 'Leg press', 'Seated cable row']);
   await expect(page.getByLabel('Leg press target')).toHaveValue('10');
   await expect(page.getByLabel('Leg press unit')).toHaveValue('reps');
   await expect(page.getByLabel('Leg press load (lb)')).toHaveValue('140');
   await expect(page.getByLabel('Step-up to box target')).toHaveValue('8');
   await expect(page.getByLabel('Step-up to box unit')).toHaveValue('reps');
-  await expect(page.getByLabel('Romanian deadlift target')).toHaveValue('8');
-  await expect(page.getByLabel('Romanian deadlift unit')).toHaveValue('reps');
+  await expect(page.getByLabel('Seated cable row target')).toHaveValue('10');
+  await expect(page.getByLabel('Seated cable row unit')).toHaveValue('reps');
 });
 
 test('eligibility and targets survive a backup import', async ({ page, browser }, testInfo) => {
@@ -71,6 +77,7 @@ test('eligibility and targets survive a backup import', async ({ page, browser }
   await page.goto('./#/blocks/new');
   await page.getByLabel('Block name').fill('Bench & Core');
   await addExercise(page, 'Leg press');
+  await page.getByLabel('Minutes').fill('2');
   await page.getByLabel('Leg press load (lb)').fill('140');
   await page.getByRole('checkbox', { name: 'Include in my plan' }).check();
   await page.getByRole('button', { name: 'Save to My Blocks' }).click();
@@ -103,6 +110,7 @@ test('a v1 backup with no library still imports', async ({ page }) => {
   await page.goto('./#/blocks/new');
   await page.getByLabel('Block name').fill('Bench & Core');
   await addExercise(page, 'Leg press');
+  await page.getByLabel('Minutes').fill('2');
   await page.getByRole('button', { name: 'Save to My Blocks' }).click();
   await expect(page.getByRole('heading', { name: 'My Blocks' })).toBeVisible();
   await seedBackup(page, { bodyLogs: [{ date: '2026-11-01', protein: true }] });
@@ -138,6 +146,7 @@ test('a rejected save keeps the name and shows an alert', async ({ page }) => {
   await page.goto('./#/blocks/new');
   await page.getByLabel('Block name').fill('Bench & Core');
   await addExercise(page, 'Leg press');
+  await page.getByLabel('Minutes').fill('2');
   await page.evaluate(() => new Promise<void>((resolve, reject) => {
     const req = indexedDB.deleteDatabase('gym-plan');
     req.onsuccess = () => resolve();
@@ -329,7 +338,7 @@ test('frame screenshots at week 21', async ({ page }, testInfo) => {
   await addExercise(page, 'Leg press');
   await page.getByLabel('Leg press load (lb)').fill('140');
   await addExercise(page, 'Step-up to box');
-  await addExercise(page, 'Romanian deadlift');
+  await addExercise(page, 'Seated cable row');
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot(page, testInfo, '3-4295');
   await page.getByRole('button', { name: 'Save to My Blocks' }).scrollIntoViewIfNeeded();
@@ -372,6 +381,7 @@ test('removing a saved block asks first and the exercise search has a placeholde
   await expect(page.getByRole('searchbox', { name: 'Search exercises' }).or(page.getByLabel('Search exercises'))).toHaveAttribute('placeholder', 'Search exercises');
   await page.keyboard.press('Escape');
   await addExercise(page, 'Leg press');
+  await page.getByLabel('Minutes').fill('2');
   await page.getByRole('button', { name: 'Save to My Blocks' }).click();
   await page.getByRole('button', { name: 'Remove Doomed block' }).click();
   await page.getByRole('button', { name: 'Keep' }).click();
@@ -379,4 +389,33 @@ test('removing a saved block asks first and the exercise search has a placeholde
   await page.getByRole('button', { name: 'Remove Doomed block' }).click();
   await page.getByTestId('block-remove-confirm').click();
   await expect(page.getByRole('link', { name: 'Doomed block' })).toHaveCount(0);
+});
+
+test('a thin, long block explains its repeats, offers a fitted length and warns on back-to-back core', async ({ page }) => {
+  await onboard(page);
+  await page.goto('./#/blocks/new');
+  await page.getByLabel('Block name').fill('Pull & push');
+  await page.getByLabel('Block type').selectOption('coached');
+  await addExercise(page, 'Seated cable row');
+  await addExercise(page, 'Push-up');
+  await page.getByLabel('Minutes').fill('21');
+  await expect(page.getByTestId('block-problem')).toHaveText('2 exercises for 21 minutes repeats about 16 times. Use 4 min or add exercises.');
+  await expect(page.getByRole('button', { name: 'Save to My Blocks' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Preview gym grid' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Use 4 min' }).click();
+  await expect(page.getByLabel('Minutes')).toHaveValue('4');
+  await expect(page.getByRole('button', { name: 'Use 4 min' })).toHaveCount(0);
+  await expect(page.getByTestId('block-problem')).toHaveCount(0);
+
+  await addExercise(page, 'Dead bug');
+  await addExercise(page, 'Plank');
+  await page.getByLabel('Minutes').fill('8');
+  await expect(page.getByTestId('block-warnings')).toContainText('Dead bug and plank are back to back. Put a different move between them.');
+  await expect(page.getByTestId('block-warnings')).toContainText('2 of 4 exercises are core moves. Keep it to 1.');
+  await page.getByRole('button', { name: 'Preview gym grid' }).click();
+  await expect(page.getByRole('dialog', { name: 'Block preview' }).getByText('4 exercises × about 3 rounds · 8 min')).toBeVisible();
+  await page.keyboard.press('Escape');
+  // Warnings never block Save: the block is the user's own.
+  await page.getByRole('button', { name: 'Save to My Blocks' }).click();
+  await expect(page.getByText('4 exercises × about 3 rounds · 8 min · Coached rotation')).toBeVisible();
 });

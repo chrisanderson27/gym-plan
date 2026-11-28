@@ -6,6 +6,7 @@ import { coachedSchedule, phaseMs, sameCoachedPhase, projectCoached } from '../e
 import { elapsedClamped } from '../engine/block/session';
 import { stationUnits } from '../engine/block/progression';
 import { ACTIVITIES } from '../engine/plan/activities';
+import { BLOCK_MAX_STATIONS } from '../engine/templates';
 import { ImportError } from './errors';
 import { toBlockExercise } from './liftday';
 import type { StoreName } from './stores';
@@ -125,7 +126,7 @@ const libraryBlock: Check = (v) => {
   if (typeof v.name !== 'string' || v.name.length === 0) return false;
   if (v.kind !== 'self-paced' && v.kind !== 'coached') return false;
   if (!finite(v.durationSec) || !Number.isInteger(v.durationSec) || v.durationSec < 60 || v.durationSec > 3600) return false;
-  if (!Array.isArray(v.stations) || v.stations.length < 1 || v.stations.length > 6 || !v.stations.every(libraryStation)) return false;
+  if (!Array.isArray(v.stations) || v.stations.length < 1 || v.stations.length > BLOCK_MAX_STATIONS || !v.stations.every(libraryStation)) return false;
   if (typeof v.recommend !== 'boolean' || !iso(v.createdAt) || !iso(v.updatedAt)) return false;
   if (v.kind === 'self-paced') return v.workSec === undefined && v.restSec === undefined && v.transitionSec === undefined;
   return finite(v.workSec) && v.workSec > 0 && finite(v.restSec) && v.restSec >= 0 && finite(v.transitionSec) && v.transitionSec >= 0;
@@ -168,13 +169,13 @@ const orderedBlock: Check = (v) => {
     const optionalPhase = (sec: unknown) => sec === 0 || work(sec);
     return only(v, [...common, 'stations', 'workSec', 'restSec', 'transitionSec'])
       && work(v.workSec) && optionalPhase(v.restSec) && optionalPhase(v.transitionSec)
-      && keyed('slotId', 1, 6, (s) => {
+      && keyed('slotId', 1, BLOCK_MAX_STATIONS, (s) => {
         if (!isRec(s) || !orderedStation(s) || !only(s, ['slotId', 'exerciseId', 'target', 'load', 'equipmentId'])) return false;
         const target = s.target as Rec;
         return only(target, ['unit', 'amount']) && (target.unit !== 'sec' || work(target.amount));
       })(v.stations);
   }
-  return v.kind === 'self-paced' && bounded(60, 3600)(v.durationSec) && id(v.name) && keyed('slotId', 1, 6, orderedStation)(v.stations);
+  return v.kind === 'self-paced' && bounded(60, 3600)(v.durationSec) && id(v.name) && keyed('slotId', 1, BLOCK_MAX_STATIONS, orderedStation)(v.stations);
 };
 const ordered = shape({ name: id, blocks: keyed('id', 1, 30, orderedBlock) });
 export const validAuthoredWorkout = (v: OrderedPrescription) =>
@@ -184,7 +185,7 @@ export const validAuthoredWorkout = (v: OrderedPrescription) =>
 // JSON backups can omit undefined fields and reorder object keys, but array order is significant.
 export const snapshotValue = (value: unknown): string => JSON.stringify(value, (_, item) => isRec(item)
   ? Object.fromEntries(Object.keys(item).sort().map((key) => [key, item[key]])) : item);
-const stations = keyed('slotId', 1, 6, (v) => isRec(v) && effectiveStation(v) && libraryStation(v));
+const stations = keyed('slotId', 1, BLOCK_MAX_STATIONS, (v) => isRec(v) && effectiveStation(v) && libraryStation(v));
 const stationChanges = arr(shape({ afterRound: integer, stations }));
 const partial = shape({ slotId: id, unit: stationUnit, count: nonnegative });
 const coachedCheckpoint = (v: unknown) => isRec(v) && only(v, ['station', 'phase', 'phaseStartMs', 'rotations'])

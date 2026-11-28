@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { orderedDurationSec, FULL_WORKOUT_MIN_SEC } from '../engine/templates';
+import { BLOCK_ROUNDS, blockBalanceIssues, blockRoundSeconds, orderedDurationSec, FULL_WORKOUT_MIN_SEC } from '../engine/templates';
+import { blockExerciseOf } from './liftday';
 import { PRESET_ACTIVITY_LABEL, WORKOUT_PRESETS, matchingSuggestion, presetById } from './presets';
 import { mixedOptions, planOrderedRun, prepareOrderedStart, loadMixedGym, startMixedSession, workoutPreview } from './mixedSession';
 import { loadCardioSnapshot } from './cardio';
 import { settings } from './p4-test-utils';
 import { openTestDb } from './test-utils';
 import { validAuthoredWorkout } from './validate';
-import { copyWorkoutBlock, workoutBlockContent } from './workoutChoices';
+import { coolDown, copyWorkoutBlock, rotation, starterStations, strength, warmUp, workoutBlockContent } from './workoutChoices';
 import type { OrderedRunBlock } from './types';
 
 let db: ReturnType<typeof openTestDb>;
@@ -71,4 +72,31 @@ test('copies of a preset keep its category and description', () => {
   const preset = presetById('lower-strength-core')!;
   const blocks = preset.blocks.map((block) => copyWorkoutBlock(block));
   expect(matchingSuggestion({ name: 'Mine', blocks })).toBe(preset);
+});
+
+test('every preset station block runs about three rounds and passes the balance rules', () => {
+  const exerciseOf = blockExerciseOf;
+  for (const preset of WORKOUT_PRESETS) {
+    const sec = orderedDurationSec(preset.blocks);
+    expect(sec / 60, preset.id).toBeGreaterThanOrEqual(45);
+    expect(sec / 60, preset.id).toBeLessThanOrEqual(62);
+    for (const block of preset.blocks) {
+      if (block.kind !== 'coached' && block.kind !== 'self-paced') continue;
+      const where = `${preset.id}:${block.id}`;
+      expect(block.stations?.every(({ exerciseId }) => blockExerciseOf(exerciseId) !== undefined), where).toBe(true);
+      expect(blockBalanceIssues(block, exerciseOf), where).toEqual([]);
+      const round = blockRoundSeconds(block, exerciseOf)!;
+      expect(Math.abs(block.durationSec - BLOCK_ROUNDS.target * round), where).toBeLessThanOrEqual(30);
+      expect(block.durationSec % 30, where).toBe(0);
+    }
+  }
+});
+
+test('a copy of a preset saved before blocks were sized by rounds keeps its category', () => {
+  const pullRow = { ...rotation, id: 'pull-row', name: 'Pull and row rotation', durationSec: 1260, stations: starterStations([
+    { exerciseId: 'seated-cable-row', target: { unit: 'reps', amount: 10 } }, { exerciseId: 'push-up', target: { unit: 'reps', amount: 8 } },
+  ], true) };
+  const saved = [{ ...warmUp, durationSec: 420 }, strength('chest-press-machine', 6), pullRow, { ...coolDown, durationSec: 360 }];
+  expect(matchingSuggestion({ name: 'Mine', blocks: saved.map((block) => copyWorkoutBlock(block)) }))
+    .toMatchObject({ category: 'Upper-body strength', description: 'Machine pressing and push-ups, then a seated cable row rotation.' });
 });

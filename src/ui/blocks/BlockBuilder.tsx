@@ -12,6 +12,7 @@ import type { LibraryBlock, LibraryStation, Settings, StationUnit } from '../../
 import { STATION_UNITS } from '../../data/types';
 import { defaultStationTarget, stationTarget, stationUnits } from '../../engine/block/progression';
 import { COACHED_REST_SEC, COACHED_TRANSITION_SEC, COACHED_WORK_SEC } from '../../engine/block/coached';
+import { BLOCK_MAX_STATIONS } from '../../engine/templates';
 import { exerciseAllowed } from '../../engine/gym/eligibility';
 import { localDate } from '../../engine/dates';
 import { weekIndex } from '../../engine/week';
@@ -22,7 +23,7 @@ import { useDemoPlayback } from '../pose/playback';
 import { navigate } from '../router';
 import { Sheet } from '../Sheet';
 import { stationGearLabel } from './gearLabel';
-import { amountOk, draftProblem, minutesOk, targetMessage } from './draftCheck';
+import { amountOk, draftFieldProblem, draftFitMinutes, draftProblem, draftWarnings, minutesOk, roundsLine, targetMessage } from './draftCheck';
 import { StationCard, stationTargetLine } from './StationCard';
 
 const EMPTY_TAGS: ReadonlySet<string> = new Set();
@@ -130,6 +131,14 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
 
   const problem = draftProblem(draft);
   const valid = problem === undefined;
+  const readable = draftFieldProblem(draft) === undefined;
+  const warnings = draftWarnings(draft);
+  const fitMinutes = draftFitMinutes(draft);
+  const stationsTarget = (s: DraftStation) => ({ exerciseId: s.exerciseId, target: { unit: s.unit, amount: Number(s.amount) } });
+  const meta = readable ? roundsLine(draft.kind === 'coached'
+    ? { kind: 'coached', durationSec: Number(draft.minutes) * 60, stations: draft.stations.map(stationsTarget),
+      workSec: draft.workSec, restSec: draft.restSec, transitionSec: draft.transitionSec }
+    : { kind: 'self-paced', durationSec: Number(draft.minutes) * 60, stations: draft.stations.map(stationsTarget) }) : undefined;
 
   const setKind = (kind: Draft['kind']) => {
     setDraft((d) => kind === 'self-paced'
@@ -248,7 +257,7 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
           )}
           <div class="block-order">
             <h2>Station order</h2>
-            <span>{draft.stations.length}/6</span>
+            <span>{draft.stations.length}/{BLOCK_MAX_STATIONS}</span>
           </div>
           {draft.stations.length === 0 && <p>Add a movement to set its target.</p>}
           {draft.stations.map((station, i) => {
@@ -304,11 +313,11 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
               </section>
             );
           })}
-          <button type="button" class="block-row" disabled={draft.stations.length >= 6} onClick={() => { setQuery(''); setSheet('add'); }}><PlusIcon /> Add exercise</button>
+          <button type="button" class="block-row" disabled={draft.stations.length >= BLOCK_MAX_STATIONS} onClick={() => { setQuery(''); setSheet('add'); }}><PlusIcon /> Add exercise</button>
           <section class="block-ready">
             <h2>Ready for the gym?</h2>
             <p>{draft.kind === 'coached' ? COACHED_HELP : SELF_HELP}</p>
-            <button type="button" class="block-row" disabled={!valid} onClick={() => setSheet('preview')}><EyeIcon /> Preview gym grid</button>
+            <button type="button" class="block-row" disabled={!readable} onClick={() => setSheet('preview')}><EyeIcon /> Preview gym grid</button>
             <label class="check block-eligibility">
               <span>Include in my plan</span>
               <input type="checkbox" checked={draft.recommend} onChange={(e) => setDraft({ ...draft, recommend: e.currentTarget.checked })} />
@@ -316,6 +325,14 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
             <p>{ELIGIBILITY_HELP}</p>
             {error && <p role="alert" class="warn">{error}</p>}
             {problem && !(minutesBad && problem.startsWith('Enter minutes')) && !(problem.startsWith('Enter a target') && Object.values(badTargets).some(Boolean)) && <p class="field-error" data-testid="block-problem">{problem}</p>}
+            {warnings.length > 0 && (
+              <ul class="block-warnings" data-testid="block-warnings">
+                {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            )}
+            {fitMinutes !== undefined && String(fitMinutes) !== draft.minutes && (
+              <button type="button" class="block-row" onClick={() => { setDraft({ ...draft, minutes: String(fitMinutes) }); setMinutesBad(false); }}>Use {fitMinutes} min</button>
+            )}
             <button type="button" class="primary" disabled={!valid || busy} onClick={() => { void save(); }}><CheckIcon /> Save to My Blocks</button>
           </section>
         </div>
@@ -366,6 +383,7 @@ export function BlockBuilder({ route, settings }: { route: string; settings: Set
               <div>
                 <p class="pref-eyebrow">Gym display</p>
                 <h2>Block preview</h2>
+                {meta && <p class="block-meta">{meta} · {draft.minutes} min</p>}
               </div>
               <button type="button" class="block-close" aria-label="Close" onClick={() => setSheet(null)}><CloseIcon /></button>
             </div>

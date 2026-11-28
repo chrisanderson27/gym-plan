@@ -150,12 +150,14 @@ test('reference Workouts layouts, suggestion saves, focus and 56 px actions', as
   await expect(page.getByRole('heading', { name: 'Preparation' })).toBeVisible();
 });
 
-async function saveBlock(page: Page, name: string, kind: 'self-paced' | 'coached', pickerLabel: string) {
+async function saveBlock(page: Page, name: string, kind: 'self-paced' | 'coached', pickerLabel: string, minutes: string) {
   await page.goto('./#/blocks/new');
   await page.getByLabel('Block name').fill(name);
   await page.getByLabel('Block type').selectOption(kind);
   await button(page, 'Add exercise').click();
   await button(page.getByRole('dialog', { name: 'Add an exercise' }), pickerLabel).click();
+  // One station saves only while it stays within six rounds.
+  await page.getByLabel('Minutes').fill(minutes);
   await expect(page.getByRole('checkbox', { name: 'Include in my plan' })).not.toBeChecked();
   await button(page, 'Save to My Blocks').click();
   await expect(page.getByRole('link', { name, exact: true })).toBeVisible();
@@ -165,17 +167,20 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   test.setTimeout(90_000);
   await page.clock.setFixedTime(at);
   await onboard(page);
-  await saveBlock(page, 'Personal circuit', 'self-paced', 'Reverse lunge Dumbbells');
-  await saveBlock(page, 'Personal rotation', 'coached', 'Seated cable row Seated cable row');
+  await saveBlock(page, 'Personal circuit', 'self-paced', 'Reverse lunge Dumbbells', '3');
+  await saveBlock(page, 'Personal rotation', 'coached', 'Seated cable row Seated cable row', '4');
   await openWorkouts(page);
   await button(page, 'New workout').click();
   const draft = page.getByRole('dialog', { name: 'Build a workout' });
   await expect(button(draft, 'Save workout')).toBeDisabled();
-  for (const title of ['Warm-up', 'Personal circuit', 'Leg press', 'Personal rotation', 'Four-station rotation', 'Legs & core circuit', 'Cool-down']) await button(draft, 'Add ' + title).click();
+  for (const title of ['Warm-up', 'Personal circuit', 'Leg press', 'Personal rotation', 'Four-station rotation', 'Legs & core circuit']) await button(draft, 'Add ' + title).click();
+  // The calf raise keeps the short personal blocks over the 45-minute floor.
+  await button(draft, 'More strength blocks').click();
+  for (const title of ['Standing or seated calf raise', 'Cool-down']) await button(draft, 'Add ' + title).click();
   await button(draft, 'Personal circuit, block 2, actions').click();
   await button(draft, 'Move down').click();
   await button(draft, 'Move down').click();
-  await button(draft, 'Cool-down, block 7, actions').click();
+  await button(draft, 'Cool-down, block 8, actions').click();
   await button(draft, 'Remove').click();
   await button(draft, 'Add Cool-down').click();
   await draft.getByRole('textbox', { name: 'Workout name' }).fill('  Friday mixed  ');
@@ -200,7 +205,7 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   await page.reload();
   await button(card, 'Preview').click();
   const preview = page.getByRole('dialog', { name: 'Preview Friday mixed' });
-  const order = ['Warm-up', 'Leg press', 'Personal rotation', 'Personal circuit', 'Four-station rotation', 'Legs & core circuit', 'Cool-down'];
+  const order = ['Warm-up', 'Leg press', 'Personal rotation', 'Personal circuit', 'Four-station rotation', 'Legs & core circuit', 'Standing or seated calf raise', 'Cool-down'];
   await expect(preview.locator('.workout-preview-list > li > h3')).toHaveText(order);
   await button(preview, 'Edit workout').click();
   const edit = page.getByRole('dialog', { name: 'Edit workout' });
@@ -212,10 +217,10 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
 
   await page.getByRole('link', { name: 'Blocks' }).click();
   await page.getByRole('link', { name: 'Personal rotation', exact: true }).click();
-  await page.getByLabel('Minutes').fill('15');
+  await page.getByLabel('Minutes').fill('3');
   await page.getByRole('checkbox', { name: 'Include in my plan' }).check();
   await button(page, 'Save to My Blocks').click();
-  await expect(page.getByText('1 stations · 15 min · Coached rotation', { exact: true })).toBeVisible();
+  await expect(page.getByText('1 exercise × about 5 rounds · 3 min · Coached rotation', { exact: true })).toBeVisible();
   await button(page, 'Remove Personal circuit').click();
   await page.getByTestId('block-remove-confirm').click();
   await expect(page.getByRole('link', { name: 'Personal circuit', exact: true })).toHaveCount(0);
@@ -224,7 +229,7 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   const editedPreview = page.getByRole('dialog', { name: 'Preview Friday mixed edited' });
   await button(editedCard, 'Preview').click();
   await expect(editedPreview.locator('.workout-preview-list > li > h3')).toHaveText(order);
-  await expect(editedPreview.getByText('Coached rotation · 8 min', { exact: true })).toBeVisible();
+  await expect(editedPreview.getByText('Coached rotation · 4 min', { exact: true })).toBeVisible();
   await capture(page, info, 'workout-preview');
   await button(editedPreview, 'Start workout').evaluate((el: HTMLButtonElement) => { el.click(); el.click(); });
   await expect(page.getByRole('heading', { name: 'Preparation' })).toBeVisible();
@@ -283,6 +288,9 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   await button(page, 'Finish block').click();
   await page.getByRole('button', { name: /^Continue to Legs & core circuit/ }).click();
   await finishTimed('Continue');
+  await expect(page.getByRole('heading', { name: 'Standing or seated calf raise' })).toBeVisible();
+  await button(page, 'Skip block').click();
+  await button(page, 'Continue').click();
   await expect(page.getByRole('heading', { name: 'Recovery' })).toBeVisible();
   await finishTimed('Finish workout');
   await expect(page).toHaveURL(new RegExp('/workout/summary/' + sid + '$'));
@@ -300,7 +308,7 @@ test('author, edit, run, restore and repeat all five kinds after source deletion
   expect(finished.rpe).toBe(9);
   expect(finished.mixed?.results[authored.ordered!.blocks[3]!.id]).toMatchObject({ rounds: null, stations: [{ exerciseId: 'step-up' }] });
   expect(original.export.stores.sets).toHaveLength(1);
-  expect(original.export.stores.libraryBlocks).toMatchObject([{ durationSec: 900, recommend: true }]);
+  expect(original.export.stores.libraryBlocks).toMatchObject([{ durationSec: 180, recommend: true }]);
 
   const context = await browser.newContext(info.project.use);
   try {
